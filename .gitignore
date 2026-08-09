@@ -1,0 +1,26 @@
+# Firmware builds
+firmware/build/
+firmware/managed_components/
+firmature/sdkconfig
+firmware/sdkconfig.old
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+
+# Android
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,19 @@
+[project]
+name = "quartz-node"
+version = "0.1.0"
+description = "Quartz (QZ) reference node — ESP32-minable cryptocurrency"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "pycryptodome>=3.20",
+]
+
+[project.scripts]
+quartz-node = "quartz.node:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["quartz"]

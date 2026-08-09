@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: quartz-node
+Version: 0.1.0
+Summary: Quartz (QZ) reference node — ESP32-minable cryptocurrency
+License-Expression: MIT
+Requires-Python: >=3.10
+Requires-Dist: pycryptodome>=3.20
