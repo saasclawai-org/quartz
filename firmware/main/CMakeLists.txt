@@ -13,6 +13,7 @@ idf_component_register(
         "quartz_display.cpp"
         "quartz_lora.c"
         "quartz_storage.c"
+        "quartz_attest.c"
     INCLUDE_DIRS
         "."
     REQUIRES

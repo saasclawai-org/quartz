@@ -222,6 +222,89 @@ The ESP32 miner serves as a hardware wallet — no separate device needed.
 - Same Ed25519 keypair is deterministically derived
 - Coins on the blockchain are accessible immediately
 
+## Mining Attestation — ESP32 Hardware Binding
+
+### The Problem
+
+CrystalHash is designed to be computable on ESP32 hardware, but it cannot prevent computation on faster hardware. A desktop CPU with AES-NI instructions is ~100x faster than an ESP32 at the AES-256 operations in CrystalHash. Without hardware binding, a single PC could dominate mining and centralize the network.
+
+### Solution: Remote Attestation via eFuse + Ed25519
+
+Quartz requires every mined block to include a **hardware attestation signature** that only a real ESP32-S3 can produce. This makes the PoW a necessary-but-insufficient condition — blocks must have BOTH valid PoW AND a valid device signature.
+
+**ESP32-S3 Security Features Used:**
+
+| Feature | Role |
+|---------|------|
+| eFuse BLOCK6 | 256-bit one-time-programmable key, unique per chip |
+| Hardware HMAC | Computes HMAC using eFuse key — key never readable by software |
+| Flash Encryption | Encrypts NVS where Ed25519 private key is stored |
+| Secure Boot v2 | Ensures only signed firmware can boot and access keys |
+| Hardware RNG | Generates Ed25519 keypair with true randomness |
+
+**Protocol:**
+
+```
+┌──────────────┐                        ┌──────────────┐
+│    ESP32-S3   │                        │   Network    │
+│    (Miner)    │                        │  (Verifier)  │
+└──────┬───────┘                        └──────┬───────┘
+       │                                       │
+       │  1. FIRST BOOT                        │
+       │  Generate Ed25519 keypair (HW RNG)    │
+       │  Burn pubkey hash → eFuse BLOCK6       │
+       │  Store private key → encrypted NVS     │
+       │                                       │
+       │  2. REGISTRATION                      │
+       │  HMAC(eFuse_key, pubkey) → attestation │
+       │  ─── registration ──────────────────→ │
+       │                                       │  Verify attestation
+       │                                       │  Add to Miner Registry
+       │  ←── registered ────────────────────  │
+       │                                       │
+       │  3. MINING (every block)              │
+       │  Find CrystalHash nonce (PoW)         │
+       │  Ed25519_sign(priv, header||nonce)    │
+       │  Block = header + txs + attestation   │
+       │  ─── block ────────────────────────→ │
+       │                                       │  Verify PoW
+       │                                       │  Verify Ed25519 sig
+       │                                       │  Check registry
+       │                                       │  Check timing
+       │                                       │
+       │  4. SLASHING (if cheating)            │
+       │                                       │  Evidence of double-sign
+       │                                       │  → Ban device
+       │                                       │  → Slash remaining balance
+```
+
+**Why a PC can't fake this:**
+
+1. The eFuse HMAC key is physically embedded in the ESP32 silicon — it cannot be read by any software, JTAG, or even the firmware itself
+2. Only the hardware HMAC peripheral can use the key — there is no instruction to read it
+3. An emulator would need to physically extract the key from the silicon (decapping, electron microscopy) — cost: $10,000+ per chip, far exceeding mining revenue
+4. Each device registers once, and the network tracks unique pubkeys
+
+**Anti-Cheat Layers:**
+
+| Layer | Detection | Response |
+|-------|-----------|----------|
+| Timing analysis | Blocks arriving faster than ESP32 hardware can compute | Auto-ban (threshold: 25% of target block time) |
+| Double-signing | Same device signs two blocks at same height | Slash + ban (cryptographic proof) |
+| Rate monitoring | Consecutive fast blocks from same device | Flag → ban after 3 consecutive |
+| IP clustering | > 5 devices from one IP | Reject new registrations |
+| Community audit | Abnormal hash rates reported by network | Manual review + governance vote |
+
+**Slashing:**
+
+If a device signs two different blocks at the same height (a fork attempt), anyone can submit the two signed blocks as evidence. The evidence is verifiable by all nodes. The device is permanently banned and any unclaimed rewards are forfeited. This makes it economically irrational to mine on multiple forks.
+
+**Limitations:**
+
+- **Physical attacks** (decapping, laser fault injection) can extract eFuse keys. Cost ($10K+) exceeds mining revenue for the foreseeable future.
+- **Botnet of ESP32s** — an attacker buying many ESP32s can mine legitimately. This is acceptable: they're contributing real hardware hashrate.
+- **One ESP32, many PCs** — the ESP32 signs blocks found by PCs. Rate-limited by the device's signing capacity and detectable via timing analysis.
+
 ## Storage Architecture
 
 Quartz nodes use a **three-tier layered storage** design optimized for reliability on embedded hardware. The key insight is that storage failures on ESP32 platforms come from physical socket issues and power-loss corruption — not write endurance. The architecture separates critical state (which must survive any crash) from bulk history (which can be rebuilt from peers).
