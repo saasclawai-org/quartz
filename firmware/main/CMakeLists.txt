@@ -12,6 +12,7 @@ idf_component_register(
         "quartz_wallet.c"
         "quartz_display.cpp"
         "quartz_lora.c"
+        "quartz_storage.c"
     INCLUDE_DIRS
         "."
     REQUIRES
@@ -21,6 +22,7 @@ idf_component_register(
         esp_driver_spi
         esp_timer
         mbedtls
+        fatfs
 )
 
 # Note: RadioLib and TFT_eSPI are managed components via idf_component.yml

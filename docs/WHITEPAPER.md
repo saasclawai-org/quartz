@@ -222,6 +222,131 @@ The ESP32 miner serves as a hardware wallet — no separate device needed.
 - Same Ed25519 keypair is deterministically derived
 - Coins on the blockchain are accessible immediately
 
+## Storage Architecture
+
+Quartz nodes use a **three-tier layered storage** design optimized for reliability on embedded hardware. The key insight is that storage failures on ESP32 platforms come from physical socket issues and power-loss corruption — not write endurance. The architecture separates critical state (which must survive any crash) from bulk history (which can be rebuilt from peers).
+
+### Storage Tiers
+
+| Tier | Medium | Capacity | Role | Reliability |
+|------|--------|----------|------|------------|
+| 0 | On-chip flash | 4-16 MB | Firmware, encrypted keys (NVS) | High (soldered, encrypted) |
+| 1 | FRAM (SPI) | 256 KB | Chain tip, UTXO root, recent headers | Extreme (atomic, zero wear) |
+| 2 | USB Flash (OTG) | 8-128 GB | Full block history | High (soldered USB, journaling) |
+
+### Tier 1: FRAM — The Anchor
+
+FRAM (Ferroelectric RAM) is the critical innovation for embedded blockchain storage:
+
+- **Infinite write endurance** (>10^14 cycles) — no wear-out ever
+- **Byte-addressable** — no erase blocks, no read-modify-write
+- **Instant writes** — no programming delay
+- **Non-volatile** — data persists instantly on power loss (no capacitor/battery needed)
+- **Atomic** — no partial writes possible at the hardware level
+
+A 256KB FRAM module (FM25V256, ~$3) stores:
+
+```
+Offset  Size     Content
+------  -------  ------------------------------------------
+0x0000  32       Chain tip hash (SHA-256 of best block)
+0x0020  4        Chain height
+0x0024  4        Cumulative chain work
+0x0028  32       UTXO set commitment (Merkle root)
+0x0048  4        UTXO count
+0x004C  2        Magic (0x515A = "QZ")
+0x004E  2        Schema version
+0x0050  4        Write sequence (incremented each commit)
+0x0054  12       Reserved
+0x0060  20 KB    Last 256 block headers (ring buffer)
+0x5060  256 B    Last 64 difficulty values
+0x5160  ~190 KB  UTXO snapshot (compact)
+```
+
+**Atomic commit protocol:** Metadata fields are written first, then `write_seq` is incremented last. If power is lost mid-write, the sequence number doesn't match → previous state is used. This mirrors a journaling filesystem's commit barrier.
+
+### Tier 2: USB Flash — The Archive
+
+ESP32-S3 supports USB OTG (Host mode), allowing direct connection to USB flash drives without a computer:
+
+- **Soldered connection** (USB-A socket on board) — no physical socket failure like SD cards
+- **Industrial USB drives** available with SLC NAND (10x more reliable than consumer SD)
+- **64 GB holds 10+ years** of full chain data at moderate usage
+- **Hot-pluggable** — node auto-detects and rebuilds index when drive inserted
+
+Block files stored as `/quartz/blocks/block_NNNNNNNNNN.bin`. Index file maps heights to file offsets. On unclean shutdown, FRAM snapshot tells the node exactly where to resume.
+
+### Why Not SD Cards?
+
+SD cards fail in the field for three reasons — none of which are write endurance:
+
+1. **Physical socket failure** — Vibration, dust, and corrosion damage the spring contacts. SD sockets are rated for ~10,000 insertions; field vibration causes micro-disconnections.
+2. **Power-loss corruption** — SD controllers cache writes in volatile RAM. Power loss mid-write corrupts not just the current block but potentially the entire FAT table. Only industrial SD cards have power-loss protection capacitors.
+3. **Controller crashes** — Cheap SD controllers lock up under sustained write loads, requiring a power cycle. The flash itself is fine, but the controller is unreliable.
+
+USB flash drives avoid all three: soldered USB traces (no socket), better controllers with wear-leveling, and larger over-provisioning.
+
+### Node Modes
+
+Three storage modes balance resource usage:
+
+**SPV (Simple Payment Verification)**
+- Stores: block headers only (80 bytes/block)
+- Annual size: ~21 MB/year
+- Hardware: ESP32 + FRAM (no USB needed)
+- Validates: PoW chain difficulty (can't verify transaction validity)
+- Use case: Pure mining (miner only needs current block template)
+
+**Pruned**
+- Stores: All headers + last 2016 full blocks (one retarget period) + UTXO set
+- Annual size: ~21 MB headers + ~530 KB blocks (rolling window)
+- Hardware: ESP32 + FRAM + small USB (even 1 GB suffices)
+- Validates: Full block validation for recent blocks
+- Use case: Running a verifying node on ESP32
+
+**Full (Archival)**
+- Stores: All blocks and headers since genesis
+- Annual size: ~70 MB/year (coinbase only) to ~530 MB/year (avg 10 txs/block)
+- Hardware: Raspberry Pi or mini PC with SSD
+- Validates: Everything, serves historical data to new nodes
+- Use case: Seed nodes, block explorers, archival
+
+### Chain Size Projections
+
+Based on actual Quartz block sizes (80-byte header, 176-byte coinbase TX, 2-byte TX length prefix):
+
+| Scenario | Per Block | Year 1 | Year 5 | Year 10 |
+|----------|-----------|--------|--------|---------|
+| Coinbase only | 265 B | 70 MB | 350 MB | 700 MB |
+| Avg 5 txs | 1.2 KB | 303 MB | 1.5 GB | 3.0 GB |
+| Avg 20 txs | 3.8 KB | 1.0 GB | 5.0 GB | 10 GB |
+| Avg 100 txs | 18 KB | 4.7 GB | 24 GB | 47 GB |
+
+For comparison, Bitcoin grows at ~68 GB/year. Quartz is 100-1000x smaller.
+
+### Recovery Protocol
+
+When a node restarts after a crash or power loss:
+
+1. **Read FRAM** — Get chain tip, height, UTXO root (always consistent)
+2. **Verify USB** — Scan block files against FRAM height
+3. **If USB gap detected** — Request missing blocks from LoRa mesh peers or WiFi
+4. **Rebuild index** — If USB was replaced, scan all block files and rebuild
+5. **Resume mining** — Once caught up to mesh consensus tip
+
+The FRAM write_seq field tracks total commits. If it seems wrong (e.g., lower than a peer's), the node knows it's on a stale chain and requests a resync.
+
+### FRAM Module Compatibility
+
+| Module | Capacity | Interface | Price | Notes |
+|--------|----------|-----------|-------|-------|
+| MB85RS256B (Fujitsu) | 256 KB | SPI | $3.50 | Primary recommendation |
+| FM25V256 (Cypress) | 256 KB | SPI | $4.00 | Pin-compatible alternative |
+| MB85RS1M (Fujitsu) | 1 MB | SPI | $12.00 | Extended UTXO snapshot space |
+| W25Q128 (Winbond) | 16 MB | SPI | $1.50 | NOR Flash (100K writes — NOT FRAM) |
+
+Note: NOR flash (W25Q series) is sometimes marketed alongside FRAM but has limited write endurance (100K cycles vs FRAM's 10^14). For the chain tip commit region, only true FRAM should be used. NOR flash is acceptable for the bulk header region where writes are spread across many sectors.
+
 ## Roadmap
 
 - **Phase 1** — Protocol spec, reference Python node, ESP32 firmware MVP ✅
