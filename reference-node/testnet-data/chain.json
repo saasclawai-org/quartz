@@ -10,7 +10,7 @@
         "nonce": 3773,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -22,7 +22,7 @@
         "nonce": 6773,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -34,7 +34,7 @@
         "nonce": 1314,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -46,18 +46,42 @@
         "nonce": 2089,
         "miner_id": "000000000000"
       },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "00031e738023ae9087ff6f8ab9b9fd86f42d7c54758bf2c23a94e00f0a2ac001",
+        "merkle_root": "5859b4417eddcda24d6e2da7872213ed624663bd0b3b4b15c33c7e296d17db12",
+        "timestamp": 1786310874,
+        "difficulty_target": 12,
+        "nonce": 9815,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 1
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000eadcdb2214ad6c993a948527bf60c715a12bfd044c50381baef28a12adff1",
+        "merkle_root": "fcc8d3d36fd4cf5495b11ad0113eaf612f222a20622ce649b02acc4af97e6b56",
+        "timestamp": 1786310904,
+        "difficulty_target": 12,
+        "nonce": 2342,
+        "miner_id": "000000000000"
+      },
       "tx_count": 1
     }
   ],
   "balances": {
-    "81aeb43a861a6d4dfe4a43eafa7cd16914": 9500000000,
-    "Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U": 750000000,
-    "e6eb2a4b765cdf5997dd67ed7817a10092": 9500000000,
+    "81aeb43a861a6d4dfe4a43eafa7cd16914": 14250000000,
+    "Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U": 1250000000,
+    "e6eb2a4b765cdf5997dd67ed7817a10092": 14250000000,
     "39759da3f3678b533399bdaeb1a2217ec8": 9500000000
   },
   "known_miners": [
+    "aabbcc010003",
     "aabbcc010001",
-    "aabbcc010002",
-    "aabbcc010003"
+    "aabbcc010002"
   ]
 }
