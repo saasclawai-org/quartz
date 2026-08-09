@@ -1,0 +1,21 @@
+{
+  "mnemonic": [
+    "mixed",
+    "mail",
+    "minute",
+    "tilt",
+    "uncover",
+    "grab",
+    "midnight",
+    "mix",
+    "dumb",
+    "select",
+    "library",
+    "lumber"
+  ],
+  "seed": "dedb39bbe3ae48f466c52e4c6bc382d4b2ff45f6458403f33eada5e26482f146406339b3bf9ba3b7ff5ad83ba9ac85d52df62584be4d5de273e29e363019fd98",
+  "private_key": "086dbff261c588f7447b384a25afb237c76ee4447272dee82f624d1b53fbc49f",
+  "public_key": "871d0db8f4d8a7d11a67a224932497981060bd852a174be759de7ba90c0ceff0",
+  "address": "Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U",
+  "derivation_path": "m/44'/789'/0'/0'/n"
+}
