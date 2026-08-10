@@ -526,6 +526,41 @@ The FRAM write_seq field tracks total commits. If it seems wrong (e.g., lower th
 
 Note: NOR flash (W25Q series) is sometimes marketed alongside FRAM but has limited write endurance (100K cycles vs FRAM's 10^14). For the chain tip commit region, only true FRAM should be used. NOR flash is acceptable for the bulk header region where writes are spread across many sectors.
 
+## RNG Hardening — Preventing the Coldcard Bug Class
+
+### The Coldcard Incident (July 2026)
+
+Coldcard hardware wallets lost $130M+ across 4,500+ addresses due to a firmware bug where `#ifndef MICROPY_HW_ENABLE_RNG` checked macro existence (not value), silently switching the hardware TRNG to a non-cryptographic software PRNG (Yasmarang) seeded from ~40 bits of entropy. The bug was invisible for 5 years because the output passed statistical tests.
+
+### Quartz Five-Layer RNG Defense
+
+**Layer 1: No compile-time RNG switches.** The Coldcard bug was a preprocessor logic error. Quartz has exactly ONE code path for random generation — no `#ifdef`, no fallback. If the hardware RNG isn't ready, the device refuses to boot.
+
+**Layer 2: Radio-first initialization.** ESP32's hardware RNG is seeded by WiFi/BLE radio noise. Before radio init, `esp_random()` returns software-derived values. Quartz requires radio initialization and 100ms warmup before any key generation.
+
+**Layer 3: NIST SP 800-90B health checks.** Before burning eFuse or generating keys, 1024 bytes of raw entropy are tested:
+- Repetition count (detect stuck values)
+- Adaptive proportion (detect bit bias)
+- Chi-square (detect non-uniform distribution)
+- Min-entropy estimate (≥ 6.0 bits/byte)
+
+If any test fails, key generation aborts and device displays error.
+
+**Layer 4: Triple-mixed entropy pool.** Three independent sources are XOR'd:
+- RF subsystem noise (`esp_fill_random`)
+- SAR ADC (floating pin analog noise)
+- SRAM PUF (power-on state)
+
+Attacker must control ALL three sources to predict output. If even one is truly random, the mix is truly random.
+
+**Layer 5: Public auditability.** Birth certificates include an entropy sample hash — SHA-256 of the raw health-check samples. Independent auditors can verify entropy quality from purchased devices.
+
+### What Health Checks Can and Cannot Detect
+
+Statistical health checks detect **hardware faults** (stuck bits, broken radio, biased ADC) but **cannot** detect a cryptographically weak PRNG that produces well-distributed output. The Coldcard Yasmarang PRNG passed statistical tests for years. This is a fundamental limitation of black-box testing.
+
+Quartz's defense against this limitation is architectural: radio-first init and triple-mix ensure the entropy comes from physical sources (RF noise, analog noise, SRAM state), not from a deterministic algorithm that could be silently substituted via a compile-time flag.
+
 ## Supply Chain Security
 
 ### The Reseller Threat

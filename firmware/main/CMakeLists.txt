@@ -16,6 +16,7 @@ idf_component_register(
         "quartz_attest.c"
         "quartz_pool.c"
         "quartz_supply_chain.c"
+        "quartz_entropy.c"
     INCLUDE_DIRS
         "."
     REQUIRES
