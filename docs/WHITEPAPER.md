@@ -526,6 +526,66 @@ The FRAM write_seq field tracks total commits. If it seems wrong (e.g., lower th
 
 Note: NOR flash (W25Q series) is sometimes marketed alongside FRAM but has limited write endurance (100K cycles vs FRAM's 10^14). For the chain tip commit region, only true FRAM should be used. NOR flash is acceptable for the bulk header region where writes are spread across many sectors.
 
+## Supply Chain Security
+
+### The Reseller Threat
+
+An attacker buys ESP32 boards in bulk, flashes custom firmware that captures the eFuse key during provisioning, then reflashes with official firmware and sells as "Quartz Ready Miners." The attacker retains every buyer's private key.
+
+### Birth Certificate Protocol
+
+Every Quartz device produces a cryptographic **birth certificate** at first boot:
+
+1. **First boot:** Device detects empty eFuse BLOCK6
+2. **Key generation:** 32 random bytes from hardware RNG burned into eFuse (irreversible)
+3. **Read protection:** eFuse block set to read-protected — key only accessible via hardware HMAC engine
+4. **Certificate creation:**
+   - `key_commit_hash` = SHA-256(efuse_key || chip_id || "QUARTZ_GENESIS")
+   - `device_pubkey` = Ed25519 public key for block signing
+   - `firmware_hash` = SHA-256 of running firmware binary
+   - `first_boot_timestamp` = RTC time at provisioning
+   - `birth_signature` = Ed25519 signature over all fields
+5. **Certificate stored in NVS and displayed on screen**
+
+### Buyer Verification
+
+At purchase time, the buyer powers on the device and their phone app checks:
+
+| Check | Pass | Fail |
+|-------|------|------|
+| Chip ID not on network | Fresh device | Clone or used |
+| Firmware hash = official | Running official release | Custom/modified firmware |
+| Birth timestamp ≥ release date | Born after firmware shipped | Impossible date = fraud |
+| Birth signature valid | Certificate integrity confirmed | Forged certificate |
+
+### Anti-Pre-Flash Detection
+
+A reseller who burns the eFuse with custom firmware, then reflashes with official firmware, faces an unsolvable problem:
+
+- **NVS wiped:** No certificate → `quartz_detect_tampering()` returns true (eFuse burned, no cert)
+- **NVS preserved:** Certificate shows the attack firmware's hash → `FIRMWARE_MISMATCH`
+- **Cannot re-create certificate:** eFuse is one-way (can't provision a new key)
+- **Cannot fake firmware hash:** Certificate signature was created with the original device key
+
+The reseller is trapped. There is no sequence of actions that produces a valid certificate with official firmware hash after burning the eFuse with custom firmware.
+
+### Reseller Certification Program
+
+Authorized resellers receive batch certificates signed by the Quartz multi-sig (3-of-5):
+- Batch ID, reseller identity, device count, factory firmware hash
+- Buyers can verify their device came from an authorized batch
+- Unauthorized resellers still function but the phone app warns: "Not from authorized reseller"
+
+### Summary
+
+| Attack | Detection |
+|-------|----------|
+| Pre-flash with known key | Firmware mismatch or tampering detection |
+| Sell clone with same chip ID | Clone detected on network registration |
+| Re-verify used device | Chip ID already registered |
+| Forge certificate | Ed25519 signature invalid |
+| Backdate birth timestamp | Timestamp before firmware release |
+
 ## Roadmap
 
 - **Phase 1** — Protocol spec, reference Python node, ESP32 firmware MVP ✅

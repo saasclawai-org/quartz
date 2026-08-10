@@ -15,6 +15,7 @@ idf_component_register(
         "quartz_storage.c"
         "quartz_attest.c"
         "quartz_pool.c"
+        "quartz_supply_chain.c"
     INCLUDE_DIRS
         "."
     REQUIRES
