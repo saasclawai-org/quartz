@@ -35,11 +35,9 @@
 **Status:** Not started
 
 ### 4. Dev Fund Multi-Sig
-**Problem:** Dev fund (2.1M QZ) controlled by single key = single point of failure.
+**RESOLVED:** Dev fund eliminated (0%). 100% of rewards go to miners. Founder coins are timelocked via CLTV for 2 years. No multi-sig needed.
 
-**Fix:** 3-of-5 multi-sig with 24h time-locked withdrawals. Community can detect and fork if malicious withdrawal attempted.
-
-**Status:** Not started
+**Status:** ✅ Resolved — see FOUNDER_TIMELOCK.md
 
 ---
 

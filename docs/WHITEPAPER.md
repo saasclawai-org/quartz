@@ -110,9 +110,10 @@ UTXO-based, Bitcoin-compatible:
 | Locktime | 4 bytes | |
 
 **Supply:** 42,000,000 QZ (42 million)
-**Block reward:** 50 QZ initially (47.5 QZ to miner + 2.5 QZ to dev fund), halving every 210,000 blocks (~8 years)
+**Block reward:** 50 QZ initially to miner, halving every 210,000 blocks (~8 years)
 **Smallest unit:** 1 qz-sat = 10⁻⁸ QZ
-**Dev fund:** 2.1M QZ (5%), vested over 4 years via per-block emission
+**Dev fund:** None (0%). 100% of block rewards go to miners. Pure fair launch.
+**Founder timelock:** All coins mined by the project founder are locked via CLTV for 2 years (525,600 blocks). Consensus-enforced, no override.
 **Early adopter bonus:** First 1,000 unique ESP32 miners get 2x reward for first 30 days
 
 ### Networking
@@ -180,31 +181,38 @@ ESP32 nodes operate in one of three modes:
 | Ticker | QZ |
 | Total Supply | 42,000,000 QZ |
 | Mineable Supply | 39,900,000 QZ (95%) |
-| Dev Fund | 2,100,000 QZ (5%), 4-year vesting |
-| Initial Block Reward | 50 QZ (47.5 miner + 2.5 dev fund) |
+| Dev Fund | None (0%) — pure fair launch |
+| Founder Timelock | 2-year CLTV on all founder-mined coins |
+| Initial Block Reward | 50 QZ (100% to miner) |
 | Halving Period | 210,000 blocks (~8 years at 2min blocks) |
 | Block Time | 120 seconds |
 | Difficulty Retarget | 144 blocks (~48 hours) |
 | Smallest Unit | 0.00000001 QZ (1 quartz-sat) |
 | Premine | 0 |
+| Dev Fund | None (0%) — pure fair launch |
+| Founder Timelock | 2-year CLTV on all founder-mined coins |
 | Early Adopter Bonus | First 1,000 miners: 2x reward for 30 days |
-| Bug Bounty | 50,000 QZ allocated from dev fund |
+| Bug Bounty | Funded by community donations |
 
-### Dev Fund Vesting Schedule
+### Token Distribution
 
-The dev fund is emitted per-block alongside mining rewards, not premined:
+- **No premine** — all QZ is mined through proof-of-work
+- **No dev fund** — 100% of block rewards go to miners
+- **No ICO** — no token sale, no fundraising
+- **No founder allocation** — founder mines like everyone else
 
-| Period | Dev Fund Per Block | Blocks | Total |
-|--------|-------------------|--------|-------|
-| Year 1 | 2.5 QZ | ~131,400 | 328,500 QZ |
-| Year 2 | 2.5 QZ | ~131,400 | 328,500 QZ |
-| Year 3 | 2.5 QZ | ~131,400 | 328,500 QZ |
-| Year 4 | 2.5 QZ | ~131,400 | 328,500 QZ |
-| **Total** | | ~525,600 | **1,314,000 QZ** |
+### Founder Timelock
 
-Remaining 786,000 QZ allocated to: bug bounties (50K), infrastructure grants (200K), community/marketing (536K).
+The founder's device pubkey is registered at genesis. When the founder mines a block, the coinbase output uses OP_CHECKLOCKTIMEVERIFY:
 
-Dev fund addresses are public and auditable on-chain.
+```
+OP_CHECKLOCKTIMEVERIFY <block_height + 525600> OP_DROP
+<founder_pubkey> OP_CHECKSIG
+```
+
+Each block's reward unlocks exactly 2 years after it was mined. No admin key, no multi-sig override, no emergency unlock. Anyone can verify on the block explorer.
+
+This is strictly stronger than Bitcoin's model. Satoshi made a social promise not to move his ~1M BTC. Quartz makes it a mathematical impossibility.
 
 ### Early Adopter Bonus
 
@@ -214,9 +222,8 @@ The first 1,000 unique ESP32 devices (by chip MAC) that mine a block receive **2
 
 ```
 Block reward (Era 1): 50 QZ total
-├── Miner:      47.5 QZ (95%)
-├── Dev fund:    2.5 QZ (5%)
-└── Bonus (if eligible): +47.5 QZ (from dev fund allocation)
+├── Miner:      50 QZ (100%)
+└── Bonus (if eligible): +50 QZ (inflation-funded)
 ```
 
 ## Wallet & Key Management
