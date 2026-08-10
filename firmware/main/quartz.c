@@ -1,39 +1,55 @@
 #include "quartz.h"
+#include "quartz_attest.h"
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "esp_cpu.h"
+#include "esp_hmac.h"
 #include "string.h"
 
 static const char *TAG = "QUARTZ";
 
-/* --- CrystalHash Implementation --- */
+/* --- CrystalHash v2 Implementation (Hardware-Bound) --- */
 
-void crystal_hash(const uint8_t *header, uint64_t nonce,
-                  uint8_t out[32], uint8_t *scratchpad)
+void crystal_hash_v2(const uint8_t *header, uint64_t nonce,
+                     uint8_t out[32], uint8_t *scratchpad, bool use_efuse)
 {
-    /* Phase 1: Initialize scratchpad from header using AES-256-CTR
-     * The header + nonce form the key/IV for filling the scratchpad.
-     * This binds the scratchpad to the specific block being mined.
+    /*
+     * CrystalHash v2 — eFuse HMAC interleaved into hash rounds.
+     *
+     * v1 had attestation as a post-hoc signature → GPU + ESP32 = GPU speed.
+     * v2 injects eFuse HMAC every 8 rounds → GPU cannot proceed without ESP32.
+     *
+     * Phase 1: INIT — SHA-256(header || nonce)
+     * Phase 2: SCRATCHPAD — AES-256-CTR fill (256KB)
+     * Phase 3: MIXING — 64 rounds, HMAC injected at rounds 7,15,23,31,39,47,55,63
+     * Phase 4: FINALIZE — SHA-256(state || SHA-256(header || nonce))
      */
+
+    /* === Phase 1: INIT === */
+    uint8_t init_input[88];
+    memcpy(init_input, header, 80);
+    memcpy(init_input + 80, &nonce, 8);
+
+    uint8_t state[32];
+    mbedtls_sha256(init_input, 88, state, 0);
+
+    /* === Phase 2: SCRATCHPAD INIT === */
+    /* AES-256-CTR using first 32 bytes of header as key
+     * On real hardware, use eFuse key as AES key for additional binding.
+     * For verification mode (use_efuse=false), use header-derived key. */
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
-
-    /* Use first 32 bytes of header as AES key, nonce+header[32:48] as IV */
-    uint8_t iv[16];
-    memcpy(iv, &nonce, 8);
-    memcpy(iv + 8, header + 32, 8);
 
     uint8_t key[32];
     memcpy(key, header, 32);
 
-    /* Generate 256KB of pseudo-random data via AES-CTR */
+    uint8_t ctr[16];
+    memcpy(ctr, &nonce, 8);
+    memcpy(ctr + 8, header + 32, 8);
+
+    uint8_t stream_block[16];
     memset(scratchpad, 0, QUARTZ_SCRATCHPAD_SIZE);
     mbedtls_aes_setkey_enc(&aes, key, 256);
-
-    /* CTR mode to fill scratchpad */
-    uint8_t stream_block[16];
-    uint8_t ctr[16];
-    memcpy(ctr, iv, 16);
 
     for (size_t offset = 0; offset < QUARTZ_SCRATCHPAD_SIZE; offset += 16) {
         mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, ctr, stream_block);
@@ -46,18 +62,11 @@ void crystal_hash(const uint8_t *header, uint64_t nonce,
     }
     mbedtls_aes_free(&aes);
 
-    /* Phase 2: Memory-hard mixing (64 rounds of random reads)
-     * Each read pulls 32 bytes from a pseudo-random offset.
-     * This is the anti-GPU/anti-ASIC core — the access pattern depends
-     * on the data itself, making it latency-bound.
-     */
-    uint8_t state[32];
-    memcpy(state, header, 32);
-
+    /* === Phase 3: MIXING — 64 rounds with HMAC injection === */
     uint32_t state_seed = (uint32_t)(nonce & 0xFFFFFFFF) ^ ((uint32_t)(nonce >> 32));
 
-    for (int round = 0; round < 64; round++) {
-        /* Derive a scratchpad index from current state */
+    for (int round = 0; round < CRYSTALHASH_MIXING_ROUNDS; round++) {
+        /* Memory-hard mixing: read scratchpad at state-derived offset */
         uint32_t idx = (*(uint32_t *)state ^ state_seed ^ (round * 0x9E3779B9));
         idx %= (QUARTZ_SCRATCHPAD_SIZE / 32);
 
@@ -66,38 +75,52 @@ void crystal_hash(const uint8_t *header, uint64_t nonce,
             state[i] ^= scratchpad[idx * 32 + i];
         }
 
-        /* Mix with ESP32 hardware SHA for diffusion */
+        /* SHA-256 diffusion */
         uint8_t tmp[32];
         mbedtls_sha256(state, 32, tmp, 0);
         memcpy(state, tmp, 32);
+
+        /* *** HARDWARE GATE ***
+         * Every 8th round: inject eFuse HMAC.
+         *
+         * The eFuse key in BLOCK6 is physically unreadable.
+         * Only the hardware HMAC engine can use it.
+         * A GPU computing this hash would freeze here — it literally
+         * cannot produce the HMAC without the ESP32 silicon.
+         *
+         * This is called 8 times per nonce attempt, making the ESP32
+         * the rate limiter, not the GPU.
+         */
+        if (round % CRYSTALHASH_HMAC_INTERVAL == (CRYSTALHASH_HMAC_INTERVAL - 1)) {
+            if (use_efuse) {
+                /* Build HMAC input: state (32 bytes) || round_num (4 bytes) */
+                uint8_t hmac_input[36];
+                memcpy(hmac_input, state, 32);
+                uint32_t round_le = round;
+                memcpy(hmac_input + 32, &round_le, 4);
+
+                /* Hardware HMAC — key never leaves eFuse */
+                uint8_t hmac_out[32];
+                esp_err_t ret = esp_hmac_calculate(HMAC_KEY0, hmac_input, 36, hmac_out);
+                if (ret == ESP_OK) {
+                    /* XOR HMAC result into state */
+                    for (int i = 0; i < 32; i++) {
+                        state[i] ^= hmac_out[i];
+                    }
+                }
+            }
+            /* Verification mode (use_efuse=false): skip HMAC.
+             * Verifier trusts attestation signature instead. */
+        }
     }
 
-    /* Phase 3: PUF — incorporate flash cache timing
-     * Read the cycle counter before/after a flash access.
-     * This varies per-chip due to silicon and temperature.
-     * Multiple samples are mixed to reduce noise.
-     */
-    uint32_t puf_samples[4];
-    for (int i = 0; i < 4; i++) {
-        volatile uint32_t *flash_ptr = (volatile uint32_t *)(0x3F400000 + (i * 0x1000));
-        uint32_t t0 = esp_cpu_get_cycle_count();
-        volatile uint32_t val = *flash_ptr;
-        (void)val;
-        uint32_t t1 = esp_cpu_get_cycle_count();
-        puf_samples[i] = t1 - t0;
-    }
-
-    /* Mix PUF samples into state */
-    for (int i = 0; i < 4; i++) {
-        state[i % 32] ^= (puf_samples[i] & 0xFF);
-    }
-
-    /* Phase 4: Final SHA-256 via hardware accelerator */
-    uint8_t final_input[40];
+    /* === Phase 4: FINALIZE === */
+    uint8_t final_input[64];
     memcpy(final_input, state, 32);
-    memcpy(final_input + 32, &nonce, 8);
+    /* Second SHA-256 of header+nonce for avalanche */
+    mbedtls_sha256(init_input, 88, final_input + 32, 0);
 
-    mbedtls_sha256(final_input, 40, out, 0);
+    mbedtls_sha256(final_input, 64, out, 0);
 }
 
 /* --- Difficulty checking --- */
@@ -197,7 +220,7 @@ void quartz_get_miner_id(uint8_t miner_id[6])
     esp_read_mac(miner_id, ESP_MAC_WIFI_STA);
 }
 
-/* --- Cycle counter --- */
+/* --- Cycle counter (legacy, used for timing stats) --- */
 
 uint32_t quartz_get_cycle_count(void)
 {

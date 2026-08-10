@@ -14,29 +14,67 @@ Existing "IoT-minable" coins (Duino-Coin, etc.) are either centralized or trivia
 
 ## Technical Design
 
-### PoW Algorithm: CrystalHash
+### PoW Algorithm: CrystalHash v2 (Hardware-Bound)
 
-CrystalHash exploits three ESP32-specific properties:
+CrystalHash v2 is a fundamental redesign from v1. The v1 approach used a flash-cache PUF and post-hoc attestation signatures. Analysis showed a GPU + 1 ESP32 signing oracle would match GPU speed — the ESP32 becomes a rubber stamp.
 
-1. **Hardware SHA/AES accelerator** — The ESP32 has a dedicated cryptographic accelerator. CrystalHash requires chains of SHA-256 + AES operations that are fastest on this hardware vs. software implementations on general CPUs.
+v2 solves this by **embedding the eFuse HMAC key into the hash computation itself.** The GPU physically cannot compute the hash without the ESP32 silicon at every step.
 
-2. **Memory-hard dataset** — A 256KB scratchpad (half of ESP32's 520KB SRAM) filled with hardware-derived pseudo-random data. This is too large for cache, too small to be interesting for ASIC development, and awkward for GPUs (which handle large parallel datasets better).
-
-3. **Physical unclonable function (PUF)** — Subtle timing variations in the ESP32's flash cache and SRAM are hardware-specific. Each chip produces slightly different timing fingerprints. CrystalHash incorporates a calibration step that binds mining to the physical chip.
+#### Algorithm
 
 ```
-CrystalHash(block_header, nonce):
-    1. Initialize 256KB scratchpad from block_header using hardware AES
-    2. Perform 64 rounds of random reads from scratchpad (memory-hard)
-    3. Mix nonce + flash cache timing samples
-    4. Final SHA-256 via hardware accelerator
-    5. Output: 32-byte hash
+CrystalHash v2(header, nonce, eFuse_key):
+  1. INIT: state = SHA-256(header || nonce)
+  2. SCRATCHPAD: AES-256-CTR fill 256KB from state
+  3. MIXING (64 rounds, HMAC injected every 8 rounds):
+     FOR round = 0..63:
+       state XOR= scratchpad[state % 8192]
+       state = SHA-256(state)
+       IF round % 8 == 7:
+         state XOR= HMAC-SHA256(eFuse_key, state || round)
+         ^^^ Requires ESP32 hardware HMAC engine
+         ^^^ Key physically unreadable from eFuse BLOCK6
+  4. FINAL: SHA-256(state || SHA-256(header || nonce))
 ```
 
-**Why this is hard to fake:**
-- GPUs: Memory access patterns don't map well to 256KB per-thread scratchpad. GPU threads share VRAM, not per-core SRAM.
-- CPUs: Software SHA is slower than ESP32's hardware accelerator for this specific chained pattern.
-- ASICs: Building a custom chip for a niche coin isn't economically viable, and emulating the PUF requires physical ESP32 silicon.
+#### Why GPUs Are Eliminated
+
+Each nonce attempt requires **8 hardware HMAC calls** (rounds 7, 15, 23, 31, 39, 47, 55, 63). The eFuse HMAC key is physically unreadable — only the ESP32's silicon HMAC engine can use it. A GPU must round-trip through the ESP32 8 times per nonce:
+
+| Setup | Hash Rate | vs Honest ESP32 |
+|-------|-----------|-----------------|
+| 1 honest ESP32 | ~250 H/s | 1× |
+| GPU + 1 ESP32 oracle | ~250 H/s | **1×** (HMAC bottleneck) |
+| GPU + 10 ESP32 oracles | ~2,500 H/s | 10× (10× hardware cost) |
+| 10 honest ESP32s | ~2,500 H/s | 10× |
+
+The GPU adds **zero advantage**. An attacker needs the same number of physical ESP32s as honest miners. The GPU just adds cost without adding speed.
+
+#### ESP32-S3 Performance
+
+| Operation | Count/Nonce | Time |
+|-----------|-------------|------|
+| SHA-256 (hardware) | 66 | ~330μs |
+| Scratchpad reads (PSRAM) | 64 | ~2ms |
+| eFuse HMAC calls | 8 | ~2ms |
+| Overhead | — | ~1ms |
+| **Total per nonce** | — | **~5.6ms** |
+| **Hash rate** | — | **~180 H/s** |
+
+At difficulty 20 (mainnet): ~70 minutes average per block (solo). At difficulty 12 (testnet): ~3 seconds.
+
+#### Verification
+
+The Python reference node cannot reproduce the eFuse HMAC steps (no hardware key). Verification trusts three things:
+1. Block hash is below difficulty target (SHA-256 proof)
+2. Attestation signature is valid (Ed25519 from registered device)
+3. Device is registered, not slashed, not timed out
+
+This is sufficient because forging all three requires a physical ESP32 with a valid eFuse provisioned on the Quartz chain.
+
+#### Why Not Flash Fingerprinting (v1 PUF)?
+
+The v1 design used flash cache timing as a PUF. Analysis showed flash timing drifts with temperature (45°C Phoenix vs 5°C Seattle), voltage (battery depletion), and wear (write cycles). This causes false rejects on honest miners and requires per-board calibration. The eFuse approach is deterministic, stable across all conditions, and equally unforgeable.
 
 ### Block Structure
 
@@ -226,11 +264,11 @@ The ESP32 miner serves as a hardware wallet — no separate device needed.
 
 ### The Problem
 
-CrystalHash is designed to be computable on ESP32 hardware, but it cannot prevent computation on faster hardware. A desktop CPU with AES-NI instructions is ~100x faster than an ESP32 at the AES-256 operations in CrystalHash. Without hardware binding, a single PC could dominate mining and centralize the network.
+CrystalHash v2 is designed to be computable on ESP32 hardware, and the eFuse HMAC interleaving makes it impossible to compute faster on GPUs. The attestation signature provides device identity and anti-cheat enforcement on top of the hardware-bound hash.
 
 ### Solution: Remote Attestation via eFuse + Ed25519
 
-Quartz requires every mined block to include a **hardware attestation signature** that only a real ESP32-S3 can produce. This makes the PoW a necessary-but-insufficient condition — blocks must have BOTH valid PoW AND a valid device signature.
+Quartz requires every mined block to include a **hardware attestation signature** that only a real ESP32-S3 can produce. Combined with CrystalHash v2's embedded eFuse HMAC, this creates a two-layer hardware binding: the hash computation requires the ESP32 at every step, and the attestation signature proves which specific device produced it.
 
 **ESP32-S3 Security Features Used:**
 

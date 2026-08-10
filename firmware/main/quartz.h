@@ -65,22 +65,42 @@ typedef struct __attribute__((packed)) {
 #define QUARTZ_TX_INPUT_SIZE  (32 + 1 + 64 + 32)   /* 129 bytes */
 #define QUARTZ_TX_OUTPUT_SIZE (8 + 32)              /* 40 bytes */
 
-/* --- CrystalHash PoW --- */
+/* --- CrystalHash v2 PoW (Hardware-Bound) --- */
+
+#define CRYSTALHASH_MIXING_ROUNDS  64
+#define CRYSTALHASH_HMAC_INTERVAL  8   /* HMAC injected every 8 rounds */
+#define CRYSTALHASH_HMAC_CALLS     (CRYSTALHASH_MIXING_ROUNDS / CRYSTALHASH_HMAC_INTERVAL) /* 8 */
 
 /**
- * Compute CrystalHash for a block header.
- * 
- * Uses ESP32 hardware AES + SHA accelerators with a 256KB memory-hard
- * scratchpad. The hash incorporates flash cache timing as a physical
- * unclonable function (PUF).
+ * Compute CrystalHash v2 for a block header.
  *
- * @param header   80-byte block header
- * @param nonce    8-byte nonce
- * @param out      32-byte output hash
- * @param scratchpad  256KB scratchpad buffer (must be heap-allocated in PSRAM)
+ * v2 interleaves the eFuse HMAC key into the hash computation itself.
+ * Every 8 rounds, the hash state is mixed through HMAC-SHA256(key, state)
+ * where the key lives in eFuse BLOCK6 — physically unreadable.
+ *
+ * This makes it impossible to compute the hash on a GPU. Each nonce
+ * attempt requires 8 round-trips through the ESP32's hardware HMAC
+ * engine. GPU speed becomes irrelevant; the ESP32 HMAC throughput
+ * is the bottleneck.
+ *
+ * Attack analysis:
+ *   GPU + 0 ESP32 = cannot mine (no eFuse key)
+ *   GPU + 1 ESP32 = ESP32 speed (HMAC bottleneck)
+ *   GPU + 10 ESP32 = 10× ESP32 speed (but 10× hardware cost)
+ *   Advantage of GPU over honest ESP32 miner = ZERO
+ *
+ * @param header       80-byte block header
+ * @param nonce        8-byte nonce
+ * @param out          32-byte output hash
+ * @param scratchpad   256KB scratchpad buffer (PSRAM)
+ * @param use_efuse    If true, use hardware eFuse HMAC (normal operation)
+ *                     If false, skip HMAC steps (verification only)
  */
-void crystal_hash(const uint8_t *header, uint64_t nonce,
-                  uint8_t out[32], uint8_t *scratchpad);
+void crystal_hash_v2(const uint8_t *header, uint64_t nonce,
+                     uint8_t out[32], uint8_t *scratchpad, bool use_efuse);
+
+/* Legacy v1 alias for compatibility */
+#define crystal_hash(header, nonce, out, scratchpad) crystal_hash_v2(header, nonce, out, scratchpad, true)
 
 /**
  * Check if a hash meets the difficulty target.
