@@ -14,6 +14,7 @@ idf_component_register(
         "quartz_lora.c"
         "quartz_storage.c"
         "quartz_attest.c"
+        "quartz_pool.c"
     INCLUDE_DIRS
         "."
     REQUIRES

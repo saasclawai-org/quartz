@@ -305,6 +305,64 @@ If a device signs two different blocks at the same height (a fork attempt), anyo
 - **Botnet of ESP32s** — an attacker buying many ESP32s can mine legitimately. This is acceptable: they're contributing real hardware hashrate.
 - **One ESP32, many PCs** — the ESP32 signs blocks found by PCs. Rate-limited by the device's signing capacity and detectable via timing analysis.
 
+## Decentralized Mining Pools
+
+Bitcoin forces miners into centralized pools (Slush, Foundry, AntPool) because individual block discovery is too rare for stable income. These pools charge 1-2.5% fees, create censorship chokepoints, and concentrate hashpower under operators who can censor transactions.
+
+Quartz replaces this model with **mesh-native mining pools** — decentralized, serverless pools formed automatically by LoRa neighbors.
+
+### How Mesh Pools Work
+
+**Discovery:** ESP32 miners broadcast LoRa beacons every 60 seconds. Nearby miners hear beacons and discover local cluster members. No internet needed.
+
+**Coordinator Election:** Every 16 blocks (~32 minutes), cluster members deterministically elect a coordinator using a verifiable hash election: the candidate with the lowest `SHA-256(pubkey || epoch_number)` wins. All members compute the same result independently — no voting, no communication needed for the election itself.
+
+**Work Distribution:** The coordinator assigns nonce ranges to pool members to reduce duplicate work: "Miner A searches 0–1M, Miner B searches 1M–2M." This is advisory — miners can search any range.
+
+**Share Submission:** Each miner sends near-miss proofs (shares) at pool difficulty (4 bits easier than network difficulty) to the coordinator via LoRa. A share proves the miner is working and counts toward their reward allocation.
+
+**Block Found:** When any member finds a block at network difficulty, the coordinator constructs a multi-output coinbase that splits the reward proportionally by share count. The block finder receives a 5% finder's bonus.
+
+**Coordinator Rotation:** Every epoch (16 blocks), a new election occurs. If the coordinator goes silent for 3 blocks, members automatically trigger re-election. No single point of failure.
+
+### Reward Split Example
+
+| Member | Shares | Proportional | Finder Bonus | Total |
+|--------|--------|-------------|-------------|-------|
+| Miner A (finder) | 40 | 18.2 QZ | +2.375 QZ | **20.575 QZ** |
+| Miner B | 30 | 13.65 QZ | — | **13.65 QZ** |
+| Miner C | 20 | 9.1 QZ | — | **9.1 QZ** |
+| Miner D | 10 | 4.55 QZ | — | **4.55 QZ** |
+| **Total** | **100** | **45.5 QZ** | **2.375 QZ** | **47.875 QZ** |
+
+Remainder from integer rounding goes to the block finder.
+
+### Anti-Cheat
+
+| Attack | Detection | Response |
+|--------|-----------|----------|
+| Coordinator steals rewards | Split is deterministic from share counts; all members verify locally | Reject block, slash coordinator |
+| Miner fakes shares | Each share requires valid PoW at pool difficulty | Forging shares = as hard as mining |
+| Sybil (fake members) | One ESP32 = one attested pubkey | Need physical devices to inflate shares |
+| Coordinator goes dark | No communication for 3 blocks | Auto re-election |
+| Withholding winning blocks | Member gets nothing by withholding | Self-defeating — no economic incentive |
+
+### Solo Mining
+
+Miners can always opt out of pooling by setting `pool_mode = SOLO`. Full reward on block find, zero on miss. Suitable for low-density areas where no mesh neighbors exist.
+
+### Advantages Over Centralized Pools
+
+| | Quartz Mesh Pool | Bitcoin Centralized Pool |
+|---|---|---|
+| Operator | Rotating, elected | Fixed company |
+| Fee | 0% | 1–2.5% |
+| Server | None (LoRa mesh) | Required (internet) |
+| Payout | Same block (coinbase split) | Daily/weekly threshold |
+| Censorship | Impossible (no operator) | Pool can exclude txs |
+| Trust | Trustless (deterministic split) | Trust operator |
+| Privacy | Pseudonymous (LoRa) | Pool knows your IP |
+
 ## Storage Architecture
 
 Quartz nodes use a **three-tier layered storage** design optimized for reliability on embedded hardware. The key insight is that storage failures on ESP32 platforms come from physical socket issues and power-loss corruption — not write endurance. The architecture separates critical state (which must survive any crash) from bulk history (which can be rebuilt from peers).
