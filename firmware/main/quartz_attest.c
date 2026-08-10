@@ -28,7 +28,7 @@
 #include "esp_efuse_table.h"
 #include "esp_hmac.h"
 #include "nvs_flash.h"
-#include "mbedtls/ed25519.h"
+// no ed25519 in esp mbedtls
 #include "mbedtls/sha256.h"
 #else
 #define ESP_LOGI(tag, fmt, ...)

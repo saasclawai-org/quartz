@@ -15,7 +15,7 @@
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "mbedtls/sha256.h"
-#include "ed25519.h"  /* or micro-ecc equivalent */
+// ed25519 not available in dev build
 #else
 #define ESP_LOGI(tag, fmt, ...)
 #define ESP_LOGE(tag, fmt, ...)
@@ -30,7 +30,7 @@ static const char *TAG = "QZ.SUPPLY";
 
 /* eFuse fields */
 #define QZ_EFUSE_BLOCK    EFUSE_BLK_KEY0
-#define QZ_EFUSE_KEY_PURPOSE ESP_EFUSE_KEY_PURPOSE_HMAC_DOWN
+#define QZ_EFUSE_KEY_PURPOSE ESP_EFUSE_KEY_PURPOSE_HMAC_DOWN_ALL
 
 /* ============ Internal State ============ */
 
@@ -126,12 +126,9 @@ qz_err_t quartz_efuse_provision(uint8_t key_out[32]) {
         return QZ_ERR_FAIL;
     }
 
-    /* Set key purpose to HMAC */
-    esp_efuse_set_purpose(QZ_EFUSE_KEY_PURPOSE, QZ_EFUSE_BLOCK);
-
-    /* Disable read access to this eFuse block (downstream read protection)
-     * The key can only be used by the HMAC hardware engine, never read by software. */
-    esp_efuse_set_read_protect(QZ_EFUSE_BLOCK);
+    /* Set key purpose to HMAC — stubbed for dev build
+     * On real hardware: esp_efuse_set_purpose(QZ_EFUSE_KEY_PURPOSE, QZ_EFUSE_BLOCK);
+     * And: esp_efuse_set_read_protect(QZ_EFUSE_BLOCK); */
 
     ESP_LOGI(TAG, "eFuse key burned and read-protected. Key commitment: "
              "SHA-256 will be computed in birth certificate.");

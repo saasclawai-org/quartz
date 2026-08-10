@@ -72,7 +72,7 @@
 #define QZ_DEVICE_SIG_SIZE      64      /* Ed25519 signature */
 #define QZ_EFUSE_BLOCK          6       /* eFuse BLOCK6 for attestation key */
 #define QZ_ATTEST_HMAC_SIZE     32      /* HMAC-SHA256 output */
-#define QZ_DEVICE_ID_SIZE       16      /* Short device identifier (first 16 bytes of pubkey hash) */
+#define QZ_DEVICE_ID_SIZE       32      /* Short device identifier (first 16 bytes of pubkey hash) */
 
 /* Registration proof = HMAC(eFuse_key, pubkey) — 32 bytes */
 typedef struct {

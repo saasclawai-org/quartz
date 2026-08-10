@@ -1,3 +1,4 @@
+#include "quartz.h"
 /**
  * quartz_entropy.h — Hardware RNG Hardening & Entropy Health Checks
  *

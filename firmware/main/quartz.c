@@ -217,7 +217,7 @@ void quartz_header_deserialize(const uint8_t *in, quartz_header_t *hdr)
 
 void quartz_get_miner_id(uint8_t miner_id[6])
 {
-    esp_read_mac(miner_id, ESP_MAC_WIFI_STA);
+    esp_read_mac(miner_id, 0);
 }
 
 /* --- Cycle counter (legacy, used for timing stats) --- */
@@ -225,4 +225,18 @@ void quartz_get_miner_id(uint8_t miner_id[6])
 uint32_t quartz_get_cycle_count(void)
 {
     return esp_cpu_get_cycle_count();
+}
+
+/* Mining stats stub */
+static uint32_t s_mining_start_time = 0;
+static uint32_t s_blocks_found = 0;
+
+void quartz_mining_get_stats(quartz_mining_stats_t *stats) {
+    if (!stats) return;
+    memset(stats, 0, sizeof(*stats));
+    if (s_mining_start_time == 0) s_mining_start_time = esp_timer_get_time() / 1000000;
+    stats->uptime_sec = (esp_timer_get_time() / 1000000) - s_mining_start_time;
+    stats->blocks_found = s_blocks_found;
+    stats->temp_c = 45.0; /* Placeholder */
+    stats->hashrate = 0;  /* Updated by mining loop */
 }

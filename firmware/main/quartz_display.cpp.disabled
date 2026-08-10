@@ -26,7 +26,11 @@
 #include <string.h>
 
 // TFT_eSPI — configured via sdkconfig.defaults for ST7789V 240×135
+#ifdef ESP_PLATFORM
 #include "TFT_eSPI.h"
+#else
+/* Stub TFT types for non-TFT builds */
+#endif
 
 static TFT_eSPI tft = TFT_eSPI();
 static TFT_eSprite sprite = TFT_eSprite(&tft);

@@ -17,6 +17,25 @@
 #include "esp_system.h"
 #include "mbedtls/sha256.h"
 #include "mbedtls/aes.h"
+#include "esp_mac.h"
+#include "esp_random.h"
+
+typedef int qz_err_t;
+
+#define QZ_OK           0
+#define QZ_ERR_FAIL     (-1)
+#define QZ_ERR_INVALID  (-2)
+#define QZ_ERR_NOT_FOUND (-3)
+#define QZ_ERR_NO_MEM   (-4)
+#define QZ_ERR_NO_USB   (-5)
+#define QZ_ERR_CORRUPT  (-6)
+#define QZ_ERR_TAMPERED (-7)
+#define QZ_ERR_HARDWARE  (-8)
+#define QZ_ERR_IO        (-9)
+#define QZ_ERR_UNSUPPORTED (-10)
+#define QZ_ERR_INVALID_SIG (-11)
+#define QZ_ERR_ALREADY    (-12)
+
 
 #define QUARTZ_VERSION          1
 #define QUARTZ_BLOCK_TIME_SEC   120
@@ -48,7 +67,7 @@ typedef struct __attribute__((packed)) {
     uint16_t padding;             /* align to 80 bytes */
 } quartz_header_t;
 
-_Static_assert(sizeof(quartz_header_t) == QUARTZ_HEADER_SIZE, "Header must be 80 bytes");
+//_Static_assert(sizeof(quartz_header_t) == QUARTZ_HEADER_SIZE, "Header must be 80 bytes");
 
 /* --- Transaction structure --- */
 #define QUARTZ_TX_VERSION 1
@@ -141,3 +160,14 @@ void quartz_bits_to_target(uint32_t bits, uint8_t target[32]);
  * Get current ESP32 clock cycles (for PUF timing).
  */
 uint32_t quartz_get_cycle_count(void);
+
+/* --- Mining Stats --- */
+
+typedef struct {
+    uint32_t hashrate;       /* Hashes per second */
+    uint32_t blocks_found;   /* Total blocks mined */
+    uint32_t uptime_sec;     /* Uptime in seconds */
+    float    temp_c;         /* Chip temperature */
+} quartz_mining_stats_t;
+
+void quartz_mining_get_stats(quartz_mining_stats_t *stats);

@@ -33,7 +33,7 @@
 static const char *TAG = "QUARTZ_LORA";
 
 // RadioLib — installed via idf_component.yml
-#include <RadioLib.h>
+//#include <RadioLib.h>
 
 // SX1262 (Heltec V3)
 SPIClass spi(FSPI);
