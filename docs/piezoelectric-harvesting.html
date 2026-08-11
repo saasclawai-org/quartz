@@ -1,0 +1,320 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Piezoelectric Energy Harvesting for ESP32</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f8fafc;
+    --fg: #172033;
+    --muted: #5b6475;
+    --line: #64748b;
+    --neutral: #e2e8f0;
+    --input: #bfdbfe;
+    --process: #c7d2fe;
+    --storage: #99f6e4;
+    --external: #fde68a;
+    --risk: #fecaca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --fg: #e5e7eb;
+      --muted: #a3adbd;
+      --line: #94a3b8;
+      --neutral: #334155;
+      --input: #1d4ed8;
+      --process: #4338ca;
+      --storage: #0f766e;
+      --external: #92400e;
+      --risk: #991b1b;
+    }
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+  svg { width: 100%; height: auto; display: block; }
+  .title { font-size: 22px; font-weight: 700; fill: var(--fg); }
+  .subtitle { font-size: 14px; fill: var(--muted); }
+  .label { font-size: 14px; font-weight: 600; fill: var(--fg); }
+  .small { font-size: 11px; fill: var(--muted); }
+  .tiny { font-size: 10px; fill: var(--muted); }
+  .node { stroke: var(--line); stroke-width: 1.5; }
+  .neutral { fill: var(--neutral); }
+  .input { fill: var(--input); }
+  .process { fill: var(--process); }
+  .storage { fill: var(--storage); }
+  .external { fill: var(--external); }
+  .risk { fill: var(--risk); }
+  .edge { stroke: var(--line); stroke-width: 1.8; fill: none; }
+  .edge-thick { stroke: var(--line); stroke-width: 3; fill: none; }
+  .zone { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 5; opacity: 0.5; }
+  .edge-label { font-size: 11px; fill: var(--muted); font-weight: 500; }
+  .voltage { font-size: 11px; fill: #059669; font-weight: 600; }
+</style>
+<main>
+<svg viewBox="0 0 1060 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrow-dc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#059669"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="530" y="34" text-anchor="middle" class="title">Piezoelectric Energy Harvesting → ESP32 Quartz Miner</text>
+  <text x="530" y="54" text-anchor="middle" class="subtitle">Road vibration / footstep harvesting power chain</text>
+
+  <!-- ZONE: Energy Source -->
+  <rect x="20" y="80" width="200" height="520" rx="8" class="zone"/>
+  <text x="120" y="100" text-anchor="middle" class="small" font-weight="600">ENERGY SOURCE</text>
+
+  <!-- Piezo discs (5 in parallel) -->
+  <g>
+    <!-- PZ1 -->
+    <rect x="45" y="125" width="60" height="40" rx="4" class="node external"/>
+    <text x="75" y="142" text-anchor="middle" class="label">PZ1</text>
+    <text x="75" y="156" text-anchor="middle" class="tiny">PZT-5H</text>
+    <!-- PZ2 -->
+    <rect x="125" y="125" width="60" height="40" rx="4" class="node external"/>
+    <text x="155" y="142" text-anchor="middle" class="label">PZ2</text>
+    <text x="155" y="156" text-anchor="middle" class="tiny">PZT-5H</text>
+    <!-- PZ3 -->
+    <rect x="45" y="180" width="60" height="40" rx="4" class="node external"/>
+    <text x="75" y="197" text-anchor="middle" class="label">PZ3</text>
+    <text x="75" y="211" text-anchor="middle" class="tiny">PZT-5H</text>
+    <!-- PZ4 -->
+    <rect x="125" y="180" width="60" height="40" rx="4" class="node external"/>
+    <text x="155" y="197" text-anchor="middle" class="label">PZ4</text>
+    <text x="155" y="211" text-anchor="middle" class="tiny">PZT-5H</text>
+    <!-- PZ5 -->
+    <rect x="45" y="235" width="60" height="40" rx="4" class="node external"/>
+    <text x="75" y="252" text-anchor="middle" class="label">PZ5</text>
+    <text x="75" y="266" text-anchor="middle" class="tiny">PZT-5H</text>
+    <!-- PZ6 -->
+    <rect x="125" y="235" width="60" height="40" rx="4" class="node external"/>
+    <text x="155" y="252" text-anchor="middle" class="label">PZ6</text>
+    <text x="155" y="266" text-anchor="middle" class="tiny">PZT-5H</text>
+  </g>
+  <text x="120" y="300" text-anchor="middle" class="small">6× piezo discs in parallel</text>
+  <text x="120" y="315" text-anchor="middle" class="tiny">Ø35mm, 0.3mm PZT-5H</text>
+  <text x="120" y="330" text-anchor="middle" class="tiny">~2-5V AC each per impact</text>
+
+  <!-- Mechanical input -->
+  <text x="120" y="365" text-anchor="middle" class="small" font-weight="600">Mechanical Input</text>
+  <text x="120" y="382" text-anchor="middle" class="tiny">Road traffic / footsteps</text>
+  <text x="120" y="397" text-anchor="middle" class="tiny">~10-1000 Hz vibration</text>
+  <text x="120" y="412" text-anchor="middle" class="tiny">or direct impact</text>
+
+  <!-- Impact tip -->
+  <text x="120" y="445" text-anchor="middle" class="small" font-weight="600">Yield: ~0.5-3 mW</text>
+  <text x="120" y="461" text-anchor="middle" class="tiny">(depending on traffic)</text>
+  <text x="120" y="480" text-anchor="middle" class="tiny">Cost: ~$2 per disc</text>
+
+  <!-- Wires from piezo array to bridge -->
+  <path d="M105,125 L105,110 L210,110 L210,170 L260,170" class="edge" marker-end="url(#arrow-ac)" stroke="#7c3aed"/>
+  <path d="M155,125 L155,105 L220,105 L220,165 L260,165" class="edge" stroke="#7c3aed" opacity="0.5"/>
+  <text x="235" y="100" class="edge-label" fill="#7c3aed">AC (chaotic)</text>
+  <text x="235" y="115" class="voltage">1-20V AC</text>
+
+  <!-- ZONE: Power Conditioning -->
+  <rect x="250" y="80" width="260" height="360" rx="8" class="zone"/>
+  <text x="380" y="100" text-anchor="middle" class="small" font-weight="600">POWER CONDITIONING</text>
+
+  <!-- Bridge Rectifier -->
+  <rect x="290" y="140" width="120" height="55" rx="4" class="node process"/>
+  <text x="350" y="162" text-anchor="middle" class="label">Bridge Rectifier</text>
+  <text x="350" y="178" text-anchor="middle" class="tiny">6× Schottky (1N5817)</text>
+  <text x="350" y="190" text-anchor="middle" class="tiny">Vf=0.2V, low loss</text>
+
+  <!-- AC input arrows -->
+  <path d="M260,168 L290,168" class="edge" marker-end="url(#arrow-ac)" stroke="#7c3aed"/>
+
+  <!-- DC output arrow to capacitor -->
+  <path d="M350,195 L350,230" class="edge" marker-end="url(#arrow-dc)" stroke="#059669"/>
+  <text x="365" y="215" class="voltage">DC (ripply)</text>
+
+  <!-- Smoothing Capacitor -->
+  <rect x="300" y="230" width="100" height="50" rx="4" class="node storage"/>
+  <text x="350" y="250" text-anchor="middle" class="label">Smoothing Cap</text>
+  <text x="350" y="265" text-anchor="middle" class="tiny">470µF, 16V electrolytic</text>
+  <text x="350" y="277" text-anchor="middle" class="tiny">+ ceramic 100nF</text>
+
+  <!-- Arrow to buck/boost -->
+  <path d="M350,280 L350,310" class="edge" marker-end="url(#arrow-dc)" stroke="#059669"/>
+
+  <!-- Buck-Boost Converter -->
+  <rect x="280" y="310" width="140" height="65" rx="4" class="node process"/>
+  <text x="350" y="332" text-anchor="middle" class="label">Buck-Boost Converter</text>
+  <text x="350" y="348" text-anchor="middle" class="tiny">LTC3588-1 or BQ25570</text>
+  <text x="350" y="362" text-anchor="middle" class="tiny">1.8V → 5V regulated out</text>
+
+  <!-- Arrow to supercap -->
+  <path d="M420,342 L470,342" class="edge" marker-end="url(#arrow-dc)" stroke="#059669"/>
+  <text x="440" y="335" class="voltage">5V DC</text>
+
+  <!-- Supercapacitor (Energy Buffer) -->
+  <rect x="290" y="400" width="140" height="55" rx="4" class="node storage"/>
+  <text x="360" y="420" text-anchor="middle" class="label">Supercapacitor Bank</text>
+  <text x="360" y="435" text-anchor="middle" class="tiny">2× 10F supercaps in series</text>
+  <text x="360" y="448" text-anchor="middle" class="tiny">5F @ 5.4V = 72J buffer</text>
+
+  <!-- Arrow from buck-boost down to supercap -->
+  <path d="M350,375 L350,400" class="edge" marker-end="url(#arrow-dc)" stroke="#059669"/>
+
+  <!-- ZONE: ESP32 Load -->
+  <rect x="540" y="80" width="280" height="520" rx="8" class="zone"/>
+  <text x="680" y="100" text-anchor="middle" class="small" font-weight="600">ESP32 LOAD (QUARTZ MINER)</text>
+
+  <!-- Power management module -->
+  <rect x="580" y="140" width="160" height="50" rx="4" class="node input"/>
+  <text x="660" y="160" text-anchor="middle" class="label">Power Mgmt (PMIC)</text>
+  <text x="660" y="175" text-anchor="middle" class="tiny">HT7333 LDO 3.3V</text>
+  <text x="660" y="187" text-anchor="middle" class="tiny">or ESP32 built-in</text>
+
+  <!-- Arrow from supercap to PMIC -->
+  <path d="M430,427 L510,427 L510,165 L580,165" class="edge-thick" marker-end="url(#arrow-dc)" stroke="#059669"/>
+  <text x="520" y="155" class="voltage">5V → 3.3V</text>
+
+  <!-- ESP32 SoC -->
+  <rect x="570" y="210" width="180" height="80" rx="4" class="node process"/>
+  <text x="660" y="232" text-anchor="middle" class="label">ESP32-D0WDQ6</text>
+  <text x="660" y="248" text-anchor="middle" class="tiny">240MHz dual-core LX6</text>
+  <text x="660" y="262" text-anchor="middle" class="tiny">WiFi + BLE radio</text>
+  <text x="660" y="276" text-anchor="middle" class="tiny">PUF mining + WOTS+ signing</text>
+
+  <!-- Arrow PMIC to ESP32 -->
+  <path d="M660,190 L660,210" class="edge-thick" marker-end="url(#arrow-dc)" stroke="#059669"/>
+  <text x="672" y="203" class="voltage">3.3V</text>
+
+  <!-- Sub-modules -->
+  <rect x="570" y="315" width="80" height="40" rx="4" class="node neutral"/>
+  <text x="610" y="332" text-anchor="middle" class="small">Flash</text>
+  <text x="610" y="346" text-anchor="middle" class="tiny">4MB SPI</text>
+
+  <rect x="665" y="315" width="80" height="40" rx="4" class="node neutral"/>
+  <text x="705" y="332" text-anchor="middle" class="small">RTC SRAM</text>
+  <text x="705" y="346" text-anchor="middle" class="tiny">PUF source</text>
+
+  <!-- arrows from ESP32 -->
+  <path d="M615,290 L615,315" class="edge" marker-end="url(#arrow)"/>
+  <path d="M700,290 L700,315" class="edge" marker-end="url(#arrow)"/>
+
+  <!-- Radio -->
+  <rect x="570" y="380" width="80" height="40" rx="4" class="node external"/>
+  <text x="610" y="397" text-anchor="middle" class="small">WiFi</text>
+  <text x="610" y="411" text-anchor="middle" class="tiny">2.4GHz</text>
+
+  <rect x="665" y="380" width="80" height="40" rx="4" class="node external"/>
+  <text x="705" y="397" text-anchor="middle" class="small">BLE</text>
+  <text x="705" y="411" text-anchor="middle" class="tiny">phone link</text>
+
+  <path d="M615,290 L580,290 L580,380" class="edge" marker-end="url(#arrow)" opacity="0.4"/>
+  <path d="M700,290 L735,290 L735,380" class="edge" marker-end="url(#arrow)" opacity="0.4"/>
+
+  <!-- Power budget box -->
+  <rect x="570" y="445" width="180" height="130" rx="4" class="node risk" opacity="0.6"/>
+  <text x="660" y="465" text-anchor="middle" class="label">Power Budget</text>
+  <text x="660" y="482" text-anchor="middle" class="tiny">ESP32 mining: ~180mA @ 3.3V</text>
+  <text x="660" y="497" text-anchor="middle" class="tiny">= 594mW active</text>
+  <text x="660" y="514" text-anchor="middle" class="tiny">Deep sleep: ~10µA</text>
+  <text x="660" y="529" text-anchor="middle" class="tiny">Light sleep: ~0.8mA</text>
+  <text x="660" y="548" text-anchor="middle" class="small" font-weight="600">Duty cycle needed:</text>
+  <text x="660" y="563" text-anchor="middle" class="tiny">~1% active @ 3mW harvest</text>
+  <text x="660" y="575" text-anchor="middle" class="tiny">(30s mine / 50min charge)</text>
+
+  <!-- ZONE: Optional Solar Supplement -->
+  <rect x="850" y="80" width="190" height="250" rx="8" class="zone"/>
+  <text x="945" y="100" text-anchor="middle" class="small" font-weight="600">SOLAR (OPTIONAL)</text>
+
+  <rect x="880" y="130" width="130" height="50" rx="4" class="node external"/>
+  <text x="945" y="150" text-anchor="middle" class="label">Solar Panel</text>
+  <text x="945" y="165" text-anchor="middle" class="tiny">5V 1W mini panel</text>
+  <text x="945" y="177" text-anchor="middle" class="tiny">100×60mm</text>
+
+  <path d="M945,180 L945,210" class="edge" marker-end="url(#arrow-dc)" stroke="#059669"/>
+
+  <rect x="880" y="210" width="130" height="45" rx="4" class="node process"/>
+  <text x="945" y="228" text-anchor="middle" class="label">Solar Charge Ctrl</text>
+  <text x="945" y="243" text-anchor="middle" class="tiny">TP4056 or MCP73871</text>
+
+  <path d="M880,232 L845,232 L845,342 L420,342" class="edge" stroke="#059669" opacity="0.5" marker-end="url(#arrow-dc)"/>
+  <text x="855" y="225" class="voltage">→ joins supercap</text>
+
+  <text x="945" y="285" text-anchor="middle" class="tiny">Adds ~1W in daylight</text>
+  <text x="945" y="300" text-anchor="middle" class="tiny">enables continuous mining</text>
+  <text x="945" y="315" text-anchor="middle" class="tiny">Cost: ~$3</text>
+
+  <!-- BOM Summary -->
+  <rect x="850" y="360" width="190" height="240" rx="8" class="zone"/>
+  <text x="945" y="380" text-anchor="middle" class="small" font-weight="600">ESTIMATED BOM</text>
+
+  <text x="865" y="405" class="tiny" font-weight="600">Piezo discs (6×)</text>
+  <text x="1040" y="405" text-anchor="end" class="tiny">$12</text>
+
+  <text x="865" y="422" class="tiny" font-weight="600">Schottky diodes (6×)</text>
+  <text x="1040" y="422" text-anchor="end" class="tiny">$2</text>
+
+  <text x="865" y="439" class="tiny" font-weight="600">LTC3588-1 module</text>
+  <text x="1040" y="439" text-anchor="end" class="tiny">$8</text>
+
+  <text x="865" y="456" class="tiny" font-weight="600">Supercaps (2× 10F)</text>
+  <text x="1040" y="456" text-anchor="end" class="tiny">$6</text>
+
+  <text x="865" y="473" class="tiny" font-weight="600">Caps + passives</text>
+  <text x="1040" y="473" text-anchor="end" class="tiny">$2</text>
+
+  <text x="865" y="490" class="tiny" font-weight="600">ESP32 dev board</text>
+  <text x="1040" y="490" text-anchor="end" class="tiny">$5</text>
+
+  <line x1="865" y1="500" x2="1040" y2="500" stroke="#64748b" stroke-width="0.5"/>
+
+  <text x="865" y="518" class="small" font-weight="700">Total (piezo only)</text>
+  <text x="1040" y="518" text-anchor="end" class="small" font-weight="700">~$35</text>
+
+  <text x="865" y="538" class="tiny" font-weight="600">+ Solar panel (opt.)</text>
+  <text x="1040" y="538" text-anchor="end" class="tiny">+$5</text>
+
+  <text x="865" y="558" class="tiny" font-weight="600">+ LoRa module (opt.)</text>
+  <text x="1040" y="558" text-anchor="end" class="tiny">+$8</text>
+
+  <text x="945" y="585" text-anchor="middle" class="tiny" font-weight="600">Full autonomous node: ~$48</text>
+
+  <!-- Legend -->
+  <rect x="20" y="630" width="700" height="60" rx="6" fill="none" stroke="#64748b" stroke-width="0.5" opacity="0.5"/>
+  <text x="35" y="650" class="small" font-weight="600">Legend:</text>
+
+  <rect x="100" y="640" width="14" height="14" rx="2" class="external"/>
+  <text x="120" y="652" class="tiny">Energy source</text>
+
+  <rect x="210" y="640" width="14" height="14" rx="2" class="process"/>
+  <text x="230" y="652" class="tiny">Conditioning / conversion</text>
+
+  <rect x="380" y="640" width="14" height="14" rx="2" class="storage"/>
+  <text x="400" y="652" class="tiny">Energy storage</text>
+
+  <rect x="500" y="640" width="14" height="14" rx="2" class="input"/>
+  <text x="520" y="652" class="tiny">Power management</text>
+
+  <rect x="640" y="640" width="14" height="14" rx="2" class="risk" opacity="0.6"/>
+  <text x="660" y="652" class="tiny">Constraints</text>
+
+  <line x1="100" y1="672" x2="130" y2="672" stroke="#7c3aed" stroke-width="1.8"/>
+  <text x="135" y="676" class="tiny">AC path</text>
+
+  <line x1="190" y1="672" x2="220" y2="672" stroke="#059669" stroke-width="1.8"/>
+  <text x="225" y="676" class="tiny">DC path</text>
+
+  <line x1="280" y1="672" x2="310" y2="672" stroke="#64748b" stroke-width="1.8"/>
+  <text x="315" y="676" class="tiny">Signal / data</text>
+</svg>
+</main>

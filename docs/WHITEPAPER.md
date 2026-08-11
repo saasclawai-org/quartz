@@ -6,7 +6,7 @@
 
 ## Abstract
 
-Quartz is a decentralized cryptocurrency designed to be mined exclusively on ESP32-series microcontrollers. Unlike conventional cryptocurrencies that favor specialized hardware (ASICs, GPUs), Quartz uses SRAM PUF attestation that binds every block to a physical ESP32 chip — making it impossible to mine on any other platform. Wallets use WOTS+ hash-based signatures, providing quantum resistance against future cryptanalytic attacks. The ultra-low power requirement (1.2W) enables energy harvesting from ambient sources — piezoelectric road surfaces, solar panels, bicycle dynamos, and waste heat — creating the first cryptocurrency that can be mined entirely on energy that was already being spent.
+Quartz is a decentralized cryptocurrency designed to be mined exclusively on ESP32-series microcontrollers. Unlike conventional cryptocurrencies that favor specialized hardware (ASICs, GPUs), Quartz uses SRAM PUF attestation that binds every block to a physical ESP32 chip — making it impossible to mine on any other platform. Wallets use WOTS+ hash-based signatures, providing quantum resistance against future cryptanalytic attacks. The ultra-low power requirement (1.2W) enables off-grid mining using solar panels and small wind turbines with LiFePO4 battery storage — creating the first cryptocurrency that can be mined entirely off-grid, with zero electricity cost.
 
 ## Motivation
 
@@ -1019,7 +1019,7 @@ This creates constant sell pressure: miners dump rewards as fast as they mine, p
 
 ### Quartz Quarries
 
-A **quarry** is a registered mining operation — from a single ESP32 on a desk to 10,000 piezo nodes embedded in a highway. Every miner must register a quarry before mining.
+A **quarry** is a registered mining operation — from a single ESP32 on a desk to 10,000 solar nodes in a field. Every miner must register a quarry before mining.
 
 **How it works:**
 
@@ -1065,7 +1065,7 @@ This makes instant dumping impossible but lets operators access earnings regular
 
 ### Single Miner (Quarry of One)
 
-Most Quartz miners start as a quarry of one — a single ESP32 on a desk, in a window, or on a bicycle.
+Most Quartz miners start as a quarry of one — a single ESP32 on a desk, in a window, or on a rooftop.
 
 - Register with one device and one owner key
 - Mine to your own address
@@ -1107,101 +1107,86 @@ The quarry rate limit creates natural scarcity without any staking or lockup mec
 This is friction at the protocol level, not the hardware level. No physical button presses, no device co-signing, no buried wallets. Just economic physics: you can only pour out 15% of the bucket per week.
 
 
-## Energy Harvesting — Mining on Waste Energy
+## Off-Grid Mining — Solar, Wind, and LiFePO4
 
-Quartz's ultra-low power requirement (1.2W per ESP32) opens a mining category impossible for any other cryptocurrency: **energy harvesting from ambient kinetic, solar, and thermal sources.** Bitcoin ASICs need 3,000W continuously. Quartz needs 1.2W intermittently. This difference enables mining modes that are genuinely green — not "carbon offset" green, but "powered by energy that was already being spent anyway" green.
+Quartz's ultra-low power requirement (1.2W per ESP32) opens a mining category impossible for any other cryptocurrency: **off-grid mining powered by solar panels and small wind turbines, with LiFePO4 battery storage.** Bitcoin ASICs need 3,000W continuously. Quartz needs 1.2W. This difference enables genuinely green mining — not "carbon offset" green, but "powered by sunlight and wind" green.
 
 ### Power Budget
 
 | Source | Average Power | Hours/Day | Daily Energy | Sufficient? |
 |--------|-------------|-----------|-------------|------------|
-| Piezo road strip (per car pass) | 10-50W (0.5s burst) | Continuous | Varies by traffic | ✅ With supercap |
-| Piezo floor tile (per step) | 0.1-1W (0.3s burst) | Continuous | Varies by footfall | ✅ With supercap |
-| Small solar panel (5W) | 3-5W peak | 4-8h | 12-40 Wh | ✅ Plenty |
-| Bicycle hub dynamo | 3W @ 15 km/h | While riding | 3 Wh/hr | ✅ While riding |
-| Thermoelectric generator (hot pipe) | 1-3W | 24h | 24-72 Wh | ✅ Continuous |
-| Small wind turbine | 1-10W | Variable | Varies | ✅ With battery |
-| Car alternator | 500W+ | While driving | Unlimited | ✅ (50+ ESP32s) |
-| Train axle generator | Kilowatts | While moving | Unlimited | ✅ (massive cluster) |
+| Solar panel (5W) | 3-5W peak | 4-8h | 12-40 Wh | ✅ Plenty |
+| Solar panel (1W mini) | 0.5-1W peak | 4-8h | 2-8 Wh | ✅ With duty cycling |
+| Small wind turbine (10W) | 1-10W | Variable | 10-80 Wh | ✅ Day and night |
+| USB wall charger | 1.2W continuous | 24h | 28.8 Wh | ✅ Cheapest option |
+| Thermoelectric generator | 1-3W | 24h | 24-72 Wh | ✅ Industrial |
 
-ESP32 mining cost: **~28.8 Wh/day** (1.2W × 24h). Any source producing more than this can mine Quartz.
+ESP32 mining cost: **~28.8 Wh/day** (1.2W × 24h). A 5W solar panel in decent sun produces this in 6-8 hours.
 
-### Piezoelectric Road Mining
+### Solar Mining — The Primary Deployment
 
-The most scalable energy harvesting application is embedding piezoelectric transducer strips in road surfaces. Vehicles compress the strips as they pass, converting kinetic energy into electrical bursts stored in supercapacitors.
-
-**Deployment scenarios:**
-
-| Location | Traffic | Avg Power | ESP32s | Hashrate |
-|----------|---------|-----------|--------|----------|
-| Residential street | 200 cars/hr | ~2W | 1 | 28 H/s |
-| City intersection | 2,000 cars/hr | ~20W | 10 | 280 H/s |
-| Highway (4 lanes) | 8,000 cars/hr | ~80W | 40 | 1,120 H/s |
-| Toll plaza | 20/min peak | ~200W burst | 100+ (supercap) | 2,800+ H/s |
-| Rail line | 50 trains/day | ~500W | 250+ | 7,000+ H/s |
-
-**Bill of materials per road node:**
-
-| Component | Cost |
-|-----------|------|
-| Piezo transducer strip | $3 |
-| Rectifier + supercapacitor (10F) | $2 |
-| 3.3V LDO regulator | $1 |
-| ESP32 + LoRa module | $8 |
-| Enclosure + asphalt embedding | $5 |
-| **Total** | **~$19** |
-
-Install once in asphalt. Mines forever. No grid power, no maintenance, no battery replacement. LoRa mesh reports blocks to the nearest gateway node.
-
-**Why this is unique to Quartz:**
-- Bitcoin ASICs need 3,000W continuous — piezo roads produce 2-80W in bursts
-- The supercapacitor buffers energy between vehicles
-- ESP32 boots in ~1 second, mines during energy availability, deep-sleeps between bursts
-- A single highway deployment could match a small mining farm — powered entirely by waste kinetic energy
-
-### Wearable and Kinetic Mining
-
-| Form Factor | Power Source | Power | Use Case |
-|-------------|------------|-------|----------|
-| Piezo shoe insole | Walking/running | 0.5-2W | Fitness mining |
-| Bicycle hub dynamo | Wheel rotation | 3W @ 15 km/h | Commute mining |
-| Hand-crank generator | Human power | 2-5W | Off-grid mining |
-| Dance floor tile | Footsteps | 0.1-1W/step | Event mining |
-| Gym bike generator | Pedaling | 50-100W | Fitness mining |
-| Door push bar | Door openings | 0.5W burst | Access control mining |
-
-These are intermittent sources. Solo mining is impractical at 28 H/s for a few hours a day. **Mesh pools are essential** — hundreds of kinetic miners aggregate hashrate via LoRa, submitting blocks collectively with proportional rewards.
-
-### Solar Autonomous Miners
-
-The simplest energy harvesting deployment:
+The simplest and most proven off-grid mining setup:
 
 ```
-Small solar panel (5W) ──→ LiPo battery (18650) ──→ ESP32 + LoRa
-     $8                      $3                      $8
-     Total: ~$19
+Solar panel (5W) ──→ TP4056 charge controller ──→ LiFePO4 18650 (1500mAh) ──→ ESP32 + LoRa
+     $5                $1                          $4                           $8
+     Total: ~$18
 ```
 
-- Mines during daylight, runs on battery at night
-- A 5W panel + single 18650 (3000 mAh) provides 24/7 operation
+- Mines during daylight, runs on LFP battery at night
+- 5W panel + single LFP 18650 provides ~16h of mining per charge cycle
+- LFP chemistry: 2,000+ cycles, fire-safe, non-toxic (unlike LiPo)
 - Deployable anywhere with sunlight: rooftops, fields, developing nations
 - No internet needed — LoRa mesh relays blocks to the nearest gateway
 - This is the most viable deployment for developing nations and remote areas
 
+**Bill of materials per solar node:**
+
+| Component | Cost |
+|-----------|------|
+| 5W solar panel (100×60mm) | $5 |
+| TP4056 charge controller | $1 |
+| LiFePO4 18650 battery (1500mAh) | $4 |
+| ESP32 + LoRa module | $8 |
+| Enclosure + wiring | $2 |
+| **Total** | **~$20** |
+
+### Wind Mining — Complementary Power
+
+Small DC wind turbines complement solar by generating power at night and during storms:
+
+- 10W vertical axis wind turbine (VAWT): ~$10
+- Works alongside solar — charges the same LFP bank
+- Night mining becomes viable without oversized battery
+- Best for coastal areas, ridgelines, high-altitude deployments
+
+### LiFePO4 Battery Storage
+
+LiFePO4 (LFP) is the recommended battery chemistry for Quartz mining:
+
+| Chemistry | Cycles | Safety | Cost | Recommendation |
+|-----------|--------|--------|------|----------------|
+| LiFePO4 (LFP) | 2,000+ | Fire-safe, no thermal runaway | $4/cell | ✅ Best choice |
+| Li-ion (NMC) | 500-800 | Fire risk if damaged | $3/cell | ⚠️ Acceptable |
+| LiPo | 300-500 | Swelling/fire risk | $2/cell | ❌ Avoid |
+| Supercapacitor | 100,000+ | No degradation | $6/10F | ✅ For burst mining |
+
+A single LFP 18650 (1500mAh, 3.2V) stores ~4.8Wh — enough for ~4 hours of continuous mining. Paired with a 5W solar panel, the node mines all day on solar and 4+ hours into the night on battery.
+
 ### Intermittent Mining Protocol
 
-Energy harvesting sources are bursty. Quartz firmware supports intermittent mining:
+For nodes without battery storage (solar-only or burst-powered), Quartz firmware supports intermittent mining:
 
-1. **Energy detection**: ADC monitors supercapacitor voltage
+1. **Energy detection**: ADC monitors input voltage
 2. **Boot threshold**: When voltage exceeds 3.3V, ESP32 boots (~1s)
 3. **Mine until depleted**: Hash nonces until voltage drops below 3.0V
 4. **Submit if found**: Flush any block to LoRa mesh before sleeping
-5. **Deep sleep**: ESP32 enters deep sleep (~10μA) until capacitor recharges
-6. **Repeat**: Next vehicle/step/sunbeam wakes the miner
+5. **Deep sleep**: ESP32 enters deep sleep (~10μA) until power returns
+6. **Repeat**: Next sunrise or wind gust wakes the miner
 
 The protocol handles graceful degradation — partial hashes are not wasted because each nonce is independent. A miner that runs 100 nonces before sleeping contributes 100 attempts to the network, even if it never finds a block solo.
 
-### Mesh Pool Integration for Harvesting Miners
+### Mesh Pool Integration for Off-Grid Miners
 
 Intermittent miners join mesh pools automatically:
 
@@ -1212,18 +1197,18 @@ Intermittent miners join mesh pools automatically:
 5. On next boot, shares are flushed to coordinator
 6. Coordinator aggregates shares across boot cycles
 
-This means a piezo road strip that wakes up 200 times per hour (once per car) and mines for 0.5 seconds each time contributes 100 seconds of mining per hour — roughly 2,800 nonce attempts. One hundred such nodes on a busy street contribute 280,000 nonces/hour pooled.
+A solar-only node that wakes for 6 hours/day contributes ~600,000 nonce attempts per day pooled. Fifty such nodes on a mesh contribute 30M nonces/day — meaningful hashrate from free sunlight.
 
 ### Environmental Impact Statement
 
-Quartz energy harvesting does not consume additional energy. It captures energy that was already being expended:
+Quartz off-grid mining has a near-zero environmental footprint:
 
-- **Road piezo**: Vehicle kinetic energy is already being dissipated as heat and vibration. Piezo strips convert waste energy to useful computation.
-- **Solar**: Sunlight was already hitting the ground.
-- **Thermal**: Waste heat from industrial processes was already being produced.
-- **Kinetic**: Human movement was already happening.
+- **Solar**: Sunlight was already hitting the ground. Panels simply redirect it to useful computation.
+- **Wind**: Wind was already blowing. Turbines convert it to hashes.
+- **LFP batteries**: Non-toxic, no heavy metals, 2,000+ cycle life = 5+ years daily use.
+- **End of life**: ESP32, solar panels, and LFP cells are all recyclable.
 
-The total energy footprint of Quartz mining is **net-zero or negative** when using harvesting — the computation is powered by energy that would have been wasted regardless. This is categorically different from Bitcoin's energy consumption, which requires dedicated grid power.
+The total energy footprint of Quartz mining is **effectively zero** when off-grid — no grid power, no fossil fuels, no offsets. This is categorically different from Bitcoin's energy consumption, which requires dedicated grid power equivalent to a small country.
 
 
 ## Autonomous Device Agents — Silicon That Earns, Spends, and Acts
@@ -1303,11 +1288,11 @@ Models are trained off-device on historical data, quantized to int8, and flashed
 
 ### Application: Self-Maintaining Highway
 
-A deployment of 500 piezo road nodes, each running as an autonomous agent:
+A deployment of 500 solar nodes, each running as an autonomous agent:
 
 ```
 Day-to-day operation:
-  1. Each node mines QZ from piezo energy of passing vehicles
+  1. Each node mines QZ from solar energy during daylight
   2. Nodes relay blocks to each other via LoRa mesh (paid from relay pool)
   3. Vibration classifier detects pavement degradation
   4. Rule engine: IF degradation > 70% AND balance > 5 QZ:
@@ -1338,10 +1323,10 @@ Nodes trade energy among themselves using QZ as the settlement layer. No utility
 
 ### Application: Vending Machine That Mines Its Own Inventory
 
-A vending machine with an ESP32 controller + piezo footpad:
+A vending machine with an ESP32 controller:
 
 ```
-1. Customers walk on footpad → piezo generates energy → ESP32 mines QZ
+1. ESP32 mines QZ on idle cycles between customer interactions
 2. Customer scans QR code → pays QZ → relay dispenses product
 3. Machine accumulates QZ from both mining and sales
 4. Rule: IF balance > restock_cost AND inventory < 20%:
