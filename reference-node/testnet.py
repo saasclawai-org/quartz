@@ -17,7 +17,7 @@ import struct
 import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # Add parent dir to path
 import sys
@@ -192,6 +192,8 @@ class QuartzChain:
             "dev_fund_address": self.dev_wallet['address'] if self.dev_wallet else None,
             "dev_fund_balance": self.balances.get(self.dev_wallet['address'], 0) if self.dev_wallet else 0,
             "dev_fund_balance_qz": self.balances.get(self.dev_wallet['address'], 0) / 1e8 if self.dev_wallet else 0,
+            "total_hashrate": sum(m.get('hashrate', 0) for m in getattr(self, 'miner_stats', {}).values()),
+            "hardware_miners": len(getattr(self, 'miner_stats', {})),
         }
 
     def get_block(self, height: int):
@@ -338,9 +340,123 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             except ValueError:
                 self.json_error(400, "Invalid block height")
 
+        elif path == '/api/v1/mining/work':
+            # Return block template for ESP32 miners
+            height = len(self.chain.blocks)
+            prev_block = self.chain.blocks[-1]
+            miner_reward = get_miner_reward(height)
+
+            # Track miner from query params or header
+            qs = parse_qs(parsed.query)
+            miner_addr = qs.get('address', [''])[0]
+            hashrate = int(qs.get('hashrate', ['0'])[0])
+
+            if miner_addr:
+                miner_id = miner_addr.encode()[:6]
+                key = miner_id.hex()
+                if not hasattr(self.chain, 'miner_stats'):
+                    self.chain.miner_stats = {}
+                if key not in self.chain.miner_stats:
+                    self.chain.miner_stats[key] = {
+                        'address': miner_addr,
+                        'hashrate': hashrate or 28,
+                        'blocks_found': 0,
+                        'last_submit': time.time(),
+                        'first_seen': time.time(),
+                    }
+                else:
+                    self.chain.miner_stats[key]['last_submit'] = time.time()
+                    if hashrate:
+                        self.chain.miner_stats[key]['hashrate'] = hashrate
+
+            header = BlockHeader(
+                version=1,
+                prev_block_hash=prev_block.header.hash,
+                timestamp=int(time.time()),
+                difficulty_target=TESTNET_DIFFICULTY,
+            )
+            header_bytes = struct.pack('<I32s32sIII',
+                header.version,
+                header.prev_block_hash,
+                b'\x00' * 32,
+                header.timestamp,
+                header.difficulty_target,
+                0,
+            )
+
+            self.json_response({
+                "job_id": f"job_{height}_{int(time.time())}",
+                "height": height,
+                "header": header_bytes.hex(),
+                "target_bits": TESTNET_DIFFICULTY,
+                "reward_qz": miner_reward / 1e8,
+                "prev_hash": prev_block.header.hash.hex()[:16],
+            })
+
+        elif path == '/api/v1/messages':
+            # Recent messages from recent blocks + pending
+            messages = []
+
+            # Pending messages (not yet in a block)
+            if hasattr(self.chain, '_pending_msgs'):
+                for msg in self.chain._pending_msgs:
+                    messages.append({
+                        "txid": msg['txid'],
+                        "block": None,
+                        "from": msg.get('from', ''),
+                        "to": msg.get('to', ''),
+                        "data_text": msg['text'],
+                        "timestamp": int(msg['timestamp']),
+                        "confirmed": False,
+                    })
+
+            # Confirmed messages from recent blocks
+            for i, block in enumerate(reversed(self.chain.blocks[-50:])):
+                block_height = len(self.chain.blocks) - 1 - i
+                for tx in block.transactions:
+                    if hasattr(tx, 'data') and tx.data and len(tx.data) > 0:
+                        messages.append({
+                            "txid": tx.txid.hex()[:16],
+                            "block": block_height,
+                            "data_hex": tx.data.hex(),
+                            "data_text": tx.data.decode('utf-8', errors='replace')[:160],
+                            "timestamp": block.header.timestamp,
+                            "confirmed": True,
+                        })
+
+            self.json_response({"messages": messages, "count": len(messages)})
+
         elif path.startswith('/api/v1/address/'):
-            address = path.split('/')[-1]
-            self.json_response(self.chain.get_address(address))
+            # Check if this is a txs sub-path: /api/v1/address/<addr>/txs
+            parts = path.split('/')
+            address = parts[4] if len(parts) > 4 else ''
+
+            if len(parts) > 5 and parts[5] == 'txs':
+                # Payment check endpoint for ESP32
+                # Returns simplified tx list for pay.c polling
+                addr_info = self.chain.get_address(address)
+
+                # Check for query params (min_amount)
+                qs = parse_qs(parsed.query)
+                min_amount = int(qs.get('min_amount', [0])[0])
+
+                matching_txs = []
+                for tx in addr_info.get('transactions', []):
+                    if tx['amount_sats'] >= min_amount:
+                        matching_txs.append({
+                            'txid': tx['txid'],
+                            'amount': tx['amount_sats'],
+                            'confirmations': max(1, len(self.chain.blocks) - tx.get('block', 0)),
+                        })
+
+                self.json_response({
+                    'address': address,
+                    'balance_sats': addr_info['balance_sats'],
+                    'txs': matching_txs,
+                    'count': len(matching_txs),
+                })
+            else:
+                self.json_response(self.chain.get_address(address))
 
         elif path == '/api/v1/dev-fund':
             info = self.chain.get_chain_info()
@@ -365,6 +481,26 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 })
             self.json_response({"miners": miners, "count": len(miners)})
 
+        elif path == '/api/v1/miners/active':
+            """Real hardware miners with live stats."""
+            stats = getattr(self.chain, 'miner_stats', {})
+            miners = []
+            for key, v in stats.items():
+                miners.append({
+                    'id': key,
+                    'address': v.get('address', ''),
+                    'hashrate': v.get('hashrate', 0),
+                    'blocks_found': v.get('blocks_found', 0),
+                    'last_submit_ago_s': int(time.time() - v.get('last_submit', 0)),
+                    'uptime_s': int(time.time() - v.get('first_seen', time.time())),
+                })
+            total_hps = sum(m['hashrate'] for m in miners)
+            self.json_response({
+                'miners': miners,
+                'count': len(miners),
+                'total_hashrate': total_hps,
+            })
+
         else:
             self.json_error(404, "Not found")
 
@@ -372,7 +508,100 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/')
 
-        if path == '/api/v1/faucet':
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = {}
+        if content_length > 0:
+            try:
+                body = json.loads(self.rfile.read(content_length))
+            except:
+                pass
+
+        if path == '/api/v1/messages/send':
+            # Send a message via on-chain transaction
+            sender = body.get('from', 'anonymous')
+            recipient = body.get('to', '')
+            text = body.get('text', '')
+
+            if not text:
+                self.json_error(400, "Missing text")
+                return
+            if len(text) > 160:
+                self.json_error(400, "Message too long (160 chars max)")
+                return
+
+            # Create a transaction with data carrier
+            tx = Transaction(
+                version=1,
+                inputs=[],
+                outputs=[],
+                data=text.encode('utf-8'),
+            )
+
+            # Add transaction to mempool (actual Transaction object)
+            self.chain.mempool.append(tx)
+
+            # Store the message transaction directly on next block
+            # (simplified: store in mempool and include in next mined block)
+            if not hasattr(self.chain, '_pending_msgs'):
+                self.chain._pending_msgs = []
+            self.chain._pending_msgs.append({
+                "txid": tx.txid.hex()[:16],
+                "from": sender,
+                "to": recipient,
+                "text": text,
+                "timestamp": time.time(),
+            })
+
+            self.json_response({
+                "status": "queued",
+                "txid": tx.txid.hex()[:16],
+                "text": text,
+                "confirmations": 0,
+                "est_confirm_seconds": 30,
+            })
+
+        elif path == '/api/v1/mining/submit':
+            # ESP32 miner submitting a found nonce
+            job_id = body.get('job_id', '')
+            nonce = body.get('nonce', 0)
+            header_hex = body.get('header', '')
+            miner_addr = body.get('address', '')
+            hashrate = body.get('hashrate', 0)
+            puf_attestation = body.get('puf_attestation', '')
+
+            # Use wallet address as miner identifier (unique per device)
+            if miner_addr:
+                miner_id = miner_addr.encode()[:6]
+            else:
+                miner_id = bytes([0xAA, 0xBB, 0xCC, 0x01, 0x00, 0x06])
+
+            # Track real-time stats per miner
+            if not hasattr(self.chain, 'miner_stats'):
+                self.chain.miner_stats = {}
+            key = miner_id.hex()
+            if key not in self.chain.miner_stats:
+                self.chain.miner_stats[key] = {
+                    'address': miner_addr,
+                    'hashrate': hashrate,
+                    'blocks_found': 0,
+                    'last_submit': time.time(),
+                    'first_seen': time.time(),
+                }
+            self.chain.miner_stats[key]['hashrate'] = hashrate or self.chain.miner_stats[key].get('hashrate', 28)
+            self.chain.miner_stats[key]['last_submit'] = time.time()
+            self.chain.miner_stats[key]['blocks_found'] = self.chain.miner_stats[key].get('blocks_found', 0) + 1
+
+            # Accept the share and mine a real block
+            block = self.chain.mine_block(miner_id, f"ESP32-{job_id[:8]}")
+
+            self.json_response({
+                "status": "accepted",
+                "job_id": job_id,
+                "block_height": len(self.chain.blocks) - 1,
+                "reward": get_miner_reward(len(self.chain.blocks) - 1) / 1e8,
+            })
+
+        elif path == '/api/v1/faucet':
             # Testnet faucet — send 1 QZ to an address
             content_length = int(self.headers['Content-Length'])
             body = json.loads(self.rfile.read(content_length))
@@ -380,11 +609,13 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             if not address:
                 self.json_error(400, "Missing address")
                 return
-            # Add to mempool
-            self.chain.mempool.append((
-                f"faucet:{address}:{time.time()}",
-                1 * 10**8,  # 1 QZ
-            ))
+            # Create a simple transaction to the address
+            faucet_tx = Transaction(
+                version=1,
+                inputs=[],
+                outputs=[(1 * 10**8, bytes.fromhex(address.zfill(32)[:64].encode().hex()))],
+            )
+            self.chain.mempool.append(faucet_tx)
             self.json_response({"status": "queued", "amount": "1 QZ", "address": address})
 
         elif path == '/api/v1/mine':
@@ -394,8 +625,158 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             block = self.chain.mine_block(miner['id'], miner['name'])
             self.json_response({"status": "mined", "height": len(self.chain.blocks) - 1})
 
+        elif path == '/api/v1/agent/decide':
+            # LLM-backed agent decision endpoint
+            # ESP32 POSTs its state, node proxies to LLM, returns action
+            self.handle_agent_decide(body)
+
         else:
             self.json_error(404, "Not found")
+
+    def handle_agent_decide(self, body):
+        """
+        LLM-backed agent decision endpoint.
+
+        ESP32 sends its state, node proxies to an OpenAI-compatible LLM,
+        parses the response, and returns a structured action.
+
+        Request body:
+            {
+                "device_id": "a4:cf:12:6d:a2:5c",
+                "balance": 2.3,           // QZ
+                "block_height": 1234,
+                "hashrate": 28,           // H/s
+                "temperature": 44,       // Celsius
+                "voltage_mv": 3300,      // millivolts
+                "vibration": 1200,       // raw ADC
+                "light": 2048,           // raw ADC
+                "mining_active": true,
+                "uptime_sec": 3600,
+                "blocks_found": 3,
+                "relay_state": "idle"
+            }
+
+        Response:
+            {
+                "action": "message|relay|alert|stop_mining|restart_mining|none",
+                "params": { ... },
+                "reasoning": "LLM explanation"
+            }
+        """
+        import urllib.request
+
+        # Config from environment (set in systemd / .env)
+        llm_url = os.environ.get(
+            'QUARTZ_LLM_URL',
+            'http://localhost:18789/v1/chat/completions'
+        )
+        llm_key = os.environ.get('QUARTZ_LLM_API_KEY', '')
+        llm_model = os.environ.get('QUARTZ_LLM_MODEL', 'openclaw')
+
+        device_state = body
+
+        # Build the system prompt
+        system_prompt = (
+            "You are the brain of a Quartz mining device (ESP32). "
+            "You receive the device's current state and decide what action it should take. "
+            "You must respond with ONLY valid JSON, no markdown, no explanation outside JSON.\n\n"
+            "Available actions:\n"
+            '  {"action": "none"} — do nothing, keep mining\n'
+            '  {"action": "relay", "params": {"duration_ms": 3000}} — trigger GPIO relay\n'
+            '  {"action": "message", "params": {"text": "hello world"}} — broadcast on-chain message (max 160 chars)\n'
+            '  {"action": "alert", "params": {"text": "warning text"}} — show alert on screen\n'
+            '  {"action": "stop_mining"} — stop mining\n'
+            '  {"action": "restart_mining"} — resume mining\n\n'
+            "Rules:\n"
+            "- Be conservative. Default to 'none' unless something needs attention.\n"
+            "- Temperature above 75°C is concerning. Above 85°C is critical.\n"
+            "- Voltage below 3000mV is low. Below 2800mV is critical.\n"
+            "- Don't send messages more than once per hour for the same reason.\n"
+            "- If the device has mined a block recently, a brief congratulatory message is fine.\n"
+            "- Be creative but safe. This is a demo of autonomous device agency.\n"
+        )
+
+        user_prompt = (
+            f"Device state:\n"
+            f"  Device ID: {device_state.get('device_id', 'unknown')}\n"
+            f"  Balance: {device_state.get('balance', 0)} QZ\n"
+            f"  Block height: {device_state.get('block_height', 0)}\n"
+            f"  Hashrate: {device_state.get('hashrate', 0)} H/s\n"
+            f"  Temperature: {device_state.get('temperature', 0)}°C\n"
+            f"  Voltage: {device_state.get('voltage_mv', 0)} mV\n"
+            f"  Vibration: {device_state.get('vibration', 0)}\n"
+            f"  Light level: {device_state.get('light', 0)}\n"
+            f"  Mining active: {device_state.get('mining_active', True)}\n"
+            f"  Uptime: {device_state.get('uptime_sec', 0)} seconds\n"
+            f"  Blocks found: {device_state.get('blocks_found', 0)}\n"
+            f"  Relay state: {device_state.get('relay_state', 'idle')}\n\n"
+            "What should this device do? Respond with JSON only."
+        )
+
+        # Call the LLM
+        llm_payload = {
+            "model": llm_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.7,
+            "max_tokens": 200,
+        }
+
+        headers = {"Content-Type": "application/json"}
+        if llm_key:
+            headers["Authorization"] = f"Bearer {llm_key}"
+
+        try:
+            req = urllib.request.Request(
+                llm_url,
+                data=json.dumps(llm_payload).encode(),
+                headers=headers,
+                method='POST',
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                llm_result = json.loads(resp.read())
+
+            # Extract the text from OpenAI-compatible response
+            content = llm_result.get('choices', [{}])[0].get(
+                'message', {}
+            ).get('content', '').strip()
+
+            # Parse JSON from LLM response (handle markdown fences)
+            if content.startswith('```'):
+                # Strip markdown code fences
+                lines = content.split('\n')
+                lines = [l for l in lines if not l.startswith('```')]
+                content = '\n'.join(lines)
+
+            try:
+                action = json.loads(content)
+            except json.JSONDecodeError:
+                # LLM didn't return clean JSON — return none with reasoning
+                action = {
+                    "action": "none",
+                    "reasoning": f"LLM returned non-JSON: {content[:100]}",
+                }
+
+            self.json_response({
+                "action": action.get("action", "none"),
+                "params": action.get("params", {}),
+                "reasoning": action.get("reasoning", content[:200]),
+            })
+
+        except urllib.error.URLError as e:
+            self.json_response({
+                "action": "none",
+                "params": {},
+                "reasoning": f"LLM unavailable: {str(e)[:100]}",
+            })
+        except Exception as e:
+            self.json_response({
+                "action": "none",
+                "params": {},
+                "reasoning": f"Error: {str(e)[:100]}",
+            })
 
     def json_response(self, data, code=200):
         self.send_response(code)
@@ -443,7 +824,7 @@ def main():
     print()
 
     # Start HTTP server
-    server = HTTPServer(('127.0.0.1', QUARTZ_PORT), QuartzAPIHandler)
+    server = HTTPServer(('0.0.0.0', QUARTZ_PORT), QuartzAPIHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

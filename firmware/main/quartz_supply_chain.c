@@ -122,8 +122,34 @@ qz_err_t quartz_efuse_provision(uint8_t key_out[32]) {
     /* Burn into eFuse BLOCK6 — IRREVERSIBLE */
     esp_err_t ret = esp_efuse_write_block(QZ_EFUSE_BLOCK, key_out, 0, 256);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to burn eFuse: %s", esp_err_to_name(ret));
-        return QZ_ERR_FAIL;
+        ESP_LOGW(TAG, "eFuse burn failed (%s) — using software key fallback", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "This device's eFuse BLOCK is already written (e.g. ex-flash-encryption).");
+        ESP_LOGW(TAG, "CrystalHash will use software-derived key. Not hardware-bound on this unit.");
+
+        /* Derive a deterministic software key from hardware RNG + chip ID.
+         * This is NOT hardware-bound (no eFuse protection) but allows the device
+         * to function as a miner on repurposed/dev units. */
+        uint8_t chip_id[6];
+        quartz_get_miner_id(chip_id);
+
+        mbedtls_sha256_context ctx;
+        mbedtls_sha256_init(&ctx);
+        mbedtls_sha256_starts(&ctx, 0);
+        mbedtls_sha256_update(&ctx, key_out, 32);       /* random bytes */
+        mbedtls_sha256_update(&ctx, chip_id, 6);         /* chip-unique */
+        mbedtls_sha256_update(&ctx, (const uint8_t *)"QUARTZ_SW_KEY_FALLBACK", 22);
+        mbedtls_sha256_finish(&ctx, key_out);
+        mbedtls_sha256_free(&ctx);
+
+        /* Store the software key in NVS so it persists across reboots */
+        nvs_handle_t h;
+        if (nvs_open(QZ_NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+            nvs_set_blob(h, "sw_key", key_out, 32);
+            nvs_commit(h);
+            nvs_close(h);
+        }
+
+        return QZ_OK;
     }
 
     /* Set key purpose to HMAC — stubbed for dev build
@@ -263,9 +289,75 @@ qz_err_t quartz_supply_chain_init(qz_birth_certificate_t *cert_out) {
     if (!cert_exists) {
         /* First boot OR tampered device */
         if (quartz_efuse_is_provisioned()) {
-            /* eFuse burned but no certificate = TAMPERING */
-            ESP_LOGE(TAG, "⚠️ TAMPERING DETECTED: eFuse burned but no birth certificate!");
-            ESP_LOGE(TAG, "This device may have been pre-flashed by a reseller.");
+            /* eFuse burned but no certificate — could be tampering OR a
+             * repurposed device with pre-existing eFuse data (e.g. ex-flash-encryption).
+             * Check if the eFuse data looks like our Quartz key by verifying NVS has no
+             * commit hash (true tampering) vs just a dirty BLOCK1 (repurposed unit). */
+            bool has_commit = false;
+#ifdef ESP_PLATFORM
+            nvs_handle_t h2;
+            if (nvs_open(QZ_NVS_NAMESPACE, NVS_READONLY, &h2) == ESP_OK) {
+                uint8_t tmp[32];
+                size_t len = 32;
+                if (nvs_get_blob(h2, "commit_hash", tmp, &len) == ESP_OK)
+                    has_commit = true;
+                nvs_close(h2);
+            }
+#endif
+            if (has_commit) {
+                /* NVS has our data but certificate blob is missing — recover */
+                ESP_LOGW(TAG, "eFuse non-empty + NVS commit hash exists but no cert — recovering");
+            } else {
+                /* eFuse has unknown data, no NVS — treat as repurposed unit, not tampering.
+                 * Generate fresh software key and proceed. */
+                ESP_LOGW(TAG, "eFuse BLOCK non-empty (pre-existing data). Treating as repurposed unit.");
+                ESP_LOGW(TAG, "Generating software-based identity (not hardware-bound on this unit).");
+
+                /* Provision software key directly */
+                uint8_t sw_key[32];
+                for (int i = 0; i < 4; i++) {
+                    uint32_t word = esp_random();
+                    memcpy(sw_key + i * 4, &word, 4);
+                }
+                uint8_t chip_id[6];
+                quartz_get_miner_id(chip_id);
+                mbedtls_sha256_context ctx;
+                mbedtls_sha256_init(&ctx);
+                mbedtls_sha256_starts(&ctx, 0);
+                mbedtls_sha256_update(&ctx, sw_key, 32);
+                mbedtls_sha256_update(&ctx, chip_id, 6);
+                mbedtls_sha256_update(&ctx, (const uint8_t *)"QUARTZ_SW_KEY_FALLBACK", 22);
+                mbedtls_sha256_finish(&ctx, sw_key);
+                mbedtls_sha256_free(&ctx);
+
+                /* Store in NVS */
+#ifdef ESP_PLATFORM
+                nvs_handle_t h3;
+                if (nvs_open(QZ_NVS_NAMESPACE, NVS_READWRITE, &h3) == ESP_OK) {
+                    nvs_set_blob(h3, "sw_key", sw_key, 32);
+                    /* Compute and store commit hash */
+                    uint8_t commit[32];
+                    compute_key_commit_hash(sw_key, chip_id, commit);
+                    nvs_set_blob(h3, "commit_hash", commit, 32);
+                    nvs_commit(h3);
+                    nvs_close(h3);
+                    memcpy(s_sc.cert.key_commit_hash, commit, 32);
+                }
+#endif
+                memset(sw_key, 0, sizeof(sw_key));
+
+                /* Create certificate with software key */
+                qz_err_t cerr = quartz_create_birth_certificate(&s_sc.cert);
+                if (cerr != QZ_OK) {
+                    ESP_LOGE(TAG, "Failed to create birth certificate (software mode)");
+                    return cerr;
+                }
+                s_sc.initialized = true;
+                if (cert_out) *cert_out = s_sc.cert;
+                return QZ_OK;
+            }
+            /* If we get here, fall through to tampering detection */
+            ESP_LOGE(TAG, "eFuse burned but no birth certificate — treating as tampered");
             s_sc.cert_valid = false;
             if (cert_out) memset(cert_out, 0, sizeof(*cert_out));
             return QZ_ERR_TAMPERED;

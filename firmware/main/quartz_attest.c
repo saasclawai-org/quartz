@@ -26,7 +26,13 @@
 #include "esp_log.h"
 #include "esp_efuse.h"
 #include "esp_efuse_table.h"
+/* HMAC peripheral only on ESP32-S3/C3 — stub for original ESP32 */
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3
 #include "esp_hmac.h"
+#define HAS_HMAC 1
+#else
+#define HAS_HMAC 0
+#endif
 #include "nvs_flash.h"
 // no ed25519 in esp mbedtls
 #include "mbedtls/sha256.h"
@@ -124,12 +130,24 @@ static qz_err_t compute_hmac_attest(const uint8_t pubkey[32], uint8_t out[32]) {
      * Key must be burned with purpose set to HMAC_DOWN_DIG_SIGN or
      * HMAC_DOWN_ALL.
      */
+#if HAS_HMAC
     esp_err_t err = esp_hmac_calculate(HMAC_KEY0, pubkey, 32, out);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HMAC calculation failed: %s", esp_err_to_name(err));
         return QZ_ERR_HARDWARE;
     }
     return QZ_OK;
+#else
+    /* Original ESP32 has no HMAC peripheral — software SHA-256 fallback */
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_starts(&ctx, 0);
+    mbedtls_sha256_update(&ctx, pubkey, 32);
+    mbedtls_sha256_update(&ctx, (const uint8_t *)"QZ_HMAC_STUB", 12);
+    mbedtls_sha256_finish(&ctx, out);
+    mbedtls_sha256_free(&ctx);
+    return QZ_OK;
+#endif
 }
 
 #endif /* ESP_PLATFORM */

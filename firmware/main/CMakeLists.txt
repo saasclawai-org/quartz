@@ -8,8 +8,24 @@ idf_component_register(
         "quartz_entropy.c"
         "quartz_storage.c"
         "quartz_wallet.c"
-    INCLUDE_DIRS "."
-    REQUIRES mbedtls fatfs nvs_flash esp_driver_spi esp_timer esp_event esp_wifi bt esp_adc efuse
+        "quartz_crypto.c"
+        "quartz_display.c"
+        "quartz_wifi.c"
+        "quartz_puf.c"
+        "quartz_wots.c"
+        "quartz_pay.c"
+        "quartz_qr.c"
+        "quartz_agent.c"
+        "ed25519-lib/add_scalar.c"
+        "ed25519-lib/fe.c"
+        "ed25519-lib/ge.c"
+        "ed25519-lib/keypair.c"
+        "ed25519-lib/sc.c"
+        "ed25519-lib/sign.c"
+        "ed25519-lib/verify.c"
+        "ed25519-lib/sha512_mbedtls.c"
+    INCLUDE_DIRS "." "ed25519-lib"
+    REQUIRES mbedtls fatfs nvs_flash esp_driver_spi esp_timer esp_event esp_wifi bt esp_adc efuse driver
 )
 
 # Relax warnings for development build

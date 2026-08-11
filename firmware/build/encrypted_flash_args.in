@@ -1,0 +1,3 @@
+--flash_mode dio --flash_freq 40m --flash_size 4MB  $<IF:$<BOOL:$<TARGET_PROPERTY:encrypted-flash,NON_ENCRYPTED_IMAGES>>,,--encrypt>
+0x20000 $<TARGET_PROPERTY:__idf_build_target,EXECUTABLE_NAME>.bin
+0x10000 partition_table/partition-table.bin

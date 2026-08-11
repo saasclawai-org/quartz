@@ -17,14 +17,33 @@ TX_OUTPUT_SIZE = 40   # 8 + 32
 BLOCK_TIME = 120
 HALVING_INTERVAL = 210_000
 INITIAL_REWARD = 50 * 10**8  # 50 QZ in quartz-sats
-MINER_REWARD = int(47.5 * 10**8)  # 47.5 QZ to miner (95%)
-DEV_FUND_REWARD = int(2.5 * 10**8)  # 2.5 QZ to dev fund (5%)
 TOTAL_SUPPLY = 42_000_000 * 10**8
-DEV_FUND_TOTAL = 2_100_000 * 10**8  # 5%
-EARLY_BONUS_MINERS = 1000  # first 1000 unique ESP32s
+EARLY_BONUS_MINERS = 1000  # first 1000 unique PUF-registered ESP32s
 EARLY_BONUS_DAYS = 30
 DIFFICULTY_BITS = 20
 RETARGET_PERIOD = 144
+
+# --- New tokenomics constants ---
+MINER_SHARE = 0.85       # 85% to miner
+RELAYER_SHARE = 0.10     # 10% to mesh relayer pool
+QUANTUM_SHARE = 0.05     # 5% to quantum security pool
+DEV_FUND_REWARD = 0      # Dev fund killed
+PUF_REWARD_MULT = 1.0    # PUF blocks get full reward
+# PUF is required from block 1. No non-PUF mining. Ever.
+PUF_REQUIRED_HEIGHT = 0
+NON_PUF_REWARD_MULT = 0.0  # Non-PUF blocks earn nothing (always)
+MAX_DIFFICULTY_CHANGE = 0.25  # Max 25% difficulty change per retarget
+EMPTY_BLOCK_GRACE = 10   # Blocks before empty-block penalty kicks in
+EMPTY_BLOCK_PENALTY = 0.9  # 10% reward reduction for empty blocks after grace
+KEY_ROTATION_WARN_AT = 240  # Warn user at WOTS+ sig #240
+KEY_ROTATION_LIMIT = 256  # Max WOTS+ sigs per address
+
+# --- Checkpoints (prevent 51% attack on young chain) ---
+# Each checkpoint is (height, block_hash_hex) — hardcoded, consensus-critical
+# Updated periodically by the reference node as the chain grows
+CHECKPOINTS = {
+    # Genesis checkpoint will be set after first block
+}
 
 
 @dataclass
@@ -82,6 +101,7 @@ class Transaction:
     inputs: list = field(default_factory=list)  # [(prev_hash, output_idx, signature, pubkey)]
     outputs: list = field(default_factory=list)  # [(amount, script_pubkey)]
     locktime: int = 0
+    data: bytes = b''  # Optional data carrier (up to 256 bytes for messages)
 
     def serialize(self) -> bytes:
         parts = [struct.pack('B', self.version)]
@@ -92,6 +112,9 @@ class Transaction:
         for amount, script in self.outputs:
             parts.append(struct.pack('<Q', amount) + script)
         parts.append(struct.pack('<I', self.locktime))
+        # Data carrier (2-byte length prefix + data)
+        parts.append(struct.pack('<H', len(self.data)))
+        parts.append(self.data)
         return b''.join(parts)
 
     @property
@@ -133,36 +156,126 @@ def compute_merkle_root(tx_hashes: List[bytes]) -> bytes:
     return level[0]
 
 
-def get_block_reward(height: int) -> int:
-    """Calculate total block reward at given height."""
+def get_era(height: int) -> int:
+    """Get the current mining era (1-indexed)."""
+    return (height // HALVING_INTERVAL) + 1
+
+
+def is_puf_required(height: int) -> bool:
+    """Check if PUF attestation is mandatory at this height.
+
+    Always True. PUF required from genesis. No exceptions.
+    """
+    return True
+
+
+def get_block_reward(height: int, has_puf: bool = True) -> int:
+    """Calculate total block reward at given height.
+
+    PUF blocks get full reward. Non-PUF blocks get 0 (always).
+    """
+    # Non-PUF blocks are never accepted
+    if not has_puf:
+        return 0
+
     halvings = height // HALVING_INTERVAL
     if halvings >= 33:
         return 0
+
     return INITIAL_REWARD >> halvings
 
 
-def get_miner_reward(height: int) -> int:
-    """Calculate miner's portion of block reward (95%)."""
-    total = get_block_reward(height)
-    return int(total * 0.95)
+def split_block_reward(total_reward: int) -> tuple:
+    """Split block reward: (miner, relayer_pool, quantum_pool).
+
+    Returns tuple of (miner_amount, relayer_amount, quantum_amount).
+    """
+    miner = int(total_reward * MINER_SHARE)
+    relayer = int(total_reward * RELAYER_SHARE)
+    quantum = total_reward - miner - relayer  # remainder avoids rounding loss
+    return (miner, relayer, quantum)
+
+
+def get_miner_reward(height: int, has_puf: bool = True, is_empty: bool = False,
+                     empty_streak: int = 0) -> int:
+    """Calculate miner's portion of block reward (85% of total).
+
+    Applies empty block penalty if miner has produced >EMPTY_BLOCK_GRACE
+    consecutive empty blocks.
+    """
+    total = get_block_reward(height, has_puf)
+    miner, _, _ = split_block_reward(total)
+
+    # Empty block penalty: 10% reduction after grace period
+    if is_empty and empty_streak > EMPTY_BLOCK_GRACE:
+        miner = int(miner * EMPTY_BLOCK_PENALTY)
+
+    return miner
+
+
+def get_relayer_reward(height: int, has_puf: bool = True) -> int:
+    """Calculate mesh relayer pool reward (10% of total)."""
+    total = get_block_reward(height, has_puf)
+    _, relayer, _ = split_block_reward(total)
+    return relayer
+
+
+def get_quantum_pool_reward(height: int, has_puf: bool = True) -> int:
+    """Calculate quantum security pool reward (5% of total)."""
+    total = get_block_reward(height, has_puf)
+    _, _, quantum = split_block_reward(total)
+    return quantum
 
 
 def get_dev_fund_reward(height: int) -> int:
-    """Calculate dev fund portion of block reward (5%).
+    """Dev fund reward — always 0. Dev fund killed."""
+    return 0
 
-    Dev fund emission ends after ~525,600 blocks (~4 years).
-    After that, 100% goes to miners.
+
+def adjust_difficulty(current_target: int, actual_time: int, expected_time: int) -> int:
+    """Adjust difficulty with max 25% change per retarget.
+
+    Prevents difficulty manipulation attacks where a large miner
+    raises difficulty then leaves.
     """
-    if height > 525_600:  # ~4 years at 120s blocks
-        return 0
-    total = get_block_reward(height)
-    return int(total * 0.05)
+    if actual_time <= 0:
+        actual_time = 1
+
+    # Calculate full adjustment
+    ratio = actual_time / expected_time
+
+    # Clamp to ±25% change
+    if ratio < (1 - MAX_DIFFICULTY_CHANGE):
+        ratio = 1 - MAX_DIFFICULTY_CHANGE
+    elif ratio > (1 + MAX_DIFFICULTY_CHANGE):
+        ratio = 1 + MAX_DIFFICULTY_CHANGE
+
+    new_target = int(current_target * ratio)
+
+    # Ensure target stays in valid range
+    if new_target < 1:
+        new_target = 1
+
+    return new_target
+
+
+def verify_checkpoint(height: int, block_hash: bytes) -> bool:
+    """Verify a block against known checkpoints.
+
+    Checkpoints prevent 51% attacks on young chains by pinning
+    specific block hashes. A reorg cannot go past a checkpoint.
+    """
+    if height not in CHECKPOINTS:
+        return True  # No checkpoint for this height
+
+    expected = bytes.fromhex(CHECKPOINTS[height])
+    return block_hash == expected
 
 
 def is_early_bonus_eligible(miner_id: bytes, known_miners: set, first_mined: dict, current_time: int) -> bool:
     """Check if a miner is eligible for the 2x early adopter bonus.
 
-    - Must be one of the first 1000 unique ESP32 miners
+    - Must be one of the first 1000 unique PUF-registered ESP32s
     - 2x reward applies for first 30 days from their first mined block
     """
     if len(known_miners) >= EARLY_BONUS_MINERS and miner_id not in known_miners:
@@ -171,6 +284,14 @@ def is_early_bonus_eligible(miner_id: bytes, known_miners: set, first_mined: dic
         return True  # new miner, eligible
     elapsed = current_time - first_mined[miner_id]
     return elapsed < (EARLY_BONUS_DAYS * 86400)
+
+
+def needs_key_rotation(ots_index: int) -> bool:
+    """Check if WOTS+ wallet should rotate to a new address.
+
+    Warns at signature #240, hard limit at #256.
+    """
+    return ots_index >= KEY_ROTATION_WARN_AT
 
 
 @dataclass

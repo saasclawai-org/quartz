@@ -1,0 +1,1 @@
+ninja: error: '/home/nmoore/.openclaw/workspace/quartz/firmware/main/ed25519-lib/ed25519.c', needed by 'esp-idf/main/CMakeFiles/__idf_main.dir/ed25519-lib/ed25519.c.obj', missing and no known rule to make it

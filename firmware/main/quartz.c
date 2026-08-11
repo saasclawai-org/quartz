@@ -3,7 +3,14 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "esp_cpu.h"
+/* HMAC peripheral only on ESP32-S3/C3 */
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3
 #include "esp_hmac.h"
+#define HAS_HW_HMAC 1
+#else
+#define HAS_HW_HMAC 0
+#include "mbedtls/sha256.h"
+#endif
 #include "string.h"
 
 static const char *TAG = "QUARTZ";
@@ -25,7 +32,10 @@ void crystal_hash_v2(const uint8_t *header, uint64_t nonce,
      * Phase 4: FINALIZE — SHA-256(state || SHA-256(header || nonce))
      */
 
-    /* === Phase 1: INIT === */
+    /* Runtime scratchpad size (default 256KB, reduced on non-PSRAM devices) */
+extern int g_scratchpad_size;
+
+/* === Phase 1: INIT === */
     uint8_t init_input[88];
     memcpy(init_input, header, 80);
     memcpy(init_input + 80, &nonce, 8);
@@ -48,10 +58,10 @@ void crystal_hash_v2(const uint8_t *header, uint64_t nonce,
     memcpy(ctr + 8, header + 32, 8);
 
     uint8_t stream_block[16];
-    memset(scratchpad, 0, QUARTZ_SCRATCHPAD_SIZE);
+    memset(scratchpad, 0, g_scratchpad_size);
     mbedtls_aes_setkey_enc(&aes, key, 256);
 
-    for (size_t offset = 0; offset < QUARTZ_SCRATCHPAD_SIZE; offset += 16) {
+    for (size_t offset = 0; offset < g_scratchpad_size; offset += 16) {
         mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, ctr, stream_block);
         memcpy(scratchpad + offset, stream_block, 16);
 
@@ -68,7 +78,7 @@ void crystal_hash_v2(const uint8_t *header, uint64_t nonce,
     for (int round = 0; round < CRYSTALHASH_MIXING_ROUNDS; round++) {
         /* Memory-hard mixing: read scratchpad at state-derived offset */
         uint32_t idx = (*(uint32_t *)state ^ state_seed ^ (round * 0x9E3779B9));
-        idx %= (QUARTZ_SCRATCHPAD_SIZE / 32);
+        idx %= (g_scratchpad_size / 32);
 
         /* XOR state with scratchpad data */
         for (int i = 0; i < 32; i++) {
@@ -101,8 +111,19 @@ void crystal_hash_v2(const uint8_t *header, uint64_t nonce,
 
                 /* Hardware HMAC — key never leaves eFuse */
                 uint8_t hmac_out[32];
+#if HAS_HW_HMAC
                 esp_err_t ret = esp_hmac_calculate(HMAC_KEY0, hmac_input, 36, hmac_out);
                 if (ret == ESP_OK) {
+#else
+                {
+                    /* Software fallback for original ESP32 (no HMAC peripheral) */
+                    mbedtls_sha256_context ctx;
+                    mbedtls_sha256_init(&ctx);
+                    mbedtls_sha256_starts(&ctx, 0);
+                    mbedtls_sha256_update(&ctx, hmac_input, 36);
+                    mbedtls_sha256_finish(&ctx, hmac_out);
+                    mbedtls_sha256_free(&ctx);
+#endif
                     /* XOR HMAC result into state */
                     for (int i = 0; i < 32; i++) {
                         state[i] ^= hmac_out[i];
