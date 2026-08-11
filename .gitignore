@@ -4,5 +4,11 @@ __pycache__/
 *.bin
 *.elf
 *.map
+*.a
+*.o
+*.obj
 node_modules/
 .env
+firmware/build/
+firmware/secure_boot_signing_key.pem
+firmware/secure_boot_signing_key.pem.signed

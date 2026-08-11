@@ -42431,12 +42431,24 @@
         "miner_id": "000000000000"
       },
       "tx_count": 1
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "00091ae9914763638027e04853676abd49f9c052fda88520abbe11719386ae8b",
+        "merkle_root": "e57e5c86e49c6fa48355a86d6edbac179a2e8b5f492776b2b51addeb86d9bd31",
+        "timestamp": 1786411989,
+        "difficulty_target": 12,
+        "nonce": 395,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 1
     }
   ],
   "balances": {
     "81aeb43a861a6d4dfe4a43eafa7cd16914": 2988500000000,
     "Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U": 571250000000,
-    "e6eb2a4b765cdf5997dd67ed7817a10092": 2979500000000,
+    "e6eb2a4b765cdf5997dd67ed7817a10092": 2983750000000,
     "39759da3f3678b533399bdaeb1a2217ec8": 2970500000000,
     "34ec900ac1cb2e79ebe4208c9ce577d9d2": 2952000000000,
     "7d85a40d82e87b90dce47d88234a85e7bb": 2947250000000,
