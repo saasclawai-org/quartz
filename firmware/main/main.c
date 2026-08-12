@@ -275,6 +275,28 @@ static void mining_task(void *pvParameters) {
             quartz_display_seed_phrase(words, 1);
             vTaskDelay(pdMS_TO_TICKS(5000));  /* Show page 2 for 5s */
 
+            /* Load seed into BLE for phone-based provisioning */
+            quartz_ble_set_seed_phrase((const char (*)[12])words);
+            /* Also load into captive portal (if active or reactivated) */
+            quartz_wifi_portal_set_seed((const char (*)[12])words, quartz_wallet_get_address());
+            ESP_LOGI(TAG, "Seed phrase available via BLE + captive portal /seed");
+
+            /* Don't wipe yet — wait for BLE or portal confirmation or 60s timeout */
+            int wait_count = 0;
+            while (!quartz_ble_is_seed_confirmed() && !quartz_wifi_portal_seed_confirmed() && wait_count < 60) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                wait_count++;
+            }
+            
+            if (quartz_ble_is_seed_confirmed()) {
+                ESP_LOGI(TAG, "✅ Seed phrase confirmed via BLE app");
+            } else if (quartz_wifi_portal_seed_confirmed()) {
+                ESP_LOGI(TAG, "✅ Seed phrase confirmed via captive portal");
+            } else {
+                ESP_LOGI(TAG, "⏰ Seed phrase timeout — displayed on screen/serial only");
+                /* still wipe after timeout */
+            }
+
             /* Wipe seed phrase from RAM */
             quartz_wallet_wipe_seed_phrase(words);
             quartz_display_clear(QZ_COLOR_BLACK);

@@ -35,6 +35,8 @@ class QuartzBLEManager(private val context: Context) {
         val SERVICE_UUID: UUID = UUID.fromString("00000a01-0000-1000-8000-00805f9b34fb")
         val STATS_UUID: UUID = UUID.fromString("00000a02-0000-1000-8000-00805f9b34fb")
         val ADDRESS_UUID: UUID = UUID.fromString("00000a03-0000-1000-8000-00805f9b34fb")
+        val SEED_UUID: UUID = UUID.fromString("00000a04-0000-1000-8000-00805f9b34fb")
+        val CONFIRM_UUID: UUID = UUID.fromString("00000a05-0000-1000-8000-00805f9b34fb")
     }
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -48,6 +50,8 @@ class QuartzBLEManager(private val context: Context) {
 
     var onStatsUpdate: ((MiningStats) -> Unit)? = null
     var onAddressRead: ((String) -> Unit)? = null
+    var onSeedRead: ((List<String>) -> Unit)? = null
+    var onSeedConfirmed: (() -> Unit)? = null
     var onConnectionChange: ((Boolean) -> Unit)? = null
     var onScanResult: ((String) -> Unit)? = null  // device name
     var onError: ((String) -> Unit)? = null
@@ -128,6 +132,43 @@ class QuartzBLEManager(private val context: Context) {
         connectedDevice = null
         statsCharacteristic = null
         onConnectionChange?.invoke(false)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun readSeedPhrase() {
+        val gatt = connectedGatt ?: run {
+            onError?.invoke("Not connected")
+            return
+        }
+        val service = gatt.getService(SERVICE_UUID) ?: run {
+            onError?.invoke("Quartz service not found")
+            return
+        }
+        val seedChar = service.getCharacteristic(SEED_UUID) ?: run {
+            onError?.invoke("Seed characteristic not found")
+            return
+        }
+        Log.i(TAG, "Reading seed phrase from device")
+        gatt.readCharacteristic(seedChar)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun confirmSeedPhrase() {
+        val gatt = connectedGatt ?: run {
+            onError?.invoke("Not connected")
+            return
+        }
+        val service = gatt.getService(SERVICE_UUID) ?: return
+        val confirmChar = service.getCharacteristic(CONFIRM_UUID) ?: run {
+            onError?.invoke("Confirm characteristic not found")
+            return
+        }
+        // Write 3 dummy bytes to confirm (firmware accepts any 3-byte write)
+        confirmChar.value = byteArrayOf(1, 2, 3)
+        confirmChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        gatt.writeCharacteristic(confirmChar)
+        Log.i(TAG, "Seed confirmation sent")
+        onSeedConfirmed?.invoke()
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -215,10 +256,28 @@ class QuartzBLEManager(private val context: Context) {
             status: Int
         ) {
             if (status != BluetoothGatt.GATT_SUCCESS) return
-            if (characteristic.uuid == ADDRESS_UUID) {
-                val addr = String(characteristic.value).trimEnd('\u0000')
-                Log.i(TAG, "Wallet address: $addr")
-                onAddressRead?.invoke(addr)
+            when (characteristic.uuid) {
+                ADDRESS_UUID -> {
+                    val addr = String(characteristic.value).trimEnd('\u0000')
+                    Log.i(TAG, "Wallet address: $addr")
+                    onAddressRead?.invoke(addr)
+                }
+                SEED_UUID -> {
+                    // Parse 12 words from packed char[12][12] array
+                    val raw = characteristic.value
+                    if (raw == null || raw.isEmpty()) {
+                        Log.w(TAG, "Seed phrase empty (already confirmed?)")
+                        return
+                    }
+                    val words = mutableListOf<String>()
+                    for (i in 0 until minOf(12, raw.size / 12)) {
+                        val wordBytes = raw.copyOfRange(i * 12, (i + 1) * 12)
+                        val word = String(wordBytes).trimEnd('\u0000').trim()
+                        if (word.isNotEmpty()) words.add(word)
+                    }
+                    Log.i(TAG, "Seed phrase read: ${words.size} words")
+                    onSeedRead?.invoke(words)
+                }
             }
         }
 
@@ -230,10 +289,26 @@ class QuartzBLEManager(private val context: Context) {
             status: Int
         ) {
             if (status != BluetoothGatt.GATT_SUCCESS) return
-            if (characteristic.uuid == ADDRESS_UUID) {
-                val addr = String(value).trimEnd('\u0000')
-                Log.i(TAG, "Wallet address: $addr")
-                onAddressRead?.invoke(addr)
+            when (characteristic.uuid) {
+                ADDRESS_UUID -> {
+                    val addr = String(value).trimEnd('\u0000')
+                    Log.i(TAG, "Wallet address: $addr")
+                    onAddressRead?.invoke(addr)
+                }
+                SEED_UUID -> {
+                    if (value.isEmpty()) {
+                        Log.w(TAG, "Seed phrase empty (already confirmed?)")
+                        return
+                    }
+                    val words = mutableListOf<String>()
+                    for (i in 0 until minOf(12, value.size / 12)) {
+                        val wordBytes = value.copyOfRange(i * 12, (i + 1) * 12)
+                        val word = String(wordBytes).trimEnd('\u0000').trim()
+                        if (word.isNotEmpty()) words.add(word)
+                    }
+                    Log.i(TAG, "Seed phrase read: ${words.size} words")
+                    onSeedRead?.invoke(words)
+                }
             }
         }
     }

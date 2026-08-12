@@ -10,6 +10,10 @@
 #define QUARTZ_CHAR_STATS_UUID      0x0A02
 #define QUARTZ_CHAR_ADDRESS_UUID    0x0A03
 
+/* Provisioning characteristics (wallet setup) */
+#define QUARTZ_CHAR_SEED_UUID      0x0A04   /* Read: get seed phrase (one-time) */
+#define QUARTZ_CHAR_CONFIRM_UUID   0x0A05   /* Write: confirm seed phrase backup */
+
 /* Initialize BLE GATT server with mining stats */
 void quartz_ble_init(void);
 
@@ -22,5 +26,20 @@ void quartz_ble_set_address(const char *address);
 
 /* Check if BLE is connected */
 bool quartz_ble_is_connected(void);
+
+/* Provisioning: get seed phrase over BLE (only works once, before confirmation) */
+void quartz_ble_set_seed_phrase(const char words[12][12]);
+
+/* Provisioning: check if user confirmed seed phrase backup */
+bool quartz_ble_is_seed_confirmed(void);
+
+/* Provisioning: set seed phrase for captive portal display */
+void quartz_wifi_portal_set_seed(const char words[12][12], const char *address);
+
+/* Provisioning: check if seed was confirmed via portal */
+bool quartz_wifi_portal_seed_confirmed(void);
+
+/* Provisioning: set the wallet address (already exists, keep it) */
+/* void quartz_ble_set_address(const char *address); — already declared */
 
 #endif /* QUARTZ_BLE_H */

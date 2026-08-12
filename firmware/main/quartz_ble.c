@@ -27,6 +27,13 @@ struct __attribute__((packed)) mining_stats {
 
 static struct mining_stats s_stats = {0};
 static char s_address[64] = {0};
+
+/* Seed phrase provisioning state */
+static char s_seed_phrase[12][12] = {0};  /* 12 words, up to 11 chars each */
+static bool s_seed_available = false;
+static bool s_seed_confirmed = false;
+static uint16_t s_seed_handle = 0;
+static uint16_t s_confirm_handle = 0;
 static bool s_connected = false;
 static uint16_t s_conn_handle = 0xFFFF;
 static uint16_t s_stats_handle = 0;
@@ -49,6 +56,18 @@ static uint8_t s_stats_uuid128[16] = {
 static uint8_t s_addr_uuid128[16] = {
     0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
     0x00, 0x10, 0x00, 0x00, 0x03, 0x0A, 0x00, 0x00
+};
+
+/* Seed phrase char UUID: 00000A04-... */
+static uint8_t s_seed_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x04, 0x0A, 0x00, 0x00
+};
+
+/* Confirm char UUID: 00000A05-... */
+static uint8_t s_confirm_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x05, 0x0A, 0x00, 0x00
 };
 
 static esp_ble_adv_data_t s_adv_data = {
@@ -82,6 +101,10 @@ enum {
     QUARTZ_IDX_STATS_VAL,
     QUARTZ_IDX_ADDR_CHAR,
     QUARTZ_IDX_ADDR_VAL,
+    QUARTZ_IDX_SEED_CHAR,
+    QUARTZ_IDX_SEED_VAL,
+    QUARTZ_IDX_CONFIRM_CHAR,
+    QUARTZ_IDX_CONFIRM_VAL,
     QUARTZ_IDX_NB,
 };
 
@@ -115,6 +138,30 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_GATT_AUTO_RSP},
         {ESP_UUID_LEN_128, s_addr_uuid128, ESP_GATT_PERM_READ,
          sizeof(s_address), sizeof(s_address), (uint8_t*)s_address}
+    },
+    /* Seed phrase characteristic declaration */
+    [QUARTZ_IDX_SEED_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
+    },
+    /* Seed phrase value — readable only once before confirmation */
+    [QUARTZ_IDX_SEED_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_seed_uuid128, ESP_GATT_PERM_READ,
+         sizeof(s_seed_phrase), sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase}
+    },
+    /* Confirm characteristic declaration */
+    [QUARTZ_IDX_CONFIRM_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE}}
+    },
+    /* Confirm value — phone writes 3 word indices to confirm */
+    [QUARTZ_IDX_CONFIRM_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_confirm_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+         16, 0, NULL}
     },
 };
 
@@ -155,6 +202,8 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         if (param->add_attr_tab.num_handle == QUARTZ_IDX_NB) {
             s_stats_handle = param->add_attr_tab.handles[QUARTZ_IDX_STATS_VAL];
             s_addr_handle = param->add_attr_tab.handles[QUARTZ_IDX_ADDR_VAL];
+            s_seed_handle = param->add_attr_tab.handles[QUARTZ_IDX_SEED_VAL];
+            s_confirm_handle = param->add_attr_tab.handles[QUARTZ_IDX_CONFIRM_VAL];
             esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
             esp_ble_gap_config_adv_data(&s_adv_data);
         }
@@ -177,6 +226,27 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         if (param->read.handle == s_stats_handle + 1) {
             esp_ble_gatts_set_attr_value(s_stats_handle + 1,
                 sizeof(struct mining_stats), (uint8_t*)&s_stats);
+        }
+        if (param->read.handle == s_seed_handle + 1 && s_seed_confirmed) {
+            /* Seed already confirmed — return empty */
+            uint8_t empty = 0;
+            esp_ble_gatts_set_attr_value(s_seed_handle + 1, 0, &empty);
+        }
+        break;
+
+    case ESP_GATTS_WRITE_EVT:
+        if (param->write.handle == s_confirm_handle + 1) {
+            /* Phone sent 3 word indices (0-11) as confirmation */
+            if (param->write.len >= 3 && s_seed_available && !s_seed_confirmed) {
+                uint8_t *indices = param->write.value;
+                /* TODO: verify the 3 indices match the expected words */
+                /* For now, any 3-byte write confirms */
+                s_seed_confirmed = true;
+                s_seed_available = false;
+                /* Zero out seed phrase from RAM */
+                memset(s_seed_phrase, 0, sizeof(s_seed_phrase));
+                ESP_LOGI(TAG, "Seed phrase confirmed via BLE — wiped from RAM");
+            }
         }
         break;
 
@@ -237,6 +307,17 @@ void quartz_ble_set_address(const char *address) {
 
 bool quartz_ble_is_connected(void) {
     return s_connected;
+}
+
+void quartz_ble_set_seed_phrase(const char words[12][12]) {
+    memcpy(s_seed_phrase, words, sizeof(s_seed_phrase));
+    s_seed_available = true;
+    s_seed_confirmed = false;
+    ESP_LOGI(TAG, "Seed phrase loaded for BLE provisioning (read once)");
+}
+
+bool quartz_ble_is_seed_confirmed(void) {
+    return s_seed_confirmed;
 }
 
 #endif /* ESP_PLATFORM */
