@@ -49,6 +49,15 @@ void quartz_display_draw_text(int x, int y, const char *text, uint16_t fg, uint1
 /* Draw larger text (16x32 bold digits for stats) */
 void quartz_display_draw_big_text(int x, int y, const char *text, uint16_t fg, uint16_t bg);
 
+/* Draw huge text (32x64 for titles) */
+void quartz_display_draw_huge_text(int x, int y, const char *text, uint16_t fg, uint16_t bg);
+
+/* Draw text with DejaVu Sans 12px (small, clean) */
+void quartz_display_draw_text_s(int x, int y, const char *text, uint16_t fg, uint16_t bg);
+
+/* Draw text with DejaVu Sans 16px (large, clean) */
+void quartz_display_draw_text_l(int x, int y, const char *text, uint16_t fg, uint16_t bg);
+
 /* Draw a horizontal line */
 void quartz_display_draw_hline(int x, int y, int w, uint16_t color);
 

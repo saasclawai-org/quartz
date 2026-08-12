@@ -17,6 +17,7 @@
 #include "quartz_puf.h"
 #include "quartz_pay.h"
 #include "quartz_agent.h"
+#include "quartz_ble.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -333,6 +334,11 @@ static void mining_task(void *pvParameters) {
     g_scratchpad_size = scratchpad_size;
     ESP_LOGI(TAG, "Scratchpad allocated (%d KB)", scratchpad_size / 1024);
 
+    /* Initialize BLE GATT server for phone app (after scratchpad) */
+    quartz_ble_set_address(quartz_wallet_get_address());
+    quartz_ble_init();
+    ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+
     /* Mining loop */
     s_mining = true;
     s_start_time = esp_timer_get_time() / 1000000;
@@ -440,6 +446,9 @@ static void mining_task(void *pvParameters) {
                 );
             }
 #endif
+
+            /* Update BLE stats for phone app */
+            quartz_ble_update_stats(s_hash_count, hps, s_blocks_found, uptime);
 
             /* Poll for messages every 10 seconds */
             static uint32_t last_msg_check = 0;

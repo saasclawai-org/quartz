@@ -10,9 +10,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quartz.wallet.ble.MiningStats
+import com.quartz.wallet.ble.QuartzBLEManager
 import com.quartz.wallet.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -167,7 +170,7 @@ fun WalletScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("📋", fontSize = 48.sp, alpha = 0.3f)
+                Text("📋", fontSize = 48.sp, modifier = Modifier.alpha(0.3f))
                 Text("No transactions yet", color = QuartzMuted, fontSize = 14.sp)
             }
         }
@@ -176,23 +179,139 @@ fun WalletScreen() {
 
 @Composable
 fun MinerScreen() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bleManager = remember { QuartzBLEManager(context) }
+
+    var isScanning by remember { mutableStateOf(false) }
+    var isConnected by remember { mutableStateOf(false) }
+    var stats by remember { mutableStateOf<MiningStats?>(null) }
+    var walletAddress by remember { mutableStateOf("") }
+    var statusMsg by remember { mutableStateOf("") }
+
+    // Set up BLE callbacks
+    LaunchedEffect(Unit) {
+        bleManager.onStatsUpdate = { newStats -> stats = newStats }
+        bleManager.onAddressRead = { addr -> walletAddress = addr }
+        bleManager.onConnectionChange = { connected ->
+            isConnected = connected
+            isScanning = false
+            statusMsg = if (connected) "Connected to Quartz-Miner" else "Disconnected"
+        }
+        bleManager.onScanResult = { name ->
+            statusMsg = "Found $name, connecting..."
+        }
+        bleManager.onError = { err ->
+            statusMsg = "Error: $err"
+            isScanning = false
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { bleManager.disconnect() }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("⛏️", fontSize = 64.sp)
-        Spacer(Modifier.height(24.dp))
-        Text("Connect Your ESP32", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("Pair via Bluetooth to monitor mining stats",
-            color = QuartzMuted, fontSize = 15.sp, textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp))
-        Button(
-            onClick = {},
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
-        ) { Text("🔗 Pair ESP32 Miner", color = QuartzBg, fontWeight = FontWeight.Bold) }
+        Text("⛏️", fontSize = 48.sp)
+        Spacer(Modifier.height(8.dp))
+        Text("Quartz Miner", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+
+        if (!isConnected && stats == null) {
+            // Not connected — show pair button
+            Text(
+                "Connect to your ESP32 miner via Bluetooth",
+                color = QuartzMuted, fontSize = 15.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            if (isScanning) {
+                CircularProgressIndicator(color = QuartzAccent, modifier = Modifier.size(32.dp))
+                Spacer(Modifier.height(8.dp))
+                Text("Scanning for Quartz-Miner...", color = QuartzMuted, fontSize = 14.sp)
+            } else {
+                Button(
+                    onClick = {
+                        isScanning = true
+                        statusMsg = "Scanning..."
+                        bleManager.startScan()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                ) {
+                    Text("🔗 Pair ESP32 Miner", color = QuartzBg, fontWeight = FontWeight.Bold)
+                }
+            }
+        } else {
+            // Connected — show mining stats
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("● ", color = QuartzAccent, fontSize = 14.sp)
+                        Text("Connected", color = QuartzAccent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(16.dp))
+
+                    stats?.let { s ->
+                        StatRow("Hashrate", "${s.hashRate} H/s")
+                        StatRow("Total Hashes", "${s.hashCount}")
+                        StatRow("Blocks Found", "${s.blocksFound}")
+                        StatRow("Uptime", formatUptime(s.uptimeSeconds))
+                    } ?: Text("Waiting for stats...", color = QuartzMuted, fontSize = 14.sp)
+
+                    if (walletAddress.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("Wallet Address", color = QuartzMuted, fontSize = 12.sp)
+                        Text(
+                            walletAddress,
+                            color = QuartzText, fontSize = 11.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = { bleManager.disconnect() },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Text("Disconnect", color = QuartzOrange)
+            }
+        }
+
+        if (statusMsg.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(statusMsg, color = QuartzMuted, fontSize = 13.sp, textAlign = TextAlign.Center)
+        }
     }
+}
+
+@Composable
+fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = QuartzMuted, fontSize = 14.sp)
+        Text(value, color = QuartzText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+fun formatUptime(seconds: Long): String {
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+    return if (h > 0) "${h}h ${m}m ${s}s"
+    else if (m > 0) "${m}m ${s}s"
+    else "${s}s"
 }
 
 @Composable

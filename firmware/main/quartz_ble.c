@@ -1,0 +1,242 @@
+/**
+ * quartz_ble.c — Bluedroid GATT server for Quartz ESP32
+ * Exposes mining stats and wallet address over BLE
+ */
+
+#include "quartz_ble.h"
+
+#ifdef ESP_PLATFORM
+#include "esp_log.h"
+#include "esp_bt.h"
+#include "esp_bt_main.h"
+#include "esp_gap_ble_api.h"
+#include "esp_gatts_api.h"
+#include "esp_bt_defs.h"
+#include <string.h>
+#include <stdio.h>
+
+static const char *TAG = "QZ.BLE";
+
+/* Packed mining stats for BLE transfer */
+struct __attribute__((packed)) mining_stats {
+    uint32_t hash_count;
+    uint32_t hash_rate;
+    uint32_t blocks_found;
+    uint32_t uptime;
+};
+
+static struct mining_stats s_stats = {0};
+static char s_address[64] = {0};
+static bool s_connected = false;
+static uint16_t s_conn_handle = 0xFFFF;
+static uint16_t s_stats_handle = 0;
+static uint16_t s_addr_handle = 0;
+static esp_gatt_if_t s_gatts_if = 0;
+
+/* GATT service UUID: 00000A01-0000-1000-8000-00805F9B34FB */
+static uint8_t s_service_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x01, 0x0A, 0x00, 0x00
+};
+
+/* Stats char UUID: 00000A02-... */
+static uint8_t s_stats_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x02, 0x0A, 0x00, 0x00
+};
+
+/* Address char UUID: 00000A03-... */
+static uint8_t s_addr_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x03, 0x0A, 0x00, 0x00
+};
+
+static esp_ble_adv_data_t s_adv_data = {
+    .set_scan_rsp = true,
+    .include_name = true,
+    .include_txpower = false,
+    .min_interval = 0x20,
+    .max_interval = 0x40,
+    .appearance = 0x00,
+    .manufacturer_len = 0,
+    .p_manufacturer_data = NULL,
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = 16,
+    .p_service_uuid = s_service_uuid128,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+
+static esp_ble_adv_params_t s_adv_params = {
+    .adv_int_min = 0x40,
+    .adv_int_max = 0x80,
+    .adv_type = ADV_TYPE_IND,
+    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+    .channel_map = ADV_CHNL_ALL,
+    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+};
+
+enum {
+    QUARTZ_IDX_SVC,
+    QUARTZ_IDX_STATS_CHAR,
+    QUARTZ_IDX_STATS_VAL,
+    QUARTZ_IDX_ADDR_CHAR,
+    QUARTZ_IDX_ADDR_VAL,
+    QUARTZ_IDX_NB,
+};
+
+static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
+    /* Service */
+    [QUARTZ_IDX_SVC] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_service_uuid128, ESP_GATT_PERM_READ,
+         0, 0, NULL}
+    },
+    /* Stats characteristic declaration */
+    [QUARTZ_IDX_STATS_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY}}
+    },
+    /* Stats characteristic value */
+    [QUARTZ_IDX_STATS_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_stats_uuid128, ESP_GATT_PERM_READ,
+         sizeof(struct mining_stats), sizeof(struct mining_stats), (uint8_t*)&s_stats}
+    },
+    /* Address characteristic declaration */
+    [QUARTZ_IDX_ADDR_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
+    },
+    /* Address characteristic value */
+    [QUARTZ_IDX_ADDR_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_addr_uuid128, ESP_GATT_PERM_READ,
+         sizeof(s_address), sizeof(s_address), (uint8_t*)s_address}
+    },
+};
+
+static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
+    switch (event) {
+    case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
+        esp_ble_gap_start_advertising(&s_adv_params);
+        break;
+    case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
+        if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
+            ESP_LOGE(TAG, "Advertising start failed");
+        } else {
+            ESP_LOGI(TAG, "BLE advertising as \"Quartz-Miner\"");
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
+                                esp_ble_gatts_cb_param_t *param) {
+    switch (event) {
+    case ESP_GATTS_REG_EVT:
+        if (param->reg.status != ESP_GATT_OK) {
+            ESP_LOGE(TAG, "GATTS register failed: %d", param->reg.status);
+            return;
+        }
+        s_gatts_if = gatts_if;
+        esp_ble_gatts_create_attr_tab(gatts_if, s_attr_db, QUARTZ_IDX_NB, 0);
+        break;
+
+    case ESP_GATTS_CREAT_ATTR_TAB_EVT:
+        if (param->add_attr_tab.status != ESP_GATT_OK) {
+            ESP_LOGE(TAG, "Create attr db failed: %d", param->add_attr_tab.status);
+            return;
+        }
+        if (param->add_attr_tab.num_handle == QUARTZ_IDX_NB) {
+            s_stats_handle = param->add_attr_tab.handles[QUARTZ_IDX_STATS_VAL];
+            s_addr_handle = param->add_attr_tab.handles[QUARTZ_IDX_ADDR_VAL];
+            esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
+            esp_ble_gap_config_adv_data(&s_adv_data);
+        }
+        break;
+
+    case ESP_GATTS_CONNECT_EVT:
+        s_connected = true;
+        s_conn_handle = param->connect.conn_id;
+        ESP_LOGI(TAG, "Phone connected to BLE");
+        break;
+
+    case ESP_GATTS_DISCONNECT_EVT:
+        s_connected = false;
+        s_conn_handle = 0xFFFF;
+        ESP_LOGI(TAG, "Phone disconnected from BLE");
+        esp_ble_gap_start_advertising(&s_adv_params);
+        break;
+
+    case ESP_GATTS_READ_EVT:
+        if (param->read.handle == s_stats_handle + 1) {
+            esp_ble_gatts_set_attr_value(s_stats_handle + 1,
+                sizeof(struct mining_stats), (uint8_t*)&s_stats);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+void quartz_ble_init(void) {
+    ESP_LOGI(TAG, "Starting BLE GATT server (Bluedroid)");
+
+    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    if (esp_bt_controller_init(&bt_cfg) != ESP_OK) {
+        ESP_LOGE(TAG, "BT controller init failed");
+        return;
+    }
+    if (esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK) {
+        ESP_LOGE(TAG, "BT controller enable failed");
+        return;
+    }
+    if (esp_bluedroid_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Bluedroid init failed");
+        return;
+    }
+    if (esp_bluedroid_enable() != ESP_OK) {
+        ESP_LOGE(TAG, "Bluedroid enable failed");
+        return;
+    }
+
+    esp_ble_gap_register_callback(gap_event_handler);
+    esp_ble_gatts_register_callback(gatts_event_handler);
+    esp_ble_gatts_app_register(0);
+
+    esp_ble_gap_set_device_name("Quartz-Miner");
+}
+
+void quartz_ble_update_stats(uint32_t hash_count, uint32_t hash_rate,
+                             uint32_t blocks_found, uint32_t uptime) {
+    s_stats.hash_count = hash_count;
+    s_stats.hash_rate = hash_rate;
+    s_stats.blocks_found = blocks_found;
+    s_stats.uptime = uptime;
+
+    if (s_connected && s_gatts_if) {
+        /* Notify stats characteristic */
+        esp_ble_gatts_send_indicate(s_gatts_if, s_conn_handle,
+            s_stats_handle, sizeof(struct mining_stats),
+            (uint8_t*)&s_stats, false);
+    }
+}
+
+void quartz_ble_set_address(const char *address) {
+    if (address) {
+        strncpy(s_address, address, sizeof(s_address) - 1);
+        s_address[sizeof(s_address) - 1] = '\0';
+    }
+}
+
+bool quartz_ble_is_connected(void) {
+    return s_connected;
+}
+
+#endif /* ESP_PLATFORM */

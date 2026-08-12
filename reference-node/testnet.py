@@ -192,9 +192,16 @@ class QuartzChain:
             "dev_fund_address": self.dev_wallet['address'] if self.dev_wallet else None,
             "dev_fund_balance": self.balances.get(self.dev_wallet['address'], 0) if self.dev_wallet else 0,
             "dev_fund_balance_qz": self.balances.get(self.dev_wallet['address'], 0) / 1e8 if self.dev_wallet else 0,
-            "total_hashrate": sum(m.get('hashrate', 0) for m in getattr(self, 'miner_stats', {}).values()),
-            "hardware_miners": len(getattr(self, 'miner_stats', {})),
+            "total_hashrate": sum(m.get('hashrate', 0) for m in self._active_miners().values()),
+            "hardware_miners": len(self._active_miners()),
         }
+
+    def _active_miners(self, max_age_s=600):
+        """Return miner_stats pruned to only recently-seen miners."""
+        now = time.time()
+        stats = getattr(self, 'miner_stats', {})
+        return {k: v for k, v in stats.items()
+                if (now - v.get('last_submit', 0)) <= max_age_s}
 
     def get_block(self, height: int):
         """Get block data for API."""
@@ -482,8 +489,15 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             self.json_response({"miners": miners, "count": len(miners)})
 
         elif path == '/api/v1/miners/active':
-            """Real hardware miners with live stats."""
+            """Real hardware miners with live stats. Stale miners (>10 min) are pruned."""
             stats = getattr(self.chain, 'miner_stats', {})
+            now = time.time()
+            STALE_TIMEOUT = 600  # 10 minutes
+            # Prune stale miners from stats
+            stale_keys = [k for k, v in stats.items()
+                          if (now - v.get('last_submit', 0)) > STALE_TIMEOUT]
+            for k in stale_keys:
+                del stats[k]
             miners = []
             for key, v in stats.items():
                 miners.append({
@@ -491,8 +505,8 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                     'address': v.get('address', ''),
                     'hashrate': v.get('hashrate', 0),
                     'blocks_found': v.get('blocks_found', 0),
-                    'last_submit_ago_s': int(time.time() - v.get('last_submit', 0)),
-                    'uptime_s': int(time.time() - v.get('first_seen', time.time())),
+                    'last_submit_ago_s': int(now - v.get('last_submit', 0)),
+                    'uptime_s': int(now - v.get('first_seen', now)),
                 })
             total_hps = sum(m['hashrate'] for m in miners)
             self.json_response({
