@@ -67,6 +67,11 @@ static bool btn_a_pressed = false;
 static bool btn_b_pressed = false;
 static bool btn_c_pressed = false;
 static float s_payment_amount = 0.1f;  /* default QR amount */
+
+/* PIN entry state (M5Stack 3-button input) */
+static char s_pin_display[9] = {0};
+static int s_pin_len = 0;
+static int s_pin_digit = 0;
 static uint32_t btn_last_read_sec = 0;
 static uint32_t btn_debounce_count = 0;
 static int64_t btn_a_low_since_us = 0;  /* timestamp when A first read low */
@@ -140,12 +145,17 @@ static void poll_buttons(void) {
     if (c_raw) { if (btn_c_low_since_us == 0) btn_c_low_since_us = now_us; }
     else { btn_c_low_since_us = 0; btn_c_pressed = false; }
 
-    /* BTN A: toggle mining <-> payment screen */
+    /* BTN A: toggle mining <-> payment screen, or PIN digit+ if locked */
     if (a_raw && !btn_a_pressed && btn_a_low_since_us > 0 &&
         (now_us - btn_a_low_since_us) >= BTN_DEBOUNCE_US) {
         btn_a_pressed = true;
         btn_last_read_sec = now;
-        if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
+        if (quartz_display_get_screen() == QZ_SCREEN_PIN_ENTRY) {
+            /* PIN entry: A increments current digit */
+            s_pin_digit = (s_pin_digit + 1) % 10;
+            quartz_display_pin_entry_m5stack(s_pin_digit, s_pin_len,
+                10 - quartz_wallet_pin_attempts());
+        } else if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             quartz_display_set_screen(QZ_SCREEN_MINING);
         } else {
             quartz_display_set_screen(QZ_SCREEN_PAYMENT);
@@ -154,7 +164,7 @@ static void poll_buttons(void) {
         return;
     }
 
-    /* BTN B: increase payment amount */
+    /* BTN B: payment amount+, or PIN next digit if locked */
     if (b_raw && !btn_b_pressed && btn_b_low_since_us > 0 &&
         (now_us - btn_b_low_since_us) >= BTN_DEBOUNCE_US) {
         if (!btn_is_pressed_digital(BTN_B_PIN)) {
@@ -163,14 +173,23 @@ static void poll_buttons(void) {
         }
         btn_b_pressed = true;
         btn_last_read_sec = now;
-        if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
+        if (quartz_display_get_screen() == QZ_SCREEN_PIN_ENTRY) {
+            /* PIN entry: B locks current digit and moves to next */
+            if (s_pin_len < 8) {
+                s_pin_display[s_pin_len++] = '0' + s_pin_digit;
+                s_pin_display[s_pin_len] = '\0';
+                s_pin_digit = 0;
+            }
+            quartz_display_pin_entry_m5stack(s_pin_digit, s_pin_len,
+                10 - quartz_wallet_pin_attempts());
+        } else if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             s_payment_amount += 0.1f;
             quartz_display_qr_payment(quartz_wallet_get_address(), s_payment_amount);
         }
         return;
     }
 
-    /* BTN C: decrease payment amount */
+    /* BTN C: payment amount-, or PIN confirm if locked */
     if (c_raw && !btn_c_pressed && btn_c_low_since_us > 0 &&
         (now_us - btn_c_low_since_us) >= BTN_DEBOUNCE_US) {
         if (!btn_is_pressed_digital(BTN_C_PIN)) {
@@ -179,7 +198,25 @@ static void poll_buttons(void) {
         }
         btn_c_pressed = true;
         btn_last_read_sec = now;
-        if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
+        if (quartz_display_get_screen() == QZ_SCREEN_PIN_ENTRY) {
+            /* PIN entry: C confirms and submits PIN */
+            if (s_pin_len >= 4) {
+                if (quartz_wallet_check_pin(s_pin_display) == QZ_WALLET_OK) {
+                    quartz_wallet_reset_pin_attempts();
+                    ESP_LOGI(TAG, "PIN correct via M5Stack buttons");
+                    quartz_display_clear(QZ_COLOR_BLACK);
+                    quartz_display_set_screen(QZ_SCREEN_MINING);
+                } else {
+                    ESP_LOGW(TAG, "Wrong PIN via buttons");
+                    quartz_wallet_record_failed_pin();
+                    s_pin_len = 0;
+                    s_pin_display[0] = '\0';
+                    s_pin_digit = 0;
+                    quartz_display_pin_entry_m5stack(0, 0,
+                        10 - quartz_wallet_pin_attempts());
+                }
+            }
+        } else if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             if (s_payment_amount > 0.1f) s_payment_amount -= 0.1f;
             quartz_display_qr_payment(quartz_wallet_get_address(), s_payment_amount);
         }
@@ -380,6 +417,13 @@ static void mining_task(void *pvParameters) {
                                      quartz_wallet_has_pin() ? "SET" : "NONE",
                                      quartz_wallet_pin_attempts(),
                                      quartz_ble_is_unlocked() ? "YES" : "NO");
+                        } else if (strncasecmp(serial_buf, "recover ", 9) == 0) {
+                            /* Recovery: 'recover word1 word2 ... word12' */
+                            ESP_LOGI(TAG, "Recovery mode — parsing seed phrase...");
+                            /* TODO: parse 12 words, derive address, query node */
+                            ESP_LOGI(TAG, "Recovery not yet fully implemented — use app");
+                        } else if (strcasecmp(serial_buf, "help") == 0) {
+                            ESP_LOGI(TAG, "Commands: confirm | pin <digits> | setpin <digits> | pinstatus | recover <12 words> | help");
                         }
                         serial_pos = 0;
                         serial_buf[0] = '\0';
@@ -459,6 +503,21 @@ static void mining_task(void *pvParameters) {
     quartz_ble_set_address(quartz_wallet_get_address());
     quartz_ble_init();
     ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+
+    /* If PIN is set, show PIN entry screen before mining starts */
+    if (quartz_wallet_has_pin()) {
+        ESP_LOGI(TAG, "PIN set — device locked until PIN entered");
+        ESP_LOGI(TAG, "Enter PIN via serial: 'pin <digits>' or BLE app");
+#ifdef QUARTZ_HAS_DISPLAY
+        quartz_display_set_screen(QZ_SCREEN_PIN_ENTRY);
+        s_pin_len = 0;
+        s_pin_digit = 0;
+        s_pin_display[0] = '\0';
+        quartz_display_pin_entry_m5stack(0, 0, 10);
+#endif
+        /* Mining starts, but seed/signing stay locked */
+        /* User can enter PIN anytime via buttons, serial, or BLE */
+    }
 
     /* Mining loop */
     s_mining = true;

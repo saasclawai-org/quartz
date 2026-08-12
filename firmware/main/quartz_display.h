@@ -109,6 +109,18 @@ typedef enum {
 void quartz_display_set_screen(qz_screen_t screen);
 qz_screen_t quartz_display_get_screen(void);
 
+/* PIN entry screen — shows entered PIN as dots, attempts left */
+void quartz_display_pin_entry(const char *entered_pin, int attempts_left);
+
+/* PIN entry M5Stack mode — big digit, 3-button navigation */
+void quartz_display_pin_entry_m5stack(int digit, int pin_len, int attempts_left);
+
+/* Recovery screens */
+void quartz_display_recovery_start(void);
+void quartz_display_recovery_sync(const char *address);
+void quartz_display_recovery_done(const char *address, int sig_index, int balance);
+void quartz_display_recovery_error(const char *msg);
+
 #ifdef __cplusplus
 }
 #endif

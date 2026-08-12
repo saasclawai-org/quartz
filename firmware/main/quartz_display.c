@@ -742,3 +742,168 @@ void quartz_display_portal(const char *ap_name) {
     quartz_display_draw_big_text(8, 160, dotbuf, COL_ACCENT, COL_BG);
 #endif
 }
+
+/* === PIN Entry Screen === */
+
+static char s_pin_display[9] = {0};  /* current PIN digits entered */
+static int s_pin_len = 0;
+static int s_pin_digit = 0;          /* current digit being edited (0-9) */
+static int s_pin_attempts_display = 10;
+
+void quartz_display_pin_entry(const char *entered_pin, int attempts_left) {
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+    quartz_display_clear(COL_BG);
+
+    /* Header */
+    quartz_display_fill_rect(0, 0, DISP_W, 22, COL_RED);
+    quartz_display_draw_text(8, 3, "PIN REQUIRED", COL_WHITE, COL_RED);
+
+    /* PIN dots / digits */
+    int pin_len = entered_pin ? strlen(entered_pin) : 0;
+    char dots[16] = {0};
+    int dx = 0;
+    for (int i = 0; i < 8; i++) {
+        if (i < pin_len) {
+            dots[dx++] = '\xE2'; dots[dx++] = '\x80'; dots[dx++] = '\xA2'; /* bullet • */
+        } else {
+            dots[dx++] = '_';
+        }
+        dots[dx++] = ' ';
+    }
+    dots[dx] = '\0';
+    quartz_display_draw_big_text(40, 40, dots, COL_WHITE, COL_BG);
+
+    /* Instructions */
+    quartz_display_draw_text(8, 80, "Serial: 'pin <digits>'", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 96, "BLE: unlock via app", COL_GRAY, COL_BG);
+
+    /* Attempts */
+    char buf[32];
+    snprintf(buf, sizeof(buf), "Attempts left: %d", attempts_left);
+    quartz_display_draw_text(8, 130, buf,
+                             attempts_left <= 3 ? COL_RED : COL_GRAY, COL_BG);
+
+    /* Buttons hint */
+    quartz_display_draw_text(8, 200, "A:up B:next C:confirm", COL_DARKGRAY, COL_BG);
+#endif
+}
+
+void quartz_display_pin_entry_m5stack(int digit, int pin_len, int attempts_left) {
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+    quartz_display_clear(COL_BG);
+
+    /* Header */
+    quartz_display_fill_rect(0, 0, DISP_W, 22, COL_RED);
+    quartz_display_fill_rect(0, 22, DISP_W, 2, COL_RED);
+
+    /* Title */
+    quartz_display_draw_text_l(60, 30, "ENTER PIN", COL_WHITE, COL_BG);
+
+    /* Big current digit */
+    char dbuf[2] = {0};
+    dbuf[0] = '0' + (digit % 10);
+    quartz_display_draw_huge_text(130, 60, dbuf, COL_ACCENT, COL_BG);
+
+    /* PIN dots */
+    char dots[24] = {0};
+    int dx = 0;
+    for (int i = 0; i < 8; i++) {
+        if (i < pin_len) {
+            dots[dx++] = '\xE2'; dots[dx++] = '\x80'; dots[dx++] = '\xA2';
+        } else if (i == pin_len) {
+            dots[dx++] = '[';
+        } else {
+            dots[dx++] = '_';
+        }
+        dots[dx++] = ' ';
+        if (i == pin_len) dots[dx++] = ']';
+    }
+    dots[dx] = '\0';
+    quartz_display_draw_big_text(40, 160, dots, COL_WHITE, COL_BG);
+
+    /* Buttons */
+    quartz_display_draw_text(8, 200, "A:digit+  B:next   C:OK", COL_GRAY, COL_BG);
+
+    /* Attempts */
+    if (attempts_left < 10) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d left", attempts_left);
+        quartz_display_draw_text(260, 200, buf,
+                                 attempts_left <= 3 ? COL_RED : COL_GRAY, COL_BG);
+    }
+#endif
+}
+
+/* === Recovery Screen === */
+
+void quartz_display_recovery_start(void) {
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+    quartz_display_clear(COL_BG);
+    quartz_display_fill_rect(0, 0, DISP_W, 22, COL_ACCENT);
+    quartz_display_draw_text(8, 3, "RECOVERY MODE", COL_WHITE, COL_ACCENT);
+
+    quartz_display_draw_text_l(20, 40, "Enter Seed Phrase", COL_WHITE, COL_BG);
+    quartz_display_draw_text(8, 70, "Serial: 'recover word1 word2 ...'", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 86, "BLE: use app recovery screen", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 120, "Waiting for input...", COL_YELLOW, COL_BG);
+#endif
+}
+
+void quartz_display_recovery_sync(const char *address) {
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+    quartz_display_clear(COL_BG);
+    quartz_display_fill_rect(0, 0, DISP_W, 22, COL_ACCENT);
+    quartz_display_draw_text(8, 3, "SYNCING...", COL_WHITE, COL_ACCENT);
+
+    quartz_display_draw_text(8, 40, "Address:", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 56, address, COL_CYAN, COL_BG);
+
+    /* Animated dots */
+    uint32_t t = esp_timer_get_time() / 1000;
+    int dots = (t / 500) % 4;
+    char dotbuf[8] = {0};
+    for (int i = 0; i < dots; i++) dotbuf[i] = '.';
+    quartz_display_draw_big_text(8, 90, dotbuf, COL_ACCENT, COL_BG);
+
+    quartz_display_draw_text(8, 130, "Querying node for", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 146, "signature index...", COL_GRAY, COL_BG);
+#endif
+}
+
+void quartz_display_recovery_done(const char *address, int sig_index, int balance) {
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+    quartz_display_clear(COL_BG);
+    quartz_display_fill_rect(0, 0, DISP_W, 22, COL_GREEN);
+    quartz_display_draw_text(8, 3, "RECOVERED!", COL_WHITE, COL_GREEN);
+
+    quartz_display_draw_text(8, 40, "Address:", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 56, address, COL_CYAN, COL_BG);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Signatures used: %d/255", sig_index);
+    quartz_display_draw_text(8, 80, buf, COL_WHITE, COL_BG);
+
+    snprintf(buf, sizeof(buf), "Balance: %d QZ", balance);
+    quartz_display_draw_text(8, 100, buf, COL_GREEN, COL_BG);
+
+    quartz_display_draw_text(8, 140, "Mining will resume shortly.", COL_ACCENT, COL_BG);
+#endif
+}
+
+void quartz_display_recovery_error(const char *msg) {
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+    quartz_display_clear(COL_BG);
+    quartz_display_fill_rect(0, 0, DISP_W, 22, COL_RED);
+    quartz_display_draw_text(8, 3, "RECOVERY FAILED", COL_WHITE, COL_RED);
+
+    quartz_display_draw_text(8, 40, msg, COL_YELLOW, COL_BG);
+    quartz_display_draw_text(8, 80, "Check seed phrase and", COL_GRAY, COL_BG);
+    quartz_display_draw_text(8, 96, "node connection.", COL_GRAY, COL_BG);
+#endif
+}
