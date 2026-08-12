@@ -103,6 +103,50 @@ bool quartz_wallet_is_backup_confirmed(void);
  */
 quartz_wallet_err_t quartz_wallet_wipe(void);
 
+// ============================================================
+// PIN Protection
+// ============================================================
+
+/**
+ * Set a PIN (4-8 digits). Hashed with salt before storing in NVS.
+ * Empty PIN string removes PIN protection.
+ *
+ * @param pin    Null-terminated PIN string (digits only)
+ * @return QZ_WALLET_OK on success
+ */
+quartz_wallet_err_t quartz_wallet_set_pin(const char *pin);
+
+/**
+ * Verify a PIN against stored hash.
+ *
+ * @param pin    Null-terminated PIN string
+ * @return QZ_WALLET_OK if correct, QZ_WALLET_ERR_AUTH if wrong
+ */
+quartz_wallet_err_t quartz_wallet_check_pin(const char *pin);
+
+/**
+ * Check if a PIN is set.
+ */
+bool quartz_wallet_has_pin(void);
+
+/**
+ * Get number of failed PIN attempts since last success.
+ */
+uint8_t quartz_wallet_pin_attempts(void);
+
+/**
+ * Reset failed attempt counter (called on successful PIN entry).
+ */
+void quartz_wallet_reset_pin_attempts(void);
+
+/**
+ * Increment failed attempt counter. If counter reaches 10,
+ * triggers factory wipe (calls quartz_wallet_wipe()).
+ *
+ * @return true if device was wiped (10 attempts reached)
+ */
+bool quartz_wallet_record_failed_pin(void);
+
 // --- Ed25519 crypto functions (implemented by linked crypto lib) ---
 
 /**

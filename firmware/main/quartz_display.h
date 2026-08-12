@@ -101,6 +101,8 @@ typedef enum {
     QZ_SCREEN_WALLET = 1,
     QZ_SCREEN_MESSAGES = 2,
     QZ_SCREEN_PAYMENT = 3,
+    QZ_SCREEN_PIN_ENTRY = 4,
+    QZ_SCREEN_RECOVERY = 5,
     QZ_SCREEN_COUNT,
 } qz_screen_t;
 

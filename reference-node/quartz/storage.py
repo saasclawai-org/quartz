@@ -91,6 +91,48 @@ class FramMeta:
 
 
 @dataclass
+class AddressState:
+    """Tracks the state of a wallet address for key rotation and recovery.
+
+    Mirrors the WOTS+ signature tracking from the ESP32 firmware:
+    each address can sign up to 256 times before needing rotation.
+    """
+    address: str  # hex Merkle root (the address identifier)
+    derivation_index: int = 0
+    wots_used: int = 0
+    wots_max: int = 256
+    rotated_to: Optional[str] = None
+    first_seen_height: int = 0
+    last_tx_height: int = 0
+    balance: int = 0  # in quartz-sats
+
+    def to_dict(self) -> dict:
+        return {
+            'address': self.address,
+            'derivation_index': self.derivation_index,
+            'wots_used': self.wots_used,
+            'wots_max': self.wots_max,
+            'rotated_to': self.rotated_to,
+            'first_seen_height': self.first_seen_height,
+            'last_tx_height': self.last_tx_height,
+            'balance': self.balance,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'AddressState':
+        return cls(
+            address=d['address'],
+            derivation_index=d.get('derivation_index', 0),
+            wots_used=d.get('wots_used', 0),
+            wots_max=d.get('wots_max', 256),
+            rotated_to=d.get('rotated_to'),
+            first_seen_height=d.get('first_seen_height', 0),
+            last_tx_height=d.get('last_tx_height', 0),
+            balance=d.get('balance', 0),
+        )
+
+
+@dataclass
 class StorageStats:
     mode: StorageMode
     total_headers: int
@@ -129,6 +171,7 @@ class LayeredStorage:
         (self.data_dir / 'blocks').mkdir(exist_ok=True)
         (self.data_dir / 'headers').mkdir(exist_ok=True)
         (self.data_dir / 'utxo').mkdir(exist_ok=True)
+        (self.data_dir / 'addresses').mkdir(exist_ok=True)
 
         # Load FRAM state
         self._load_fram()
@@ -452,3 +495,76 @@ class LayeredStorage:
             if not self.has_block(h):
                 return h
         return self._fram_meta.height + 1
+
+    # ============ Address State (Wallet Recovery) ============
+
+    def _address_path(self, address: str) -> Path:
+        """Path for address state file."""
+        # Sanitize: keep only hex chars
+        safe = ''.join(c for c in address if c in '0123456789abcdefABCDEF')
+        if not safe:
+            safe = 'unknown'
+        return self.data_dir / 'addresses' / f'{safe}.json'
+
+    def get_address_state(self, address: str) -> Optional[AddressState]:
+        """Read address state from storage.
+
+        Returns None if the address has never been seen.
+        """
+        path = self._address_path(address)
+        if not path.exists():
+            return None
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            return AddressState.from_dict(data)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"⚠️  Address state corrupt for {address}: {e}")
+            return None
+
+    def update_address_state(self, state: AddressState):
+        """Atomically write address state.
+
+        Uses temp+fsync+rename for crash safety, same as FRAM commit.
+        """
+        path = self._address_path(state.address)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(self.data_dir / 'addresses'),
+            prefix='.addr_',
+            suffix='.tmp'
+        )
+        try:
+            with os.fdopen(fd, 'w') as f:
+                json.dump(state.to_dict(), f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.rename(tmp_path, str(path))
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
+
+    def record_signature(self, address: str, sig_index: int,
+                         tx_hash: bytes, height: int):
+        """Record that a WOTS+ signature was consumed.
+
+        Increments wots_used, updates last_tx_height, and persists.
+        If the address is unknown, creates a new state entry.
+        """
+        state = self.get_address_state(address)
+        if state is None:
+            state = AddressState(
+                address=address,
+                first_seen_height=height,
+                last_tx_height=height,
+                wots_used=sig_index + 1,
+            )
+        else:
+            state.wots_used = max(state.wots_used, sig_index + 1)
+            state.last_tx_height = height
+        self.update_address_state(state)
+
+    def get_balance(self, address: str) -> int:
+        """Convenience: get balance for an address. Returns 0 if unknown."""
+        state = self.get_address_state(address)
+        return state.balance if state else 0

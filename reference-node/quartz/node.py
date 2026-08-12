@@ -3,6 +3,9 @@ Quartz P2P node — handles block relay, chain sync, and peer management.
 
 For the Python reference implementation. ESP32 nodes connect to this
 node (and each other) for chain synchronization.
+
+Also serves a lightweight HTTP API for wallet state queries
+(key rotation tracking, balance lookup, chain height).
 """
 
 import asyncio
@@ -11,6 +14,7 @@ import logging
 import struct
 import time
 from typing import Dict, List, Optional, Set
+from pathlib import Path
 
 from .blockchain import (
     Block, BlockHeader, Transaction, Block as BlockType,
@@ -18,6 +22,7 @@ from .blockchain import (
     RETARGET_PERIOD, DIFFICULTY_BITS, BLOCK_TIME,
 )
 from .crystal_hash import check_difficulty
+from .storage import LayeredStorage, StorageMode, AddressState
 
 logger = logging.getLogger("quartz.node")
 
@@ -37,6 +42,7 @@ MSG_PONG = 9
 MSG_TX = 10
 
 DEFAULT_PORT = 8420  # QZ = 0x51 5A → close enough
+HTTP_PORT = 8421     # One above P2P port
 MAX_PEERS = 32
 
 
@@ -45,16 +51,24 @@ class QuartzNode:
 
     Maintains the blockchain state, handles incoming peer connections,
     and broadcasts new blocks/transactions.
+
+    Also runs an HTTP API server for wallet state queries.
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
+    def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT,
+                 http_port: int = HTTP_PORT, data_dir: str = "quartz-data"):
         self.host = host
         self.port = port
+        self.http_port = http_port
         self.chain: List[Block] = []
         self.mempool: Dict[bytes, Transaction] = {}
         self.peers: Set[tuple] = set()  # (host, port)
         self.running = False
         self.server: Optional[asyncio.Server] = None
+        self.http_server: Optional[asyncio.Server] = None
+
+        # Persistent storage for address state, headers, blocks
+        self.storage = LayeredStorage(data_dir, mode=StorageMode.FULL)
 
         # Initialize with genesis block
         genesis = Block.create_genesis()
@@ -85,20 +99,36 @@ class QuartzNode:
         logger.info(f"Peer added: {host}:{port} ({len(self.peers)} total)")
 
     async def start(self):
-        """Start the P2P server."""
+        """Start the P2P server and HTTP API server."""
         self.running = True
+
+        # Start P2P server
         self.server = await asyncio.start_server(
             self._handle_peer, self.host, self.port
         )
-        logger.info(f"Quartz node listening on {self.host}:{self.port}")
+        logger.info(f"Quartz P2P listening on {self.host}:{self.port}")
+
+        # Start HTTP API server
+        self.http_server = await asyncio.start_server(
+            self._handle_http, self.host, self.http_port
+        )
+        logger.info(f"Quartz HTTP API listening on {self.host}:{self.http_port}")
+
         logger.info(f"Chain height: {self.height}")
 
         async with self.server:
-            await self.server.serve_forever()
+            async with self.http_server:
+                await asyncio.gather(
+                    self.server.serve_forever(),
+                    self.http_server.serve_forever(),
+                )
 
     async def stop(self):
         """Stop the node."""
         self.running = False
+        if self.http_server:
+            self.http_server.close()
+            await self.http_server.wait_closed()
         if self.server:
             self.server.close()
             await self.server.wait_closed()
@@ -210,6 +240,141 @@ class QuartzNode:
         # Simplified — real impl would validate signatures
         logger.info(f"Transaction received, added to mempool ({len(self.mempool)} pending)")
 
+    # ============ HTTP API Server ============
+
+    async def _handle_http(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        """Handle an incoming HTTP request using bare asyncio streams."""
+        try:
+            # Read request line
+            request_line = await reader.readline()
+            if not request_line:
+                writer.close()
+                return
+            try:
+                parts = request_line.decode('ascii').strip().split()
+                method, path, _proto = parts
+            except (ValueError, UnicodeDecodeError):
+                await self._http_respond(writer, 400, {"error": "bad request"})
+                return
+
+            # Read and discard headers
+            while True:
+                header_line = await reader.readline()
+                if header_line in (b'\r\n', b'\n', b''):
+                    break
+
+            if method != 'GET':
+                await self._http_respond(writer, 405, {"error": "method not allowed"})
+                return
+
+            # Route the request
+            await self._route_http(path, writer)
+
+        except asyncio.ConnectionError:
+            pass
+        except Exception as e:
+            logger.error(f"HTTP handler error: {e}")
+            try:
+                await self._http_respond(writer, 500, {"error": "internal server error"})
+            except Exception:
+                pass
+        finally:
+            writer.close()
+
+    async def _route_http(self, path: str, writer: asyncio.StreamWriter):
+        """Route HTTP GET request to the appropriate handler."""
+
+        # GET /api/v1/wallet/{address}/state
+        if path.startswith('/api/v1/wallet/') and path.endswith('/state'):
+            address = path[len('/api/v1/wallet/'):-len('/state')]
+            await self._api_wallet_state(address, writer)
+            return
+
+        # GET /api/v1/wallet/{address}/balance
+        if path.startswith('/api/v1/wallet/') and path.endswith('/balance'):
+            address = path[len('/api/v1/wallet/'):-len('/balance')]
+            await self._api_wallet_balance(address, writer)
+            return
+
+        # GET /api/v1/height
+        if path == '/api/v1/height':
+            await self._api_height(writer)
+            return
+
+        # Unknown route
+        await self._http_respond(writer, 404, {"error": "not found"})
+
+    async def _api_wallet_state(self, address: str, writer: asyncio.StreamWriter):
+        """GET /api/v1/wallet/{address}/state — full wallet state for recovery."""
+        state = self.storage.get_address_state(address)
+        if state is None:
+            await self._http_respond(writer, 404, {
+                "error": "address not found",
+                "wots_used": 0,
+            })
+            return
+
+        wots_remaining = state.wots_max - state.wots_used
+
+        # Determine rotation status
+        if state.rotated_to:
+            rotation_status = "rotated"
+        elif state.wots_used >= state.wots_max:
+            rotation_status = "required"
+        elif state.wots_used >= 240:  # KEY_ROTATION_WARN_AT
+            rotation_status = "warning"
+        else:
+            rotation_status = "ok"
+
+        await self._http_respond(writer, 200, {
+            "address": address,
+            "derivation_index": state.derivation_index,
+            "balance": state.balance,
+            "wots_used": state.wots_used,
+            "wots_remaining": wots_remaining,
+            "rotation_status": rotation_status,
+            "last_sig_index": state.wots_used,
+            "rotated_to": state.rotated_to,
+            "first_seen": state.first_seen_height,
+            "last_active": state.last_tx_height,
+        })
+
+    async def _api_wallet_balance(self, address: str, writer: asyncio.StreamWriter):
+        """GET /api/v1/wallet/{address}/balance — simple balance lookup."""
+        balance = self.storage.get_balance(address)
+        await self._http_respond(writer, 200, {"balance": balance})
+
+    async def _api_height(self, writer: asyncio.StreamWriter):
+        """GET /api/v1/height — current chain tip info."""
+        tip = self.tip
+        await self._http_respond(writer, 200, {
+            "height": self.height,
+            "hash": tip.hash.hex(),
+        })
+
+    async def _http_respond(self, writer: asyncio.StreamWriter,
+                            status: int, body: dict):
+        """Send a JSON HTTP response."""
+        status_text = {
+            200: "OK",
+            400: "Bad Request",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            500: "Internal Server Error",
+        }.get(status, "OK")
+
+        json_body = json.dumps(body).encode('utf-8')
+        headers = (
+            f"HTTP/1.1 {status} {status_text}\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: {len(json_body)}\r\n"
+            f"Connection: close\r\n"
+            f"\r\n"
+        ).encode('ascii')
+
+        writer.write(headers + json_body)
+        await writer.drain()
+
     async def _broadcast(self, msg_type: int, payload: bytes):
         """Broadcast to all connected peers (placeholder)."""
         pass
@@ -227,10 +392,19 @@ def main():
     parser = argparse.ArgumentParser(description='Quartz reference node')
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
+    parser.add_argument('--http-port', type=int, default=HTTP_PORT,
+                        help='HTTP API port (default: 8421)')
+    parser.add_argument('--data-dir', default='quartz-data',
+                        help='Data directory for storage (default: quartz-data)')
     parser.add_argument('--peer', action='append', help='Connect to peer (host:port)')
     args = parser.parse_args()
 
-    node = QuartzNode(host=args.host, port=args.port)
+    node = QuartzNode(
+        host=args.host,
+        port=args.port,
+        http_port=args.http_port,
+        data_dir=args.data_dir,
+    )
 
     if args.peer:
         for p in args.peer:
@@ -246,6 +420,7 @@ def main():
     logger.info("╚══════════════════════════════════╝")
     logger.info(f"Genesis hash: {node.tip.hash.hex()[:16]}...")
     logger.info(f"Supply cap: 42,000,000 QZ")
+    logger.info(f"P2P: {args.host}:{args.port}  HTTP API: {args.host}:{args.http_port}")
 
     asyncio.run(node.start())
 
