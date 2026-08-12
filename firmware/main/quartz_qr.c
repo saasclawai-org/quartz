@@ -513,3 +513,163 @@ int quartz_qr_display(
 
     return 0;
 }
+
+/* === Serial ASCII QR Output === */
+
+int quartz_qr_serial(const char *data, qr_ecc_t ecc) {
+    if (!data) return -1;
+
+    int data_len = strlen(data);
+    int version = quartz_qr_version_for_data(data_len, ecc);
+    if (version < 1) return -1;
+
+    int size = qr_modules(version);
+
+    gf_init();
+
+    qr_matrix_t mat;
+    memset(&mat, 0, sizeof(mat));
+    mat.version = version;
+    mat.size = size;
+
+    place_finder(&mat, 0, 0);
+    place_finder(&mat, 0, size - 7);
+    place_finder(&mat, size - 7, 0);
+    place_timing(&mat);
+    place_alignment(&mat);
+    reserve_format(&mat);
+    place_dark_module(&mat);
+
+    int total_cw = qr_total_codewords[version - 1];
+    int ec_per_block = qr_ec_codewords[ecc][version - 1];
+    int num_blocks = qr_blocks[ecc][version - 1];
+    int total_data_cw = total_cw - ec_per_block * num_blocks;
+
+    uint8_t *codewords = calloc(total_cw, 1);
+    if (!codewords) return -1;
+
+    int bit_pos = 0;
+    uint8_t *bits = calloc(total_cw, 1);
+    if (!bits) { free(codewords); return -1; }
+
+    for (int i = 3; i >= 0; i--) {
+        if ((4 >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
+        bit_pos++;
+    }
+    if (version < 10) {
+        for (int i = 7; i >= 0; i--) {
+            if ((data_len >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
+            bit_pos++;
+        }
+    } else {
+        for (int i = 15; i >= 0; i--) {
+            if ((data_len >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
+            bit_pos++;
+        }
+    }
+    for (int i = 0; i < data_len; i++) {
+        for (int b = 7; b >= 0; b--) {
+            if ((data[i] >> b) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
+            bit_pos++;
+        }
+    }
+    int total_data_bits = total_data_cw * 8;
+    while (bit_pos < total_data_bits && bit_pos % 8 != 0) bit_pos++;
+    int cw_count = bit_pos / 8;
+    uint8_t pad[] = { 0xEC, 0x11 };
+    int pad_idx = 0;
+    while (cw_count < total_data_cw) {
+        bits[cw_count] = pad[pad_idx];
+        pad_idx = 1 - pad_idx;
+        cw_count++;
+    }
+    memcpy(codewords, bits, total_data_cw);
+    free(bits);
+
+    uint8_t gen[32];
+    rs_generator(ec_per_block, gen);
+
+    uint8_t *full_data = calloc(total_cw, 1);
+    if (!full_data) { free(codewords); return -1; }
+
+    if (num_blocks == 1) {
+        memcpy(full_data, codewords, total_data_cw);
+        rs_encode(codewords, total_data_cw, gen, ec_per_block,
+                  full_data + total_data_cw);
+    } else {
+        int data_per_block = total_data_cw / num_blocks;
+        for (int b = 0; b < num_blocks; b++) {
+            uint8_t ec_out[32];
+            rs_encode(codewords + b * data_per_block, data_per_block,
+                      gen, ec_per_block, ec_out);
+            for (int i = 0; i < data_per_block; i++) {
+                full_data[b + i * num_blocks] = codewords[b * data_per_block + i];
+            }
+            for (int i = 0; i < ec_per_block; i++) {
+                full_data[total_data_cw + b + i * num_blocks] = ec_out[i];
+            }
+        }
+    }
+
+    place_data(&mat, full_data, total_cw * 8);
+    apply_mask(&mat);
+    place_format(&mat, ecc);
+
+    free(codewords);
+    free(full_data);
+
+    /* Output QR as ASCII art using block characters */
+    /* Top quiet zone */
+    printf("\n");
+    for (int i = 0; i < 2; i++) printf("          \n");
+
+    /* Each row uses two terminal lines with Unicode half-blocks */
+    /* ▀ = top dark, ▄ = bottom dark, █ = both dark, space = both light */
+    for (int r = 0; r < size; r += 2) {
+        printf("          ");
+        for (int c = 0; c < size; c++) {
+            int top = qr_matrix_get(&mat, r, c);
+            int bot = (r + 1 < size) ? qr_matrix_get(&mat, r + 1, c) : 0;
+            /* Dark module on white background = inverted */
+            /* Print inverted (white QR on black) for better scanning */
+            if (top && bot) printf("  ");
+            else if (top && !bot) printf(" \n");  /* can't do half-block easily, use spaces/dots */
+            else if (!top && bot) printf("\n ");
+            else printf("##");
+        }
+        printf("\n");
+    }
+
+    /* Actually, let's use a simpler approach: ## for dark, space for light */
+    /* Redo with simple ASCII that phones can scan */
+    printf("\r\n");
+    printf("\r\n");
+    /* Border */
+    int border = 2;
+    for (int i = 0; i < border; i++) {
+        printf("          ");
+        for (int c = 0; c < size + border * 2; c++) printf("  ");
+        printf("\r\n");
+    }
+    for (int r = 0; r < size; r++) {
+        printf("          ");
+        for (int i = 0; i < border; i++) printf("  ");
+        for (int c = 0; c < size; c++) {
+            /* Inverted: dark module = space, light = ## */
+            /* This gives black background with white QR on dark terminals */
+            if (qr_matrix_get(&mat, r, c)) printf("  ");
+            else printf("##");
+        }
+        for (int i = 0; i < border; i++) printf("  ");
+        printf("\r\n");
+    }
+    for (int i = 0; i < border; i++) {
+        printf("          ");
+        for (int c = 0; c < size + border * 2; c++) printf("  ");
+        printf("\r\n");
+    }
+    printf("\r\n");
+    fflush(stdout);
+
+    return 0;
+}

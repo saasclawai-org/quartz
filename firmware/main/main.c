@@ -18,6 +18,7 @@
 #include "quartz_pay.h"
 #include "quartz_agent.h"
 #include "quartz_ble.h"
+#include "quartz_qr.h"
 #include <string.h>
 #include <stdio.h>
 #include <strings.h>
@@ -274,39 +275,58 @@ static void mining_task(void *pvParameters) {
         char words[12][12];
         werr = quartz_wallet_get_seed_phrase_for_backup(words, 12);
         if (werr == QZ_WALLET_OK) {
-            /* Method 1: Serial output (always available) */
+            /* Build seed QR payload: JSON with words + address */
+            char qr_payload[256];
+            int qlen = snprintf(qr_payload, sizeof(qr_payload),
+                "{\"v\":1,\"words\":[");
+            for (int i = 0; i < 12; i++) {
+                qlen += snprintf(qr_payload + qlen, sizeof(qr_payload) - qlen,
+                    "\"%s\"%s", words[i], (i < 11) ? "," : "");
+            }
+            qlen += snprintf(qr_payload + qlen, sizeof(qr_payload) - qlen,
+                "],\"addr\":\"%s\"}", quartz_wallet_get_address());
+
+            /* === SECURE CHANNELS ONLY === */
+            /* NO captive portal — seed never goes over WiFi */
+            /* NO unbonded BLE — seed char only readable after pairing */
+
+            /* Channel 1: Serial QR code (scan with phone app camera) */
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
-            ESP_LOGI(TAG, "║   🔮 QUARTZ WALLET SEED PHRASE       ║");
-            ESP_LOGI(TAG, "║   WRITE THIS DOWN — confirm to stop   ║");
+            ESP_LOGI(TAG, "║   🔮 QUARTZ WALLET — SEED QR CODE    ║");
+            ESP_LOGI(TAG, "║   Scan with Quartz app camera        ║");
             ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
-            ESP_LOGI(TAG, "");
-            for (int i = 0; i < 12; i++) {
-                ESP_LOGI(TAG, "  %2d. %s", i + 1, words[i]);
-            }
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "Address: %s", quartz_wallet_get_address());
             ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "Confirm via: BLE app / http://192.168.4.1/seed / serial");
+            ESP_LOGI(TAG, "Open the Quartz app → Scan Seed QR → point camera at the QR below:");
             ESP_LOGI(TAG, "");
 
-            /* Method 2: On-screen display (if display exists) */
+            /* Output QR code as ASCII art on serial terminal */
+            quartz_qr_serial(qr_payload, QR_ECC_HIGH);
+
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Or scan the QR on the device screen with your phone camera.");
+            ESP_LOGI(TAG, "After writing down your seed, confirm in the app or type 'confirm' + Enter.");
+            ESP_LOGI(TAG, "");
+
+            /* Channel 2: Display QR code (M5Stack with screen) */
 #ifdef QUARTZ_HAS_DISPLAY
-            quartz_display_seed_phrase(words, 0);
-            vTaskDelay(pdMS_TO_TICKS(5000));
-            quartz_display_seed_phrase(words, 1);
-            vTaskDelay(pdMS_TO_TICKS(5000));
+            /* Show QR on display — phone scans directly */
+            quartz_display_clear(0xFFFF);  /* white background */
+            quartz_qr_display(qr_payload, QR_ECC_HIGH,
+                             (DISP_W - 200) / 2, 30, 3,
+                             0x0000, 0xFFFF);  /* black on white */
+            quartz_display_draw_text(40, 250, "Scan with Quartz app", 0x0000, 0xFFFF);
 #endif
 
-            /* Method 3: BLE provisioning (phone app) */
+            /* Channel 3: BLE (bonded only — app must pair first) */
+            /* Seed characteristic returns empty unless bonded */
             quartz_ble_set_seed_phrase((const char (*)[12])words);
 
-            /* Method 4: Captive portal /seed endpoint */
-            quartz_wifi_portal_set_seed((const char (*)[12])words, quartz_wallet_get_address());
-
-            ESP_LOGI(TAG, "Seed available via: serial + display + BLE + captive portal /seed");
-            ESP_LOGI(TAG, "To confirm via serial: type 'confirm' and press Enter");
-            ESP_LOGI(TAG, "Waiting for confirmation (no timeout — device will not mine until confirmed)...");
+            ESP_LOGI(TAG, "Waiting for confirmation...");
+            ESP_LOGI(TAG, "  - Quartz app (BLE): pair device, then confirm in app");
+            ESP_LOGI(TAG, "  - Serial: type 'confirm' + Enter");
 
             /* Serial confirmation input state */
             char serial_buf[32] = {0};
@@ -315,7 +335,6 @@ static void mining_task(void *pvParameters) {
 
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
-                   !quartz_wifi_portal_seed_confirmed() &&
                    !serial_confirmed) {
                 /* Check serial input */
                 int c = getchar_timeout_us(0);
@@ -340,8 +359,6 @@ static void mining_task(void *pvParameters) {
 
             if (quartz_ble_is_seed_confirmed()) {
                 ESP_LOGI(TAG, "✅ Seed confirmed via BLE app");
-            } else if (quartz_wifi_portal_seed_confirmed()) {
-                ESP_LOGI(TAG, "✅ Seed confirmed via captive portal");
             } else if (serial_confirmed) {
                 ESP_LOGI(TAG, "✅ Seed confirmed via serial");
             }

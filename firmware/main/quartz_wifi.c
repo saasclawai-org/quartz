@@ -164,9 +164,6 @@ static const char *PORTAL_HTML =
     "<button type='submit'>Start Mining ⚡</button>"
     "</form>"
     "<p>Miner will restart and begin mining automatically</p>"
-    "<hr style='border-color:#333;margin:20px 0'>"
-    "<p>🔮 <a href='/seed' style='color:#9933ff'>View Seed Phrase</a>"
-    " — required for wallet recovery</p>"
     "</body></html>";
 
 static void portal_task(void *pv) {
@@ -270,128 +267,12 @@ static void portal_task(void *pv) {
             }
         }
 
-        /* Serve seed phrase page if available */
-        if (strstr(buf, "GET /seed") != NULL && s_portal_seed_available && !s_portal_seed_confirmed) {
-            /* Build seed phrase page dynamically */
-            char seed_html[2048];
-            int off = 0;
-            off += snprintf(seed_html + off, sizeof(seed_html) - off,
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
-                "<!DOCTYPE html><html><head>"
-                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                "<title>🔮 Quartz Seed Phrase</title>"
-                "<style>"
-                "body{font-family:system-ui;max-width:420px;margin:20px auto;padding:20px;"
-                "background:#1a1a2e;color:#eee}"
-                "h1{color:#9933ff;text-align:center}"
-                ".seed-box{background:#2a2a4e;border:1px solid #9933ff;border-radius:12px;"
-                "padding:20px;margin:16px 0}"
-                ".word{display:inline-block;width:45%;padding:8px 12px;margin:4px 0;"
-                "font-size:18px;font-weight:600}"
-                ".word b{color:#9933ff;margin-right:8px}"
-                ".addr{font-family:monospace;font-size:12px;color:#888;"
-                "word-break:break-all;text-align:center;margin:12px 0}"
-                ".warn{color:#ff6b35;font-size:14px;text-align:center;margin:12px 0}"
-                "button{width:100%;padding:14px;border:none;border-radius:8px;"
-                "background:#9933ff;color:#fff;font-size:18px;cursor:pointer;margin-top:8px}"
-                ".confirmed{color:#00d4aa;text-align:center;font-size:20px;margin:20px 0}"
-                "</style></head><body>"
-                "<h1>🔮 Seed Phrase</h1>"
-                "<div class='warn'>⚠️ Write these 12 words down. Shown only once!</div>"
-                "<div class='seed-box'>");
-            for (int i = 0; i < 12; i++) {
-                off += snprintf(seed_html + off, sizeof(seed_html) - off,
-                    "<div class='word'><b>%d.</b>%s</div>", i + 1, s_portal_seed[i]);
-            }
-            off += snprintf(seed_html + off, sizeof(seed_html) - off,
-                "</div>"
-                "<div class='addr'>Address: %s</div>"
-                "<div class='warn'>Confirm: type word #%d to verify you wrote it down</div>"
-                "<form action='/confirm-seed' method='POST'>"
-                "<input name='word' placeholder='Word #%d' required "
-                "style='width:100%%;padding:14px;margin:8px 0;border:1px solid #444;"
-                "border-radius:8px;background:#2a2a4e;color:#fff;box-sizing:border-box;font-size:16px'>"
-                "<input type='hidden' name='idx' value='%d'>"
-                "<button type='submit'>✅ Confirm Backup</button>"
-                "</form>"
-                "</body></html>",
-                s_portal_address,
-                s_portal_challenge_idx + 1,
-                s_portal_challenge_idx + 1,
-                s_portal_challenge_idx);
-            send(csock, seed_html, off, 0);
-            close(csock);
-            continue;
-        }
-
-        /* Handle seed confirmation — verify the challenge word */
-        if (strstr(buf, "POST /confirm-seed") != NULL) {
-            /* Parse word= from body */
-            char *body = strstr(buf, "\r\n\r\n");
-            if (body) body += 4;
-            
-            char typed_word[16] = {0};
-            if (body) {
-                char *w = strstr(body, "word=");
-                if (w) {
-                    w += 5;
-                    int wi = 0;
-                    while (*w && *w != '&' && *w != '\r' && wi < 15) {
-                        if (*w == '+') typed_word[wi++] = ' ';
-                        else if (*w == '%' && w[1] && w[2]) {
-                            int hi = (w[1] >= '0' && w[1] <= '9') ? w[1]-'0' : (w[1]>='a'?w[1]-'a'+10:w[1]-'A'+10);
-                            int lo = (w[2] >= '0' && w[2] <= '9') ? w[2]-'0' : (w[2]>='a'?w[2]-'a'+10:w[2]-'A'+10);
-                            typed_word[wi++] = (hi << 4) | lo;
-                            w += 2;
-                        } else typed_word[wi++] = *w;
-                        w++;
-                    }
-                }
-            }
-            
-            /* Compare against the challenge word */
-            const char *expected = s_portal_seed[s_portal_challenge_idx];
-            if (strcasecmp(typed_word, expected) == 0) {
-                /* Correct word — confirm */
-                s_portal_seed_confirmed = true;
-                memset(s_portal_seed, 0, sizeof(s_portal_seed));
-                s_portal_seed_available = false;
-                ESP_LOGI(TAG, "Seed phrase confirmed via captive portal — wiped");
-                const char *resp =
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
-                    "<!DOCTYPE html><html><head>"
-                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                    "<title>Quartz Seed Confirmed</title>"
-                    "<style>body{font-family:system-ui;text-align:center;padding:40px;"
-                    "background:#1a1a2e;color:#eee}h1{color:#00d4aa}</style>"
-                    "</head><body><h1>✅ Confirmed!</h1>"
-                    "<p>Your seed phrase has been wiped from device memory.</p>"
-                    "<p>Keep your backup safe — it's the only way to recover your funds.</p>"
-                    "</body></html>";
-                send(csock, resp, strlen(resp), 0);
-            } else {
-                /* Wrong word — reject */
-                ESP_LOGW(TAG, "Seed confirmation FAILED: typed '%s' expected '%s'", typed_word, expected);
-                /* Pick a new random challenge */
-                s_portal_challenge_idx = esp_random() % 12;
-                char retry_html[512];
-                snprintf(retry_html, sizeof(retry_html),
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
-                    "<!DOCTYPE html><html><head>"
-                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                    "<title>Quartz Seed</title>"
-                    "<style>body{font-family:system-ui;text-align:center;padding:40px;"
-                    "background:#1a1a2e;color:#eee}h1{color:#ff6b35}"
-                    "a{color:#9933ff;font-size:18px}</style>"
-                    "</head><body><h1>❌ Wrong word!</h1>"
-                    "<p>Go back and check your backup.</p>"
-                    "<p><a href='/seed'>← Try again (word #%d)</a></p>"
-                    "</body></html>", s_portal_challenge_idx + 1);
-                send(csock, retry_html, strlen(retry_html), 0);
-            }
-            close(csock);
-            continue;
-        }
+        /* NOTE: Seed phrase is NO LONGER served over WiFi/captive portal.
+         * Seed is only available via:
+         *   1. Serial QR code (scan with phone app)
+         *   2. Device display QR code (M5Stack)
+         *   3. BLE (bonded devices only)
+         * This is a security hardening — WiFi is plaintext, anyone nearby can sniff. */
 
         /* Serve the portal page */
         send(csock, PORTAL_HTML, strlen(PORTAL_HTML), 0);
