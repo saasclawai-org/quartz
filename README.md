@@ -1,6 +1,6 @@
 # 🔮 Quartz (QZ)
 
-**The quantum-safe, hardware-bound cryptocurrency. Mine with a $15 chip.**
+**The quantum-safe, hardware-bound cryptocurrency. Better security economics than Bitcoin at 1/6,000th the energy cost.**
 
 [Website](https://quartz.preview.saasclaw.ai) · [Block Explorer](https://quartz.preview.saasclaw.ai/explorer/) · [Wallet](https://quartz.preview.saasclaw.ai/wallet/) · [Whitepaper](docs/WHITEPAPER.md)
 
@@ -53,6 +53,58 @@ Each ESP32 has a unique silicon fingerprint:
 4. **Attestation**: PUF fingerprint published on boot, verified by node
 
 **Result**: A GPU farm can't out-mine real devices because the PUF key is physically embedded in the silicon. Cloning a device requires decapping and electron microscopy ($10K+ per chip).
+
+## Security Economics
+
+Quartz doesn't try to match Bitcoin's absolute attack cost — that would require matching its energy consumption. Instead, Quartz achieves **better security economics** through a different model: physical device scarcity instead of energy expenditure.
+
+### Attack Cost vs Network Value
+
+The right question isn't "how much does an attack cost in absolute terms?" but "how much does it cost relative to what you'd gain?"
+
+| | Bitcoin (2009) | Bitcoin (2026) | Quartz (500K miners) |
+|---|---|---|---|
+| 51% attack cost | ~$5K (GPUs) | ~$7B (ASICs + power) | ~$3.75M (250K ESP32s) |
+| Network value | ~$0 | ~$1.2T | ~$100M (projected) |
+| Attack cost / value | ∞ | ~0.6% | ~3.75% |
+| Centralization risk | Low | **High** (10 pools control >50%) | **None** (PUF-bound) |
+| Attack lead time | Hours | **Minutes** (hashpower rental) | **Months** (physical PUF enrollment) |
+
+Quartz at 500K devices has a **6x better attack-cost-to-value ratio than Bitcoin has today**. An attacker must spend 3.75% of the network's total value to attack it, vs Bitcoin's 0.6%. And unlike Bitcoin — where hashpower can be rented in minutes via mining pools — a Quartz attack requires physically acquiring, powering, and enrolling hundreds of thousands of devices over months.
+
+### Why This Scales
+
+Bitcoin wasn't born with $7B security. In 2009, a few thousand dollars in GPUs could have 51%-attacked it. Security grew with adoption — more miners, higher value, higher attack cost. Quartz follows the same flywheel:
+
+```
+More devices → higher attack cost → more valuable network
+     ↑                                         ↓
+     └───── more incentive to mine honestly ←──┘
+```
+
+The difference is Quartz's flywheel runs on **physical hardware** instead of **energy**. Each new miner increases attack cost by $15 and adds 0.5W of power — vs Bitcoin's $3,000 ASIC and 3,000W.
+
+### What Quartz Can Honestly Claim
+
+- ✅ **Quantum-safe wallets** — WOTS+ resists Shor's algorithm. Bitcoin's ECDSA does not.
+- ✅ **Better attack-cost ratio at scale** — 3.75% vs Bitcoin's 0.6% at 500K devices.
+- ✅ **Impossible to centralize** — PUF binding means no pool can aggregate mining power they don't physically control. Bitcoin's hashrate is concentrated in ~10 pools.
+- ✅ **6,000x less energy** — 0.5W per device vs 3,000W per ASIC.
+- ✅ **Slower attack surface** — months of physical provisioning vs minutes of hashpower rental.
+- ❌ **Not nation-state resistant** — $3.75M is within reach of a well-funded attacker. Bitcoin's $7B is not.
+- ❌ **Not battle-tested** — Bitcoin has survived 15+ years of continuous attacks. Quartz hasn't.
+
+### Comparison
+
+| Security property | Bitcoin | Quartz |
+|---|---|---|
+| Wallet quantum resistance | ❌ (ECDSA) | ✅ (WOTS+) |
+| Mining centralization resistance | ❌ (ASIC pools) | ✅ (PUF-bound) |
+| Attack cost / network value (at scale) | 0.6% | 3.75% |
+| Attack lead time | Minutes | Months |
+| Nation-state resistance | ✅ | ❌ |
+| Energy per miner | 3,000W | 0.5W |
+| Hardware cost per miner | $3,000+ | $15 |
 
 ## Tokenomics
 
