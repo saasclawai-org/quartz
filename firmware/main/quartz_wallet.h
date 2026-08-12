@@ -85,6 +85,19 @@ quartz_wallet_err_t quartz_wallet_get_seed_phrase_for_backup(
 void quartz_wallet_wipe_seed_phrase(char words[12][12]);
 
 /**
+ * Mark seed phrase backup as confirmed.
+ * Sets FLAG_BACKED_UP in NVS — device won't nag about seed on boot.
+ * Call after user confirms they wrote down the words.
+ */
+quartz_wallet_err_t quartz_wallet_confirm_backup(void);
+
+/**
+ * Check if seed phrase backup has been confirmed.
+ * Returns true if FLAG_BACKED_UP is set in NVS.
+ */
+bool quartz_wallet_is_backup_confirmed(void);
+
+/**
  * Factory reset — wipe all keys from NVS and RAM.
  * Requires physical button hold to trigger via BLE.
  */

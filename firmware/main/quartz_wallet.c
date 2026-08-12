@@ -309,6 +309,41 @@ void quartz_wallet_wipe_seed_phrase(char words[12][12]) {
 }
 
 // ============================================================
+// Backup Confirmation (persistent NVS flag)
+// ============================================================
+
+quartz_wallet_err_t quartz_wallet_confirm_backup(void) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return QZ_WALLET_ERR_STORAGE;
+    }
+
+    // Read current flags, set FLAG_BACKED_UP
+    uint8_t flags = 0;
+    nvs_get_u8(handle, NVS_KEY_FLAGS, &flags);
+    flags |= FLAG_BACKED_UP;
+    nvs_set_u8(handle, NVS_KEY_FLAGS, flags);
+    nvs_commit(handle);
+    nvs_close(handle);
+
+    ESP_LOGI(TAG, "✅ Backup confirmed — FLAG_BACKED_UP set in NVS");
+    return QZ_WALLET_OK;
+}
+
+bool quartz_wallet_is_backup_confirmed(void) {
+    nvs_handle_t handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
+        return false;
+    }
+    uint8_t flags = 0;
+    nvs_get_u8(handle, NVS_KEY_FLAGS, &flags);
+    nvs_close(handle);
+    return (flags & FLAG_BACKED_UP) != 0;
+}
+
+// ============================================================
 // Factory Reset — Wipe Everything
 // ============================================================
 

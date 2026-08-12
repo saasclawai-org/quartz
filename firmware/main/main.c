@@ -240,6 +240,8 @@ static void mining_task(void *pvParameters) {
 
     /* Initialize wallet */
     quartz_wallet_err_t werr = quartz_wallet_load();
+    bool seed_needs_display = false;
+
     if (werr == QZ_WALLET_ERR_NOT_FOUND) {
         ESP_LOGI(TAG, "========================================");
         ESP_LOGI(TAG, "  Creating new Quartz wallet...");
@@ -251,15 +253,30 @@ static void mining_task(void *pvParameters) {
             vTaskDelete(NULL);
             return;
         }
+        seed_needs_display = true;
+    } else if (werr == QZ_WALLET_OK) {
+        /* Wallet exists — check if seed was ever confirmed */
+        if (!quartz_wallet_is_backup_confirmed()) {
+            ESP_LOGW(TAG, "⚠️ Wallet exists but seed phrase was NEVER confirmed!");
+            ESP_LOGW(TAG, "⚠️ Re-displaying seed for backup...");
+            seed_needs_display = true;
+        } else {
+            ESP_LOGI(TAG, "Wallet loaded: %s", quartz_wallet_get_address());
+        }
+    } else {
+        ESP_LOGE(TAG, "Wallet load failed (code %d)", werr);
+        quartz_display_error("Wallet load failed");
+    }
 
-        /* Display seed phrase ONE TIME on serial output */
+    if (seed_needs_display) {
         char words[12][12];
         werr = quartz_wallet_get_seed_phrase_for_backup(words, 12);
         if (werr == QZ_WALLET_OK) {
+            /* Method 1: Serial output (always available) */
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
             ESP_LOGI(TAG, "║   🔮 QUARTZ WALLET SEED PHRASE       ║");
-            ESP_LOGI(TAG, "║   WRITE THIS DOWN — shown only once  ║");
+            ESP_LOGI(TAG, "║   WRITE THIS DOWN — confirm to stop   ║");
             ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
             ESP_LOGI(TAG, "");
             for (int i = 0; i < 12; i++) {
@@ -268,44 +285,47 @@ static void mining_task(void *pvParameters) {
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "Address: %s", quartz_wallet_get_address());
             ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Confirm via: BLE app / http://192.168.4.1/seed / serial");
+            ESP_LOGI(TAG, "");
 
-            /* Display seed phrase on screen too */
+            /* Method 2: On-screen display (if display exists) */
+#ifdef QUARTZ_HAS_DISPLAY
             quartz_display_seed_phrase(words, 0);
-            vTaskDelay(pdMS_TO_TICKS(5000));  /* Show page 1 for 5s */
+            vTaskDelay(pdMS_TO_TICKS(5000));
             quartz_display_seed_phrase(words, 1);
-            vTaskDelay(pdMS_TO_TICKS(5000));  /* Show page 2 for 5s */
+            vTaskDelay(pdMS_TO_TICKS(5000));
+#endif
 
-            /* Load seed into BLE for phone-based provisioning */
+            /* Method 3: BLE provisioning (phone app) */
             quartz_ble_set_seed_phrase((const char (*)[12])words);
-            /* Also load into captive portal (if active or reactivated) */
-            quartz_wifi_portal_set_seed((const char (*)[12])words, quartz_wallet_get_address());
-            ESP_LOGI(TAG, "Seed phrase available via BLE + captive portal /seed");
 
-            /* Don't wipe yet — wait for BLE or portal confirmation or 60s timeout */
-            int wait_count = 0;
-            while (!quartz_ble_is_seed_confirmed() && !quartz_wifi_portal_seed_confirmed() && wait_count < 60) {
+            /* Method 4: Captive portal /seed endpoint */
+            quartz_wifi_portal_set_seed((const char (*)[12])words, quartz_wallet_get_address());
+
+            ESP_LOGI(TAG, "Seed available via: serial + display + BLE + captive portal /seed");
+            ESP_LOGI(TAG, "Waiting for confirmation (no timeout — device will not mine until confirmed)...");
+
+            /* Wait for confirmation from ANY source — NO TIMEOUT */
+            while (!quartz_ble_is_seed_confirmed() &&
+                   !quartz_wifi_portal_seed_confirmed()) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
-                wait_count++;
             }
-            
+
+            /* Confirm in NVS so we never show seed again */
+            quartz_wallet_confirm_backup();
+
             if (quartz_ble_is_seed_confirmed()) {
-                ESP_LOGI(TAG, "✅ Seed phrase confirmed via BLE app");
+                ESP_LOGI(TAG, "✅ Seed confirmed via BLE app");
             } else if (quartz_wifi_portal_seed_confirmed()) {
-                ESP_LOGI(TAG, "✅ Seed phrase confirmed via captive portal");
-            } else {
-                ESP_LOGI(TAG, "⏰ Seed phrase timeout — displayed on screen/serial only");
-                /* still wipe after timeout */
+                ESP_LOGI(TAG, "✅ Seed confirmed via captive portal");
             }
 
             /* Wipe seed phrase from RAM */
             quartz_wallet_wipe_seed_phrase(words);
+#ifdef QUARTZ_HAS_DISPLAY
             quartz_display_clear(QZ_COLOR_BLACK);
+#endif
         }
-    } else if (werr != QZ_WALLET_OK) {
-        ESP_LOGE(TAG, "Wallet load failed (code %d)", werr);
-        quartz_display_error("Wallet load failed");
-    } else {
-        ESP_LOGI(TAG, "Wallet loaded: %s", quartz_wallet_get_address());
     }
 
     /* Initialize PUF (hardware binding) — NO FALLBACK.

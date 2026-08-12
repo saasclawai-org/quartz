@@ -33,12 +33,6 @@ void quartz_ble_set_seed_phrase(const char words[12][12]);
 /* Provisioning: check if user confirmed seed phrase backup */
 bool quartz_ble_is_seed_confirmed(void);
 
-/* Provisioning: set seed phrase for captive portal display */
-void quartz_wifi_portal_set_seed(const char words[12][12], const char *address);
-
-/* Provisioning: check if seed was confirmed via portal */
-bool quartz_wifi_portal_seed_confirmed(void);
-
 /* Provisioning: set the wallet address (already exists, keep it) */
 /* void quartz_ble_set_address(const char *address); — already declared */
 
