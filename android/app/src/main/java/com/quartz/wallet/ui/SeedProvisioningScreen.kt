@@ -64,7 +64,6 @@ fun SeedProvisioningScreen(
         }
         bleManager.onConnectionChange = { connected ->
             if (connected && phase == "ble_connecting") {
-                kotlinx.coroutines.delay(1000)
                 bleManager.readSeedPhrase()
             }
         }
@@ -227,9 +226,11 @@ fun SeedProvisioningScreen(
                         onValueChange = { userInput = it },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                        colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF9933FF),
-                            textColor = Color.White
+                            unfocusedBorderColor = Color(0xFF444466),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
                         )
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -272,12 +273,7 @@ fun SeedProvisioningScreen(
             }
 
             "done" -> {
-                Icon(
-                    painter = androidx.compose.material.icons.Icons.Default.Check,
-                    contentDescription = "Done",
-                    tint = Color(0xFF00D4AA),
-                    modifier = Modifier.size(64.dp)
-                )
+                Text("✅", fontSize = 48.sp)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("✅ Wallet Setup Complete!", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00D4AA))
                 Spacer(modifier = Modifier.height(8.dp))

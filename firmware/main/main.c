@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include <ctype.h>
+#include <unistd.h>
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
@@ -315,7 +316,7 @@ static void mining_task(void *pvParameters) {
             /* Show QR on display — phone scans directly */
             quartz_display_clear(0xFFFF);  /* white background */
             quartz_qr_display(qr_payload, QR_ECC_HIGH,
-                             (DISP_W - 200) / 2, 30, 3,
+                             (320 - 200) / 2, 30, 3,
                              0x0000, 0xFFFF);  /* black on white */
             quartz_display_draw_text(40, 250, "Scan with Quartz app", 0x0000, 0xFFFF);
 #endif
@@ -336,10 +337,11 @@ static void mining_task(void *pvParameters) {
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
                    !serial_confirmed) {
-                /* Check serial input */
-                int c = getchar_timeout_us(0);
-                if (c != EOF && c != 0xFF) {
-                    if (c == '\n' || c == '\r') {
+                /* Check serial input via non-blocking read */
+                char ch;
+                int n = read(STDIN_FILENO, &ch, 1);
+                if (n == 1) {
+                    if (ch == '\n' || ch == '\r') {
                         serial_buf[serial_pos] = '\0';
                         if (strcasecmp(serial_buf, "confirm") == 0) {
                             serial_confirmed = true;
@@ -348,10 +350,10 @@ static void mining_task(void *pvParameters) {
                         serial_pos = 0;
                         serial_buf[0] = '\0';
                     } else if (serial_pos < (int)sizeof(serial_buf) - 1) {
-                        serial_buf[serial_pos++] = (char)c;
+                        serial_buf[serial_pos++] = ch;
                     }
                 }
-                vTaskDelay(pdMS_TO_TICKS(100));
+                vTaskDelay(pdMS_TO_TICKS(50));
             }
 
             /* Confirm in NVS so we never show seed again */

@@ -12,7 +12,6 @@
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"
-#include "esp_mac.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -182,15 +181,24 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         }
         break;
     case ESP_GAP_BLE_SEC_REQ_EVT:
-        /* Pairing request from phone — accept */
-        esp_ble_gap_security_rsp(param->sec_req.bd_addr, true);
-        ESP_LOGI(TAG, "BLE pairing request accepted from " MACSTR, MAC2STR(param->sec_req.bd_addr));
+        /* Security request from phone — accept */
+        esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+        ESP_LOGI(TAG, "BLE security request from %02x:%02x:%02x:%02x:%02x:%02x",
+                 param->ble_security.ble_req.bd_addr[0], param->ble_security.ble_req.bd_addr[1],
+                 param->ble_security.ble_req.bd_addr[2], param->ble_security.ble_req.bd_addr[3],
+                 param->ble_security.ble_req.bd_addr[4], param->ble_security.ble_req.bd_addr[5]);
         break;
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
         if (param->ble_security.auth_cmpl.success) {
-            ESP_LOGI(TAG, "✅ BLE bonded with " MACSTR, MAC2STR(param->ble_security.auth_cmpl.bd_addr));
+            ESP_LOGI(TAG, "✅ BLE bonded with %02x:%02x:%02x:%02x:%02x:%02x",
+                     param->ble_security.auth_cmpl.bd_addr[0], param->ble_security.auth_cmpl.bd_addr[1],
+                     param->ble_security.auth_cmpl.bd_addr[2], param->ble_security.auth_cmpl.bd_addr[3],
+                     param->ble_security.auth_cmpl.bd_addr[4], param->ble_security.auth_cmpl.bd_addr[5]);
         } else {
-            ESP_LOGW(TAG, "❌ BLE bond failed with " MACSTR, MAC2STR(param->ble_security.auth_cmpl.bd_addr));
+            ESP_LOGW(TAG, "❌ BLE bond failed with %02x:%02x:%02x:%02x:%02x:%02x",
+                     param->ble_security.auth_cmpl.bd_addr[0], param->ble_security.auth_cmpl.bd_addr[1],
+                     param->ble_security.auth_cmpl.bd_addr[2], param->ble_security.auth_cmpl.bd_addr[3],
+                     param->ble_security.auth_cmpl.bd_addr[4], param->ble_security.auth_cmpl.bd_addr[5]);
         }
         break;
     default:
@@ -293,16 +301,16 @@ void quartz_ble_init(void) {
     }
 
     /* === BLE Security: require bonding for seed characteristics === */
-    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE,
-        (uint8_t[]){ESP_BLE_ONLY_ACCEPT_AUTHENTICATED_REQUESTS | ESP_BLE_AUTH_REQ_BOND}, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_IO_CAP_MODE,
-        (uint8_t[]){ESP_IO_CAP_NONE}, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE,
-        (uint8_t[]){16}, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY,
-        (uint8_t[]){ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK}, 1);
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY,
-        (uint8_t[]){ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK}, 1);
+    uint8_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;  /* Secure Connections + Bond */
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
+    uint8_t iocap = ESP_IO_CAP_NONE;  /* No display/keyboard on ESP32 */
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
+    uint8_t key_size = 16;  /* Max key size */
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
+    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
 
     esp_ble_gap_register_callback(gap_event_handler);
     esp_ble_gatts_register_callback(gatts_event_handler);
