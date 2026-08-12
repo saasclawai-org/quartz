@@ -165,26 +165,43 @@ Era 3 is the "quantum enforcement era" — only PUF-attested blocks earn rewards
 
 ### Full Setup Guide
 
-See **[setup.saasclaw.ai](https://quartz.preview.saasclaw.ai/setup.html)** for the complete walkthrough with screenshots, platform-specific serial instructions (Windows/Mac/Linux), and troubleshooting.
+See **[setup guide](https://quartz.preview.saasclaw.ai/setup.html)** for the complete walkthrough.
 
-### Flash an ESP32
-```bash
-# Using esptool
-pip install esptool
-python -m esptool --chip esp32 --port COM6 --baud 115200 write_flash \
-  0x1000 bootloader.bin 0x10000 partition-table.bin 0x20000 quartz-miner.bin
+### The Short Version
+
+```
+1. Flash firmware → ESP32
+2. Install Quartz app on Android
+3. Plug ESP32 into computer via USB
+4. Open serial terminal (115200 baud)
+5. ESP32 shows seed as QR code
+6. Scan QR with phone camera in app
+7. Write down 12 words → confirm 3 random words in app
+8. ✅ Mining starts automatically
 ```
 
-Or use the [browser flasher](https://quartz.preview.saasclaw.ai/#flash) (Chrome/Edge, Web Serial).
+### Flash an ESP32
 
-### Save Your Seed Phrase
+Browser flasher (Chrome/Edge): <https://quartz.preview.saasclaw.ai/download.html>
 
-After flashing and WiFi setup, the device shows a 12-word seed phrase. Confirm it via:
-- **📱 Android app** — guided BLE flow with 3-word verification
-- **🌐 Phone browser** — open `192.168.4.1/seed` on the Quartz WiFi hotspot
-- **💻 Serial terminal** — connect at 115200 baud, type `confirm` + Enter
+Or command line:
+```bash
+pip install esptool
+python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash \
+  0x1000 bootloader.bin 0x8000 partition-table.bin 0x10000 quartz-app-v047.bin
+```
 
-See the [Setup Guide](https://quartz.preview.saasclaw.ai/setup.html) for detailed instructions.
+### Seed Phrase Security
+
+The seed phrase is shown as a **QR code** only — never as plain text over WiFi or Bluetooth.
+
+- **Serial terminal**: QR appears as ASCII art (scan with phone camera)
+- **M5Stack display**: QR on screen (scan with phone camera)
+- **BLE**: available only after bonding/pairing
+
+The seed never goes over WiFi. The captive portal is for WiFi setup only.
+
+See the [Setup Guide](https://quartz.preview.saasclaw.ai/setup.html) for OS-specific instructions.
 
 ### Run a Node
 ```bash
