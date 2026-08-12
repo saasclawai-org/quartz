@@ -163,6 +163,10 @@ Era 3 is the "quantum enforcement era" — only PUF-attested blocks earn rewards
 
 ## Quick Start
 
+### Full Setup Guide
+
+See **[setup.saasclaw.ai](https://quartz.preview.saasclaw.ai/setup.html)** for the complete walkthrough with screenshots, platform-specific serial instructions (Windows/Mac/Linux), and troubleshooting.
+
 ### Flash an ESP32
 ```bash
 # Using esptool
@@ -172,6 +176,15 @@ python -m esptool --chip esp32 --port COM6 --baud 115200 write_flash \
 ```
 
 Or use the [browser flasher](https://quartz.preview.saasclaw.ai/#flash) (Chrome/Edge, Web Serial).
+
+### Save Your Seed Phrase
+
+After flashing and WiFi setup, the device shows a 12-word seed phrase. Confirm it via:
+- **📱 Android app** — guided BLE flow with 3-word verification
+- **🌐 Phone browser** — open `192.168.4.1/seed` on the Quartz WiFi hotspot
+- **💻 Serial terminal** — connect at 115200 baud, type `confirm` + Enter
+
+See the [Setup Guide](https://quartz.preview.saasclaw.ai/setup.html) for detailed instructions.
 
 ### Run a Node
 ```bash
