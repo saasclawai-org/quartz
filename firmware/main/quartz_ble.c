@@ -12,6 +12,7 @@
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"
+#include "esp_mac.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -145,10 +146,12 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
          sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
     },
-    /* Seed phrase value — readable only once before confirmation */
+    /* Seed phrase value — requires bonded connection (encrypted)
+     * Uses ESP_GATT_PERM_READ_ENCRYPTED so only paired devices can read */
     [QUARTZ_IDX_SEED_VAL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_128, s_seed_uuid128, ESP_GATT_PERM_READ,
+        {ESP_UUID_LEN_128, s_seed_uuid128,
+         ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED,
          sizeof(s_seed_phrase), sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase}
     },
     /* Confirm characteristic declaration */
@@ -157,10 +160,11 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
          sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE}}
     },
-    /* Confirm value — phone writes 3 word indices to confirm */
+    /* Confirm value — phone writes to confirm seed (requires bonding) */
     [QUARTZ_IDX_CONFIRM_VAL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_128, s_confirm_uuid128, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+        {ESP_UUID_LEN_128, s_confirm_uuid128,
+         ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED,
          16, 0, NULL}
     },
 };
@@ -175,6 +179,18 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
             ESP_LOGE(TAG, "Advertising start failed");
         } else {
             ESP_LOGI(TAG, "BLE advertising as \"Quartz-Miner\"");
+        }
+        break;
+    case ESP_GAP_BLE_SEC_REQ_EVT:
+        /* Pairing request from phone — accept */
+        esp_ble_gap_security_rsp(param->sec_req.bd_addr, true);
+        ESP_LOGI(TAG, "BLE pairing request accepted from " MACSTR, MAC2STR(param->sec_req.bd_addr));
+        break;
+    case ESP_GAP_BLE_AUTH_CMPL_EVT:
+        if (param->ble_security.auth_cmpl.success) {
+            ESP_LOGI(TAG, "✅ BLE bonded with " MACSTR, MAC2STR(param->ble_security.auth_cmpl.bd_addr));
+        } else {
+            ESP_LOGW(TAG, "❌ BLE bond failed with " MACSTR, MAC2STR(param->ble_security.auth_cmpl.bd_addr));
         }
         break;
     default:
@@ -276,11 +292,25 @@ void quartz_ble_init(void) {
         return;
     }
 
+    /* === BLE Security: require bonding for seed characteristics === */
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE,
+        (uint8_t[]){ESP_BLE_ONLY_ACCEPT_AUTHENTICATED_REQUESTS | ESP_BLE_AUTH_REQ_BOND}, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IO_CAP_MODE,
+        (uint8_t[]){ESP_IO_CAP_NONE}, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE,
+        (uint8_t[]){16}, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY,
+        (uint8_t[]){ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK}, 1);
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY,
+        (uint8_t[]){ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK}, 1);
+
     esp_ble_gap_register_callback(gap_event_handler);
     esp_ble_gatts_register_callback(gatts_event_handler);
     esp_ble_gatts_app_register(0);
 
     esp_ble_gap_set_device_name("Quartz-Miner");
+
+    ESP_LOGI(TAG, "BLE security: bonding required for seed/confirm characteristics");
 }
 
 void quartz_ble_update_stats(uint32_t hash_count, uint32_t hash_rate,

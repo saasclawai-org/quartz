@@ -1,12 +1,9 @@
 package com.quartz.wallet.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
+import android.app.Activity
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,16 +12,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanIntentResult
+import com.journeyapps.barcodescanner.ScanOptions
 import com.quartz.wallet.ble.QuartzBLEManager
-import java.util.concurrent.Executors
 
 @Composable
 fun SeedProvisioningScreen(
@@ -36,6 +31,23 @@ fun SeedProvisioningScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var confirmStep by remember { mutableIntStateOf(0) }
     var userInput by remember { mutableStateOf("") }
+
+    // ZXing barcode scanner launcher
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
+        if (result.contents == null) {
+            error = "Scan cancelled"
+            phase = "error"
+        } else {
+            val words = parseSeedQrPayload(result.contents)
+            if (words.size == 12) {
+                seedWords = words
+                phase = "display"
+            } else {
+                error = "Invalid QR: expected 12 words, got ${words.size}"
+                phase = "error"
+            }
+        }
+    }
 
     // BLE callbacks
     LaunchedEffect(Unit) {
@@ -86,7 +98,15 @@ fun SeedProvisioningScreen(
 
                 // Option 1: Scan QR from device screen or serial terminal
                 Button(
-                    onClick = { phase = "qr_scan" },
+                    onClick = {
+                        val options = ScanOptions().apply {
+                            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            setPrompt("Point camera at the QR code on your device screen or serial terminal")
+                            setBeepEnabled(true)
+                            setOrientationLocked(false)
+                        }
+                        scanLauncher.launch(options)
+                    },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9933FF))
                 ) {
@@ -120,27 +140,6 @@ fun SeedProvisioningScreen(
                         )
                     }
                 }
-            }
-
-            "qr_scan" -> {
-                QrScannerSection(
-                    onQrScanned = { payload ->
-                        // Parse JSON: {"v":1,"words":["word1","word2",...],"addr":"..."}
-                        val words = parseSeedQrPayload(payload)
-                        if (words.size == 12) {
-                            seedWords = words
-                            phase = "display"
-                        } else {
-                            error = "Invalid QR code: expected 12 words, got ${words.size}"
-                            phase = "error"
-                        }
-                    },
-                    onError = { msg ->
-                        error = msg
-                        phase = "error"
-                    },
-                    onBack = { phase = "choice" }
-                )
             }
 
             "ble_connecting" -> {
@@ -317,121 +316,11 @@ fun SeedProvisioningScreen(
     }
 }
 
-@Composable
-fun QrScannerSection(
-    onQrScanned: (String) -> Unit,
-    onError: (String) -> Unit,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var hasCameraPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
-        if (!granted) onError("Camera permission denied")
-    }
-
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    if (!hasCameraPermission) {
-        Text("Camera permission required for QR scanning", color = Color.Gray)
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9933FF))
-        ) {
-            Text("Grant Camera Permission")
-        }
-        return
-    }
-
-    Text(
-        "📷 Point camera at the QR code",
-        fontSize = 18.sp,
-        color = Color.White,
-        textAlign = TextAlign.Center
-    )
-    Spacer(modifier = Modifier.height(16.dp))
-
-    val previewView = remember { PreviewView(context) }
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    var scanned by remember { mutableStateOf(false) }
-
-    AndroidView(
-        factory = { previewView },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(350.dp)
-    ) { view ->
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            try {
-                val cameraProvider = cameraProviderFuture.get()
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(view.surfaceProvider)
-                }
-                val barcodeAnalyzer = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                    .also { analysis ->
-                        analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                            if (!scanned) {
-                                // Use ML Kit or ZXing here — simplified for now
-                                // In production, use com.google.mlkit:mlkit-barcode-scanning
-                                imageProxy.close()
-                            } else {
-                                imageProxy.close()
-                            }
-                        }
-                    }
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    barcodeAnalyzer
-                )
-            } catch (e: Exception) {
-                onError("Camera error: ${e.message}")
-            }
-        }, ContextCompat.getMainExecutor(context))
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(
-        "The QR code contains your encrypted seed phrase.\n" +
-        "It appears on the serial terminal or device screen.",
-        fontSize = 13.sp,
-        color = Color.Gray,
-        textAlign = TextAlign.Center
-    )
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedButton(
-        onClick = onBack,
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
-    ) {
-        Text("Back")
-    }
-}
-
 // Parse JSON seed QR payload
 // Format: {"v":1,"words":["word1","word2",...],"addr":"Qk..."}
 fun parseSeedQrPayload(payload: String): List<String> {
-    // Simple JSON parsing without library
     val words = mutableListOf<String>()
     val regex = """"([a-z]+)"""".toRegex()
-    // Find the words array section
     val wordsSection = payload.substringAfter("\"words\":[").substringBefore("]")
     regex.findAll(wordsSection).forEach { match ->
         words.add(match.groupValues[1])
