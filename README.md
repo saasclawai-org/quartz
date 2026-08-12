@@ -154,12 +154,26 @@ Era 3 is the "quantum enforcement era" — only PUF-attested blocks earn rewards
 
 ## Supported Boards
 
-| Board | Display | LoRa | Price | Recommendation |
+Three tiers, one firmware. Compile-time flags (`QUARTZ_HAS_DISPLAY`, `QUARTZ_HAS_LORA`) select the right drivers.
+
+| Board | Price | Display | LoRa | Role |
 |---|---|---|---|---|
-| **Heltec WiFi LoRa 32 V3** | 0.96" OLED | SX1262 | ~$15 | Best overall |
-| **LilyGO T-Display S3** | 1.14" TFT | — | ~$12 | Best display |
-| **M5Stack Core** | 2.0" TFT | — | ~$35 | Premium (tested) |
-| ESP32-WROOM (generic) | — | — | ~$4 | Budget |
+| **ESP32-WROOM** | ~$5 | ❌ | ❌ | Entry miner — cheapest crypto hardware on Earth |
+| **Heltec WiFi LoRa 32 V3** | ~$15 | 0.96" OLED | SX1262 | Mesh miner — all three radios, solar-deployable |
+| **M5Stack Core** | ~$35 | 3.2" TFT 320×240 | ❌ | Hardware wallet — QR seed provisioning, transaction signing |
+
+**One codebase, three sdkconfig presets:**
+
+| Preset | Board | Display | LoRa |
+|---|---|---|---|
+| `sdkconfig.esp32wroom` | $5 ESP32 | None | None |
+| `sdkconfig.heltec_lora32` | $15 Heltec | OLED 128×64 | SX1262 |
+| `sdkconfig.m5stack_core` | $35 M5Stack | TFT 320×240 | None |
+
+```bash
+# Build for your board
+idf.py -DSDKCONFIG=sdkconfig.heltec_lora32 build
+```
 
 ## Quick Start
 
@@ -188,7 +202,7 @@ Or command line:
 ```bash
 pip install esptool
 python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash \
-  0x1000 bootloader.bin 0x8000 partition-table.bin 0x10000 quartz-app-v047.bin
+  0x1000 bootloader-v048.bin 0x10000 partition-table-v048.bin 0x20000 quartz-app-v048.bin
 ```
 
 ### Seed Phrase Security
