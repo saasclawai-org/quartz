@@ -28,6 +28,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
+#include "driver/adc.h"
 #include "nvs_flash.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -52,7 +53,7 @@ uint32_t g_last_hps = 0;  /* current hashrate, read by mining_submit */
 #define QUARTZ_NODE_PORT 21100
 
 /* === M5Stack Core Buttons === */
-#define BTN_A_PIN   39   /* Left button */
+#define BTN_A_PIN   39   /* Left button (SENSOR_VN) */
 #define BTN_B_PIN   38   /* Middle button */
 #define BTN_C_PIN   37   /* Right button */
 
@@ -63,53 +64,82 @@ static bool btn_c_pressed = false;
 static float s_payment_amount = 0.1f;  /* default QR amount */
 static uint32_t btn_last_read_sec = 0;
 static uint32_t btn_debounce_count = 0;
+static int64_t btn_a_low_since_us = 0;  /* timestamp when A first read low */
+static int64_t btn_b_low_since_us = 0;
+static int64_t btn_c_low_since_us = 0;
 
-#define BTN_DEBOUNCE_NEEDED   5    /* need 5 consecutive low reads (~50ms) */
-#define BTN_COOLDOWN_SEC       1    /* min 1s between button actions */
+#define BTN_DEBOUNCE_US       200000  /* 200ms debounce */
+#define BTN_COOLDOWN_SEC       1       /* min 1s between button actions */
+#define BTN_STARTUP_GRACE_SEC  10      /* ignore button presses in first 10s after boot */
+#define BTN_FLOAT_CHECK_COUNT  5       /* samples for floating-pin detection */
+#define BTN_FLOAT_CHECK_US     1000    /* 1ms between samples */
 
 static void init_buttons(void) {
-    /* M5Stack Core buttons: GPIO39, 38, 37 (input-only, no internal pull-up)
-     * M5Stack PCB has external pull-ups, so unpressed = HIGH */
+    /* GPIO39 (BTN_A) is shared with light sensor ADC1_CH3.
+     * GPIO38/37 are ADC1_CH2/CH1 but work as digital (agent doesn't
+     * reconfigure them). We'll read BTN_A via ADC instead. */
     gpio_config_t btn_conf = {
-        .pin_bit_mask = (1ULL << BTN_A_PIN) | (1ULL << BTN_B_PIN) | (1ULL << BTN_C_PIN),
+        .pin_bit_mask = (1ULL << BTN_B_PIN) | (1ULL << BTN_C_PIN),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,     /* these pins don't support internal pull-up */
+        .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&btn_conf);
+    /* GPIO39 is configured as ADC by quartz_agent_init — no digital config needed */
+}
+
+/* Distinguish a real button press from a floating pin.
+ * For GPIO38/37: digital read with multi-sample.
+ * For GPIO39: ADC read (pin is in ADC mode for light sensor).
+ * When button pressed → GND → ADC ~0. When unpressed → floats higher. */
+static bool btn_is_pressed_digital(int pin) {
+    for (int i = 0; i < BTN_FLOAT_CHECK_COUNT; i++) {
+        if (gpio_get_level(pin) != 0) return false;
+        ets_delay_us(BTN_FLOAT_CHECK_US);
+    }
+    return true;
+}
+
+static bool btn_a_is_pressed(void) {
+    /* GPIO39 is ADC1_CHANNEL_3. Read ADC: 0 = pressed (GND), >200 = not pressed */
+    int val = adc1_get_raw(ADC1_CHANNEL_3);
+    return (val >= 0 && val < 100);  /* threshold: pressed = near 0V */
 }
 
 static void poll_buttons(void) {
     uint32_t now = esp_timer_get_time() / 1000000;
 
-    /* Debounce: read buttons, require N consecutive same reads */
-    bool a_raw = (gpio_get_level(BTN_A_PIN) == 0);
+    /* Ignore buttons during startup grace period */
+    if (now < BTN_STARTUP_GRACE_SEC) return;
+
+    /* Cooldown check (applies to all buttons) */
+    if (btn_last_read_sec > 0 && (now - btn_last_read_sec) < BTN_COOLDOWN_SEC) return;
+
+    int64_t now_us = esp_timer_get_time();
+
+    /* Read button states.
+     * A: via ADC (GPIO39 is in ADC mode for light sensor)
+     * B/C: via digital GPIO (work fine) */
+    bool a_raw = btn_a_is_pressed();
     bool b_raw = (gpio_get_level(BTN_B_PIN) == 0);
     bool c_raw = (gpio_get_level(BTN_C_PIN) == 0);
 
-    /* If any button is raw-low, increment debounce counter */
-    if (a_raw || b_raw || c_raw) {
-        btn_debounce_count++;
-    } else {
-        btn_debounce_count = 0;
-        btn_a_pressed = false;
-        btn_b_pressed = false;
-        btn_c_pressed = false;
-        return;
-    }
+    /* Track when each button first goes active */
+    if (a_raw) { if (btn_a_low_since_us == 0) btn_a_low_since_us = now_us; }
+    else { btn_a_low_since_us = 0; btn_a_pressed = false; }
 
-    /* Wait for debounce threshold */
-    if (btn_debounce_count < BTN_DEBOUNCE_NEEDED) return;
+    if (b_raw) { if (btn_b_low_since_us == 0) btn_b_low_since_us = now_us; }
+    else { btn_b_low_since_us = 0; btn_b_pressed = false; }
 
-    /* Cooldown check */
-    if (btn_last_read_sec > 0 && (now - btn_last_read_sec) < BTN_COOLDOWN_SEC) return;
+    if (c_raw) { if (btn_c_low_since_us == 0) btn_c_low_since_us = now_us; }
+    else { btn_c_low_since_us = 0; btn_c_pressed = false; }
 
     /* BTN A: toggle mining <-> payment screen */
-    if (a_raw && !btn_a_pressed) {
+    if (a_raw && !btn_a_pressed && btn_a_low_since_us > 0 &&
+        (now_us - btn_a_low_since_us) >= BTN_DEBOUNCE_US) {
         btn_a_pressed = true;
         btn_last_read_sec = now;
-        btn_debounce_count = 0;
         if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             quartz_display_set_screen(QZ_SCREEN_MINING);
         } else {
@@ -120,10 +150,14 @@ static void poll_buttons(void) {
     }
 
     /* BTN B: increase payment amount */
-    if (b_raw && !btn_b_pressed) {
+    if (b_raw && !btn_b_pressed && btn_b_low_since_us > 0 &&
+        (now_us - btn_b_low_since_us) >= BTN_DEBOUNCE_US) {
+        if (!btn_is_pressed_digital(BTN_B_PIN)) {
+            btn_b_low_since_us = 0;
+            return;
+        }
         btn_b_pressed = true;
         btn_last_read_sec = now;
-        btn_debounce_count = 0;
         if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             s_payment_amount += 0.1f;
             quartz_display_qr_payment(quartz_wallet_get_address(), s_payment_amount);
@@ -132,10 +166,14 @@ static void poll_buttons(void) {
     }
 
     /* BTN C: decrease payment amount */
-    if (c_raw && !btn_c_pressed) {
+    if (c_raw && !btn_c_pressed && btn_c_low_since_us > 0 &&
+        (now_us - btn_c_low_since_us) >= BTN_DEBOUNCE_US) {
+        if (!btn_is_pressed_digital(BTN_C_PIN)) {
+            btn_c_low_since_us = 0;
+            return;
+        }
         btn_c_pressed = true;
         btn_last_read_sec = now;
-        btn_debounce_count = 0;
         if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             if (s_payment_amount > 0.1f) s_payment_amount -= 0.1f;
             quartz_display_qr_payment(quartz_wallet_get_address(), s_payment_amount);
@@ -430,11 +468,8 @@ static void mining_task(void *pvParameters) {
 
         /* If on payment screen, don't redraw mining stats */
         if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
-            /* Skip mining display update — QR stays on screen */
-            s_hash_count++;
-            if (s_hash_count % 100 == 0) {
-                vTaskDelay(pdMS_TO_TICKS(10));
-            }
+            /* QR stays on screen — just yield to other tasks */
+            vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 #endif
