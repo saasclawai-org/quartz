@@ -20,6 +20,8 @@
 #include "quartz_ble.h"
 #include <string.h>
 #include <stdio.h>
+#include <strings.h>
+#include <ctype.h>
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
@@ -303,12 +305,34 @@ static void mining_task(void *pvParameters) {
             quartz_wifi_portal_set_seed((const char (*)[12])words, quartz_wallet_get_address());
 
             ESP_LOGI(TAG, "Seed available via: serial + display + BLE + captive portal /seed");
+            ESP_LOGI(TAG, "To confirm via serial: type 'confirm' and press Enter");
             ESP_LOGI(TAG, "Waiting for confirmation (no timeout — device will not mine until confirmed)...");
+
+            /* Serial confirmation input state */
+            char serial_buf[32] = {0};
+            int serial_pos = 0;
+            bool serial_confirmed = false;
 
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
-                   !quartz_wifi_portal_seed_confirmed()) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
+                   !quartz_wifi_portal_seed_confirmed() &&
+                   !serial_confirmed) {
+                /* Check serial input */
+                int c = getchar_timeout_us(0);
+                if (c != EOF && c != 0xFF) {
+                    if (c == '\n' || c == '\r') {
+                        serial_buf[serial_pos] = '\0';
+                        if (strcasecmp(serial_buf, "confirm") == 0) {
+                            serial_confirmed = true;
+                            ESP_LOGI(TAG, "✅ Seed confirmed via serial input");
+                        }
+                        serial_pos = 0;
+                        serial_buf[0] = '\0';
+                    } else if (serial_pos < (int)sizeof(serial_buf) - 1) {
+                        serial_buf[serial_pos++] = (char)c;
+                    }
+                }
+                vTaskDelay(pdMS_TO_TICKS(100));
             }
 
             /* Confirm in NVS so we never show seed again */
@@ -318,6 +342,8 @@ static void mining_task(void *pvParameters) {
                 ESP_LOGI(TAG, "✅ Seed confirmed via BLE app");
             } else if (quartz_wifi_portal_seed_confirmed()) {
                 ESP_LOGI(TAG, "✅ Seed confirmed via captive portal");
+            } else if (serial_confirmed) {
+                ESP_LOGI(TAG, "✅ Seed confirmed via serial");
             }
 
             /* Wipe seed phrase from RAM */

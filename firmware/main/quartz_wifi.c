@@ -43,6 +43,7 @@ static char s_portal_seed[12][12] = {0};
 static char s_portal_address[64] = {0};
 static bool s_portal_seed_available = false;
 static bool s_portal_seed_confirmed = false;
+static int s_portal_challenge_idx = 0;  /* random word index for confirmation */
 
 /* Node configuration */
 #define NODE_HOST   "quartz.preview.saasclaw.ai"
@@ -305,34 +306,89 @@ static void portal_task(void *pv) {
             off += snprintf(seed_html + off, sizeof(seed_html) - off,
                 "</div>"
                 "<div class='addr'>Address: %s</div>"
+                "<div class='warn'>Confirm: type word #%d to verify you wrote it down</div>"
                 "<form action='/confirm-seed' method='POST'>"
-                "<button type='submit'>✅ I've written it down</button>"
+                "<input name='word' placeholder='Word #%d' required "
+                "style='width:100%%;padding:14px;margin:8px 0;border:1px solid #444;"
+                "border-radius:8px;background:#2a2a4e;color:#fff;box-sizing:border-box;font-size:16px'>"
+                "<input type='hidden' name='idx' value='%d'>"
+                "<button type='submit'>✅ Confirm Backup</button>"
                 "</form>"
-                "</body></html>");
+                "</body></html>",
+                s_portal_address,
+                s_portal_challenge_idx + 1,
+                s_portal_challenge_idx + 1,
+                s_portal_challenge_idx);
             send(csock, seed_html, off, 0);
             close(csock);
             continue;
         }
 
-        /* Handle seed confirmation */
+        /* Handle seed confirmation — verify the challenge word */
         if (strstr(buf, "POST /confirm-seed") != NULL) {
-            s_portal_seed_confirmed = true;
-            /* Zero out seed phrase from portal memory */
-            memset(s_portal_seed, 0, sizeof(s_portal_seed));
-            s_portal_seed_available = false;
-            ESP_LOGI(TAG, "Seed phrase confirmed via captive portal — wiped");
-            const char *resp =
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
-                "<!DOCTYPE html><html><head>"
-                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                "<title>Quartz Seed Confirmed</title>"
-                "<style>body{font-family:system-ui;text-align:center;padding:40px;"
-                "background:#1a1a2e;color:#eee}h1{color:#00d4aa}</style>"
-                "</head><body><h1>✅ Confirmed!</h1>"
-                "<p>Your seed phrase has been wiped from the device memory.</p>"
-                "<p>Keep your backup safe — it's the only way to recover your funds.</p>"
-                "</body></html>";
-            send(csock, resp, strlen(resp), 0);
+            /* Parse word= from body */
+            char *body = strstr(buf, "\r\n\r\n");
+            if (body) body += 4;
+            
+            char typed_word[16] = {0};
+            if (body) {
+                char *w = strstr(body, "word=");
+                if (w) {
+                    w += 5;
+                    int wi = 0;
+                    while (*w && *w != '&' && *w != '\r' && wi < 15) {
+                        if (*w == '+') typed_word[wi++] = ' ';
+                        else if (*w == '%' && w[1] && w[2]) {
+                            int hi = (w[1] >= '0' && w[1] <= '9') ? w[1]-'0' : (w[1]>='a'?w[1]-'a'+10:w[1]-'A'+10);
+                            int lo = (w[2] >= '0' && w[2] <= '9') ? w[2]-'0' : (w[2]>='a'?w[2]-'a'+10:w[2]-'A'+10);
+                            typed_word[wi++] = (hi << 4) | lo;
+                            w += 2;
+                        } else typed_word[wi++] = *w;
+                        w++;
+                    }
+                }
+            }
+            
+            /* Compare against the challenge word */
+            const char *expected = s_portal_seed[s_portal_challenge_idx];
+            if (strcasecmp(typed_word, expected) == 0) {
+                /* Correct word — confirm */
+                s_portal_seed_confirmed = true;
+                memset(s_portal_seed, 0, sizeof(s_portal_seed));
+                s_portal_seed_available = false;
+                ESP_LOGI(TAG, "Seed phrase confirmed via captive portal — wiped");
+                const char *resp =
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
+                    "<!DOCTYPE html><html><head>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>Quartz Seed Confirmed</title>"
+                    "<style>body{font-family:system-ui;text-align:center;padding:40px;"
+                    "background:#1a1a2e;color:#eee}h1{color:#00d4aa}</style>"
+                    "</head><body><h1>✅ Confirmed!</h1>"
+                    "<p>Your seed phrase has been wiped from device memory.</p>"
+                    "<p>Keep your backup safe — it's the only way to recover your funds.</p>"
+                    "</body></html>";
+                send(csock, resp, strlen(resp), 0);
+            } else {
+                /* Wrong word — reject */
+                ESP_LOGW(TAG, "Seed confirmation FAILED: typed '%s' expected '%s'", typed_word, expected);
+                /* Pick a new random challenge */
+                s_portal_challenge_idx = esp_random() % 12;
+                char retry_html[512];
+                snprintf(retry_html, sizeof(retry_html),
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
+                    "<!DOCTYPE html><html><head>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>Quartz Seed</title>"
+                    "<style>body{font-family:system-ui;text-align:center;padding:40px;"
+                    "background:#1a1a2e;color:#eee}h1{color:#ff6b35}"
+                    "a{color:#9933ff;font-size:18px}</style>"
+                    "</head><body><h1>❌ Wrong word!</h1>"
+                    "<p>Go back and check your backup.</p>"
+                    "<p><a href='/seed'>← Try again (word #%d)</a></p>"
+                    "</body></html>", s_portal_challenge_idx + 1);
+                send(csock, retry_html, strlen(retry_html), 0);
+            }
             close(csock);
             continue;
         }
@@ -730,7 +786,10 @@ void quartz_wifi_portal_set_seed(const char words[12][12], const char *address) 
     strncpy(s_portal_address, address ? address : "", sizeof(s_portal_address) - 1);
     s_portal_seed_available = true;
     s_portal_seed_confirmed = false;
-    ESP_LOGI(TAG, "Seed phrase loaded into captive portal (visit /seed)");
+    /* Pick random challenge word for verification */
+    s_portal_challenge_idx = esp_random() % 12;
+    ESP_LOGI(TAG, "Seed phrase loaded into captive portal (visit /seed, challenge word #%d)",
+             s_portal_challenge_idx + 1);
 }
 
 bool quartz_wifi_portal_seed_confirmed(void) {
