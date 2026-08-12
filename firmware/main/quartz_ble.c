@@ -4,6 +4,7 @@
  */
 
 #include "quartz_ble.h"
+#include "quartz_wallet.h"
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
@@ -34,11 +35,18 @@ static bool s_seed_available = false;
 static bool s_seed_confirmed = false;
 static uint16_t s_seed_handle = 0;
 static uint16_t s_confirm_handle = 0;
+static uint16_t s_pin_set_handle = 0;
+static uint16_t s_pin_unlock_handle = 0;
+static uint16_t s_pin_status_handle = 0;
 static bool s_connected = false;
 static uint16_t s_conn_handle = 0xFFFF;
 static uint16_t s_stats_handle = 0;
 static uint16_t s_addr_handle = 0;
 static esp_gatt_if_t s_gatts_if = 0;
+
+/* PIN unlock state — gates seed/signing access */
+static bool s_device_unlocked = true;  /* unlocked by default if no PIN set */
+static uint8_t s_pin_status_buf[3] = {0};  /* has_pin, attempts_left, unlocked */
 
 /* GATT service UUID: 00000A01-0000-1000-8000-00805F9B34FB */
 static uint8_t s_service_uuid128[16] = {
@@ -68,6 +76,24 @@ static uint8_t s_seed_uuid128[16] = {
 static uint8_t s_confirm_uuid128[16] = {
     0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
     0x00, 0x10, 0x00, 0x00, 0x05, 0x0A, 0x00, 0x00
+};
+
+/* PIN set char UUID: 00000A06-... */
+static uint8_t s_pin_set_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x06, 0x0A, 0x00, 0x00
+};
+
+/* PIN unlock char UUID: 00000A07-... */
+static uint8_t s_pin_unlock_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x07, 0x0A, 0x00, 0x00
+};
+
+/* PIN status char UUID: 00000A08-... */
+static uint8_t s_pin_status_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x08, 0x0A, 0x00, 0x00
 };
 
 static esp_ble_adv_data_t s_adv_data = {
@@ -105,6 +131,12 @@ enum {
     QUARTZ_IDX_SEED_VAL,
     QUARTZ_IDX_CONFIRM_CHAR,
     QUARTZ_IDX_CONFIRM_VAL,
+    QUARTZ_IDX_PIN_SET_CHAR,
+    QUARTZ_IDX_PIN_SET_VAL,
+    QUARTZ_IDX_PIN_UNLOCK_CHAR,
+    QUARTZ_IDX_PIN_UNLOCK_VAL,
+    QUARTZ_IDX_PIN_STATUS_CHAR,
+    QUARTZ_IDX_PIN_STATUS_VAL,
     QUARTZ_IDX_NB,
 };
 
@@ -165,6 +197,44 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_UUID_LEN_128, s_confirm_uuid128,
          ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED,
          16, 0, NULL}
+    },
+    /* PIN set characteristic declaration */
+    [QUARTZ_IDX_PIN_SET_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_WRITE}}
+    },
+    /* PIN set value — write PIN string (requires bonding) */
+    [QUARTZ_IDX_PIN_SET_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_pin_set_uuid128,
+         ESP_GATT_PERM_WRITE_ENCRYPTED,
+         10, 0, NULL}
+    },
+    /* PIN unlock characteristic declaration */
+    [QUARTZ_IDX_PIN_UNLOCK_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_WRITE}}
+    },
+    /* PIN unlock value — write PIN to unlock device */
+    [QUARTZ_IDX_PIN_UNLOCK_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_pin_unlock_uuid128,
+         ESP_GATT_PERM_WRITE_ENCRYPTED,
+         10, 0, NULL}
+    },
+    /* PIN status characteristic declaration */
+    [QUARTZ_IDX_PIN_STATUS_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
+    },
+    /* PIN status value — read: [has_pin, attempts_left, unlocked] */
+    [QUARTZ_IDX_PIN_STATUS_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_pin_status_uuid128, ESP_GATT_PERM_READ,
+         sizeof(s_pin_status_buf), sizeof(s_pin_status_buf), s_pin_status_buf}
     },
 };
 
@@ -228,6 +298,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_addr_handle = param->add_attr_tab.handles[QUARTZ_IDX_ADDR_VAL];
             s_seed_handle = param->add_attr_tab.handles[QUARTZ_IDX_SEED_VAL];
             s_confirm_handle = param->add_attr_tab.handles[QUARTZ_IDX_CONFIRM_VAL];
+            s_pin_set_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_SET_VAL];
+            s_pin_unlock_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_UNLOCK_VAL];
+            s_pin_status_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_STATUS_VAL];
             esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
             esp_ble_gap_config_adv_data(&s_adv_data);
         }
@@ -270,6 +343,36 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                 /* Zero out seed phrase from RAM */
                 memset(s_seed_phrase, 0, sizeof(s_seed_phrase));
                 ESP_LOGI(TAG, "Seed phrase confirmed via BLE — wiped from RAM");
+            }
+        }
+        /* PIN set — requires bonded encrypted connection */
+        if (param->write.handle == s_pin_set_handle + 1) {
+            if (param->write.len > 0 && param->write.len <= 8) {
+                char pin[9] = {0};
+                memcpy(pin, param->write.value, param->write.len);
+                pin[param->write.len] = '\0';
+                quartz_wallet_set_pin(pin);
+                memset(pin, 0, sizeof(pin));
+            }
+        }
+        /* PIN unlock — write PIN to unlock device */
+        if (param->write.handle == s_pin_unlock_handle + 1) {
+            if (param->write.len > 0 && param->write.len <= 8) {
+                char pin[9] = {0};
+                memcpy(pin, param->write.value, param->write.len);
+                pin[param->write.len] = '\0';
+                if (quartz_wallet_check_pin(pin) == QZ_WALLET_OK) {
+                    s_device_unlocked = true;
+                    quartz_wallet_reset_pin_attempts();
+                    ESP_LOGI(TAG, "Device unlocked via BLE PIN");
+                } else {
+                    bool wiped = quartz_wallet_record_failed_pin();
+                    if (wiped) {
+                        s_device_unlocked = false;
+                        ESP_LOGE(TAG, "Device wiped after 10 failed PIN attempts");
+                    }
+                }
+                memset(pin, 0, sizeof(pin));
             }
         }
         break;
@@ -356,6 +459,34 @@ void quartz_ble_set_seed_phrase(const char words[12][12]) {
 
 bool quartz_ble_is_seed_confirmed(void) {
     return s_seed_confirmed;
+}
+
+bool quartz_ble_is_unlocked(void) {
+    return s_device_unlocked;
+}
+
+void quartz_ble_get_pin_status(bool *has_pin, uint8_t *attempts_left, bool *unlocked) {
+    *has_pin = quartz_wallet_has_pin();
+    *attempts_left = 10 - quartz_wallet_pin_attempts();
+    *unlocked = s_device_unlocked;
+    /* Update BLE status buffer */
+    s_pin_status_buf[0] = *has_pin ? 1 : 0;
+    s_pin_status_buf[1] = *attempts_left;
+    s_pin_status_buf[2] = *unlocked ? 1 : 0;
+}
+
+void quartz_ble_set_pin(const char *pin) {
+    quartz_wallet_set_pin(pin);
+    s_device_unlocked = true;  /* just set it, device stays unlocked */
+}
+
+void quartz_ble_unlock(const char *pin) {
+    if (quartz_wallet_check_pin(pin) == QZ_WALLET_OK) {
+        s_device_unlocked = true;
+        quartz_wallet_reset_pin_attempts();
+    } else {
+        quartz_wallet_record_failed_pin();
+    }
 }
 
 #endif /* ESP_PLATFORM */

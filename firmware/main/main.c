@@ -273,6 +273,19 @@ static void mining_task(void *pvParameters) {
     }
 
     if (seed_needs_display) {
+        /* Gate seed display behind PIN if set */
+        if (quartz_wallet_has_pin() && !quartz_ble_is_unlocked()) {
+            ESP_LOGI(TAG, "PIN set — seed locked. Enter via serial 'pin <digits>' or BLE app");
+#ifdef QUARTZ_HAS_DISPLAY
+            quartz_display_clear(QZ_COLOR_BLACK);
+            quartz_display_draw_text(40, 100, "PIN Required", QZ_COLOR_YELLOW, QZ_COLOR_BLACK);
+            quartz_display_draw_text(20, 130, "Enter via app or serial", QZ_COLOR_GRAY, QZ_COLOR_BLACK);
+#endif
+            while (!quartz_ble_is_unlocked()) {
+                vTaskDelay(pdMS_TO_TICKS(200));
+            }
+        }
+
         char words[12][12];
         werr = quartz_wallet_get_seed_phrase_for_backup(words, 12);
         if (werr == QZ_WALLET_OK) {
@@ -343,9 +356,30 @@ static void mining_task(void *pvParameters) {
                 if (n == 1) {
                     if (ch == '\n' || ch == '\r') {
                         serial_buf[serial_pos] = '\0';
+                        /* Serial commands */
                         if (strcasecmp(serial_buf, "confirm") == 0) {
                             serial_confirmed = true;
                             ESP_LOGI(TAG, "✅ Seed confirmed via serial input");
+                        } else if (strncasecmp(serial_buf, "pin ", 4) == 0) {
+                            /* Unlock with PIN */
+                            const char *pin = serial_buf + 4;
+                            if (quartz_wallet_check_pin(pin) == QZ_WALLET_OK) {
+                                quartz_wallet_reset_pin_attempts();
+                                ESP_LOGI(TAG, "✅ PIN correct — device unlocked");
+                            } else {
+                                ESP_LOGW(TAG, "❌ Wrong PIN (attempt %d/10)",
+                                         quartz_wallet_pin_attempts() + 1);
+                                quartz_wallet_record_failed_pin();
+                            }
+                        } else if (strncasecmp(serial_buf, "setpin ", 7) == 0) {
+                            /* Set PIN */
+                            const char *pin = serial_buf + 7;
+                            quartz_wallet_set_pin(pin);
+                        } else if (strcasecmp(serial_buf, "pinstatus") == 0) {
+                            ESP_LOGI(TAG, "PIN: %s, attempts: %d/10, unlocked: %s",
+                                     quartz_wallet_has_pin() ? "SET" : "NONE",
+                                     quartz_wallet_pin_attempts(),
+                                     quartz_ble_is_unlocked() ? "YES" : "NO");
                         }
                         serial_pos = 0;
                         serial_buf[0] = '\0';
