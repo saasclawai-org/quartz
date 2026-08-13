@@ -26,7 +26,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from quartz.blockchain import (
     Block, BlockHeader, Transaction, compute_merkle_root,
     get_block_reward, get_miner_reward, get_dev_fund_reward,
-    HEADER_SIZE, BLOCK_TIME,
+    HEADER_SIZE, BLOCK_TIME, RETARGET_PERIOD,
+    retarget_difficulty_bits as _retarget_bits,
 )
 from quartz.crystal_hash import crystal_hash_verify, check_difficulty
 from quartz.crypto import create_new_wallet, public_key_to_address, sign_message
@@ -63,6 +64,7 @@ class QuartzChain:
         self.first_mined = {}
         self.balances = {}  # address -> balance (in sats)
         self.dev_wallet = None
+        self.current_difficulty = TESTNET_DIFFICULTY
 
         os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -116,6 +118,15 @@ class QuartzChain:
         height = len(self.blocks)
         prev_block = self.blocks[-1]
 
+        # Check for difficulty retarget
+        if height > 0 and height % RETARGET_PERIOD == 0:
+            old_diff = self.current_difficulty
+            self.current_difficulty = _retarget_bits(
+                self.current_difficulty, self.blocks, TESTNET_BLOCK_TIME)
+            if self.current_difficulty != old_diff:
+                print(f"📐 Difficulty retarget at block {height}: "
+                      f"{old_diff} → {self.current_difficulty} bits")
+
         # Calculate reward
         miner_reward = get_miner_reward(height)
         dev_reward = get_dev_fund_reward(height)
@@ -132,7 +143,7 @@ class QuartzChain:
             version=1,
             prev_block_hash=prev_block.header.hash,
             timestamp=int(time.time()),
-            difficulty_target=TESTNET_DIFFICULTY,
+            difficulty_target=self.current_difficulty,
         )
 
         # Coinbase transaction
@@ -141,7 +152,7 @@ class QuartzChain:
         block.build_header()
 
         # Mine (simulated — real ESP32 would do CrystalHash)
-        target = 1 << (256 - TESTNET_DIFFICULTY)
+        target = 1 << (256 - self.current_difficulty)
         attempts = 0
         while True:
             header_hash = block.header.hash
@@ -181,7 +192,7 @@ class QuartzChain:
         return {
             "height": len(self.blocks) - 1,
             "best_hash": self.blocks[-1].header.hash.hex() if self.blocks else None,
-            "difficulty": TESTNET_DIFFICULTY,
+            "difficulty": self.current_difficulty,
             "block_time": TESTNET_BLOCK_TIME,
             "total_supply": total_supply,
             "total_supply_qz": total_supply / 1e8,
@@ -288,6 +299,7 @@ class QuartzChain:
             ],
             "balances": self.balances,
             "known_miners": [m.hex() for m in self.known_miners],
+            "current_difficulty": self.current_difficulty,
         }
         with open(CHAIN_FILE, 'w') as f:
             json.dump(data, f, indent=2)
@@ -311,7 +323,8 @@ class QuartzChain:
 
         self.balances = data.get('balances', {})
         self.known_miners = set(bytes.fromhex(m) for m in data.get('known_miners', []))
-        print(f"📦 Loaded {len(self.blocks)} blocks from disk")
+        self.current_difficulty = data.get('current_difficulty', TESTNET_DIFFICULTY)
+        print(f"📦 Loaded {len(self.blocks)} blocks from disk (difficulty: {self.current_difficulty})")
 
 
 # Genesis pre-allocation for faucet
@@ -380,7 +393,7 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 version=1,
                 prev_block_hash=prev_block.header.hash,
                 timestamp=int(time.time()),
-                difficulty_target=TESTNET_DIFFICULTY,
+                difficulty_target=self.chain.current_difficulty,
             )
             header_bytes = struct.pack('<I32s32sIII',
                 header.version,
@@ -395,7 +408,7 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 "job_id": f"job_{height}_{int(time.time())}",
                 "height": height,
                 "header": header_bytes.hex(),
-                "target_bits": TESTNET_DIFFICULTY,
+                "target_bits": self.chain.current_difficulty,
                 "reward_qz": miner_reward / 1e8,
                 "prev_hash": prev_block.header.hash.hex()[:16],
             })

@@ -20,6 +20,7 @@ from .blockchain import (
     Block, BlockHeader, Transaction, Block as BlockType,
     compute_merkle_root, get_block_reward,
     RETARGET_PERIOD, DIFFICULTY_BITS, BLOCK_TIME,
+    retarget_difficulty_bits,
 )
 from .crystal_hash import check_difficulty
 from .storage import LayeredStorage, StorageMode, AddressState
@@ -224,6 +225,17 @@ class QuartzNode:
             # Accept
             self.chain.append(block)
             logger.info(f"✅ Block accepted! Height: {self.height}")
+
+            # Difficulty retarget every RETARGET_PERIOD blocks
+            if self.height > 0 and self.height % RETARGET_PERIOD == 0:
+                current_bits = block.header.difficulty_target
+                new_bits = retarget_difficulty_bits(
+                    current_bits, self.chain, BLOCK_TIME)
+                if new_bits != current_bits:
+                    logger.info(f"📐 Difficulty retarget at block {self.height}: "
+                                f"{current_bits} → {new_bits} bits")
+                    # Update expected difficulty for next block template
+                    self._current_difficulty = new_bits
 
             # Remove confirmed txs from mempool
             for tx in block.transactions:

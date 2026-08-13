@@ -233,7 +233,7 @@ def get_dev_fund_reward(height: int) -> int:
 
 
 def adjust_difficulty(current_target: int, actual_time: int, expected_time: int) -> int:
-    """Adjust difficulty with max 25% change per retarget.
+    """Adjust difficulty target (integer threshold) with max 25% change per retarget.
 
     Prevents difficulty manipulation attacks where a large miner
     raises difficulty then leaves.
@@ -257,6 +257,70 @@ def adjust_difficulty(current_target: int, actual_time: int, expected_time: int)
         new_target = 1
 
     return new_target
+
+
+def retarget_difficulty_bits(current_bits: int, blocks: list,
+                              target_block_time: int) -> int:
+    """Calculate new difficulty bits after a retarget period.
+
+    Called every RETARGET_PERIOD blocks. Compares actual time elapsed
+    against expected time and adjusts difficulty bits accordingly.
+
+    Args:
+        current_bits: Current difficulty in bits (e.g. 20 = top 20 bits must be zero)
+        blocks: List of Block objects (need at least RETARGET_PERIOD + 1)
+        target_block_time: Target seconds between blocks (BLOCK_TIME)
+
+    Returns:
+        New difficulty bits (int). Clamped to ±1 bit change per retarget
+        for stability on small chains.
+    """
+    if len(blocks) < RETARGET_PERIOD + 1:
+        return current_bits
+
+    # Compare last RETARGET_PERIOD blocks' time span
+    first = blocks[-(RETARGET_PERIOD + 1)]
+    last = blocks[-1]
+
+    actual_time = last.header.timestamp - first.header.timestamp
+    expected_time = RETARGET_PERIOD * target_block_time
+
+    if actual_time <= 0:
+        actual_time = 1
+
+    # If blocks were too fast (actual < expected), increase difficulty
+    # If blocks were too slow (actual > expected), decrease difficulty
+    ratio = actual_time / expected_time
+
+    # Convert bits to target threshold for adjustment
+    # difficulty_bits = N means hash must be < 2^(256-N)
+    # Higher bits = harder = smaller target
+    # We adjust the target, then convert back to bits
+
+    if ratio < 1.0:
+        # Blocks too fast — increase difficulty (increase bits)
+        # Max 25% reduction in target = roughly +1 bit
+        adjustment = ratio  # < 1.0
+        new_bits = current_bits
+        # Each +1 bit roughly halves the target (doubles difficulty)
+        # For 25% clamp, we might go up by 0 or 1 bit
+        if ratio < 0.75:
+            new_bits = current_bits + 1
+        # Very fast (< 50% of target): up to +2 bits
+        if ratio < 0.50:
+            new_bits = current_bits + 2
+    else:
+        # Blocks too slow — decrease difficulty (decrease bits)
+        new_bits = current_bits
+        if ratio > 1.25:
+            new_bits = current_bits - 1
+        if ratio > 1.50:
+            new_bits = current_bits - 2
+
+    # Clamp to sane range
+    new_bits = max(1, min(new_bits, 32))
+
+    return new_bits
 
 
 def verify_checkpoint(height: int, block_hash: bytes) -> bool:
