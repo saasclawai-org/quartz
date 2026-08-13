@@ -61,6 +61,66 @@ static const int qr_blocks[4][10] = {
     /* ECC-H */ { 1, 1, 2, 4, 4, 4, 5, 6, 8, 8 },
 };
 
+/* Block structure: group 1 (count, data_cw_per_block) + group 2 (count, data_cw_per_block) */
+/* From ISO/IEC 18004 Table 9 — exact for versions 1-10, all ECC levels */
+typedef struct {
+    int g1_blocks;  /* number of blocks in group 1 */
+    int g1_data;    /* data codewords per block in group 1 */
+    int g2_blocks;  /* number of blocks in group 2 (0 for single-group) */
+    int g2_data;    /* data codewords per block in group 2 */
+} qr_block_layout_t;
+
+static const qr_block_layout_t qr_block_layout[4][10] = {
+    /* ECC-L */ {
+        {1, 19, 0, 0},  /* v1 */
+        {1, 34, 0, 0},  /* v2 */
+        {1, 55, 0, 0},  /* v3 */
+        {1, 80, 0, 0},  /* v4 */
+        {1, 108, 0, 0}, /* v5 */
+        {2, 68, 0, 0},  /* v6 */
+        {2, 78, 0, 0},  /* v7 */
+        {2, 97, 0, 0},  /* v8 */
+        {2, 116, 0, 0}, /* v9 */
+        {2, 68, 2, 69}, /* v10 */
+    },
+    /* ECC-M */ {
+        {1, 16, 0, 0},  /* v1 */
+        {1, 28, 0, 0},  /* v2 */
+        {1, 44, 0, 0},  /* v3 */
+        {2, 32, 0, 0},  /* v4 */
+        {2, 43, 0, 0},  /* v5 */
+        {4, 27, 0, 0},  /* v6 */
+        {4, 31, 0, 0},  /* v7 */
+        {2, 38, 2, 39}, /* v8 */
+        {3, 36, 2, 37}, /* v9 */
+        {4, 43, 1, 44}, /* v10 */
+    },
+    /* ECC-Q */ {
+        {1, 13, 0, 0},  /* v1 */
+        {1, 22, 0, 0},  /* v2 */
+        {2, 17, 0, 0},  /* v3 */
+        {2, 24, 0, 0},  /* v4 */
+        {2, 15, 2, 16}, /* v5 */
+        {4, 19, 0, 0},  /* v6 */
+        {2, 14, 4, 15}, /* v7 */
+        {4, 18, 2, 19}, /* v8 */
+        {4, 16, 4, 17}, /* v9 */
+        {3, 36, 2, 37}, /* v10 */
+    },
+    /* ECC-H */ {
+        {1, 9, 0, 0},   /* v1 */
+        {1, 16, 0, 0},  /* v2 */
+        {2, 13, 0, 0},  /* v3 */
+        {4, 9, 0, 0},   /* v4 */
+        {2, 11, 2, 12}, /* v5 */
+        {4, 15, 0, 0},  /* v6 */
+        {2, 14, 4, 15}, /* v7 */
+        {4, 12, 2, 13}, /* v8 */
+        {3, 18, 2, 19}, /* v9 */
+        {2, 14, 4, 15}, /* v10 */
+    },
+};
+
 /* === Galois Field arithmetic for Reed-Solomon === */
 /* GF(256) with primitive polynomial 0x11D */
 
@@ -424,8 +484,12 @@ int quartz_qr_display(
         }
     }
 
-    /* Terminator (up to 4 zero bits) */
+    /* Terminator: up to 4 zero bits (zero XOR = no-op, just advance position) */
     int total_data_bits = total_data_cw * 8;
+    for (int i = 0; i < 4 && bit_pos < total_data_bits; i++) {
+        bit_pos++;
+    }
+    /* Pad to byte boundary */
     while (bit_pos < total_data_bits && bit_pos % 8 != 0) bit_pos++;
 
     /* Pad bytes */
@@ -444,32 +508,67 @@ int quartz_qr_display(
     uint8_t gen[32];
     rs_generator(ec_per_block, gen);
 
-    /* Split data into blocks, compute ECC per block */
-    /* Simplified: for single-block versions, compute directly */
+    /* Get block layout for this version + ecc */
+    const qr_block_layout_t *layout = &qr_block_layout[ecc][version - 1];
+    int total_blocks = layout->g1_blocks + layout->g2_blocks;
+
     uint8_t *full_data = calloc(total_cw, 1);
     if (!full_data) { free(codewords); return -1; }
 
-    /* Interleave data blocks then ECC blocks */
-    /* For simplicity, handle single-block case (most common for small QR) */
-    if (num_blocks == 1) {
-        memcpy(full_data, codewords, total_data_cw);
-        rs_encode(codewords, total_data_cw, gen, ec_per_block,
-                  full_data + total_data_cw);
-    } else {
-        /* Multi-block: split, encode each, interleave */
-        int data_per_block = total_data_cw / num_blocks;
-        /* Simple interleave for equal-size blocks */
-        for (int b = 0; b < num_blocks; b++) {
-            uint8_t ec_out[32];
-            rs_encode(codewords + b * data_per_block, data_per_block,
-                      gen, ec_per_block, ec_out);
-            /* Interleave into full_data */
-            for (int i = 0; i < data_per_block; i++) {
-                full_data[b + i * num_blocks] = codewords[b * data_per_block + i];
+    /* Process each block: split data, compute ECC, interleave */
+    int data_offset = 0;
+    int max_data_per_block = layout->g1_data > layout->g2_data ? layout->g1_data : layout->g2_data;
+
+    /* Allocate per-block ECC output */
+    uint8_t ec_blocks[total_blocks][32];  /* max ec_per_block = 32 */
+    memset(ec_blocks, 0, sizeof(ec_blocks));
+
+    int block_idx = 0;
+
+    /* Group 1 blocks */
+    for (int b = 0; b < layout->g1_blocks; b++) {
+        rs_encode(codewords + data_offset, layout->g1_data,
+                  gen, ec_per_block, ec_blocks[block_idx]);
+        data_offset += layout->g1_data;
+        block_idx++;
+    }
+
+    /* Group 2 blocks */
+    for (int b = 0; b < layout->g2_blocks; b++) {
+        rs_encode(codewords + data_offset, layout->g2_data,
+                  gen, ec_per_block, ec_blocks[block_idx]);
+        data_offset += layout->g2_data;
+        block_idx++;
+    }
+
+    /* Interleave: first data codewords from all blocks (round-robin), then ECC */
+    int out_pos = 0;
+
+    /* Interleave data: take 1st cw from each block, then 2nd, etc. */
+    for (int i = 0; i < max_data_per_block; i++) {
+        int b = 0;
+        /* Group 1 blocks */
+        for (int g = 0; g < layout->g1_blocks; g++) {
+            if (i < layout->g1_data) {
+                int blk_start = g * layout->g1_data;
+                full_data[out_pos++] = codewords[blk_start + i];
             }
-            for (int i = 0; i < ec_per_block; i++) {
-                full_data[total_data_cw + b + i * num_blocks] = ec_out[i];
+            b++;
+        }
+        /* Group 2 blocks */
+        for (int g = 0; g < layout->g2_blocks; g++) {
+            if (i < layout->g2_data) {
+                int blk_start = layout->g1_blocks * layout->g1_data + g * layout->g2_data;
+                full_data[out_pos++] = codewords[blk_start + i];
             }
+            b++;
+        }
+    }
+
+    /* Interleave ECC: take 1st ec cw from each block, then 2nd, etc. */
+    for (int i = 0; i < ec_per_block; i++) {
+        for (int b = 0; b < total_blocks; b++) {
+            full_data[out_pos++] = ec_blocks[b][i];
         }
     }
 
@@ -542,8 +641,9 @@ int quartz_qr_serial(const char *data, qr_ecc_t ecc) {
 
     int total_cw = qr_total_codewords[version - 1];
     int ec_per_block = qr_ec_codewords[ecc][version - 1];
-    int num_blocks = qr_blocks[ecc][version - 1];
-    int total_data_cw = total_cw - ec_per_block * num_blocks;
+    const qr_block_layout_t *layout = &qr_block_layout[ecc][version - 1];
+    int total_blocks = layout->g1_blocks + layout->g2_blocks;
+    int total_data_cw = layout->g1_blocks * layout->g1_data + layout->g2_blocks * layout->g2_data;
 
     uint8_t *codewords = calloc(total_cw, 1);
     if (!codewords) return -1;
@@ -574,6 +674,9 @@ int quartz_qr_serial(const char *data, qr_ecc_t ecc) {
         }
     }
     int total_data_bits = total_data_cw * 8;
+    for (int i = 0; i < 4 && bit_pos < total_data_bits; i++) {
+        bit_pos++;
+    }
     while (bit_pos < total_data_bits && bit_pos % 8 != 0) bit_pos++;
     int cw_count = bit_pos / 8;
     uint8_t pad[] = { 0xEC, 0x11 };
@@ -592,22 +695,42 @@ int quartz_qr_serial(const char *data, qr_ecc_t ecc) {
     uint8_t *full_data = calloc(total_cw, 1);
     if (!full_data) { free(codewords); return -1; }
 
-    if (num_blocks == 1) {
-        memcpy(full_data, codewords, total_data_cw);
-        rs_encode(codewords, total_data_cw, gen, ec_per_block,
-                  full_data + total_data_cw);
-    } else {
-        int data_per_block = total_data_cw / num_blocks;
-        for (int b = 0; b < num_blocks; b++) {
-            uint8_t ec_out[32];
-            rs_encode(codewords + b * data_per_block, data_per_block,
-                      gen, ec_per_block, ec_out);
-            for (int i = 0; i < data_per_block; i++) {
-                full_data[b + i * num_blocks] = codewords[b * data_per_block + i];
+    int max_data_per_block = layout->g1_data > layout->g2_data ? layout->g1_data : layout->g2_data;
+    uint8_t ec_blocks_s[total_blocks][32];
+    memset(ec_blocks_s, 0, sizeof(ec_blocks_s));
+
+    int data_offset = 0;
+    int block_idx = 0;
+    for (int b = 0; b < layout->g1_blocks; b++) {
+        rs_encode(codewords + data_offset, layout->g1_data,
+                  gen, ec_per_block, ec_blocks_s[block_idx]);
+        data_offset += layout->g1_data;
+        block_idx++;
+    }
+    for (int b = 0; b < layout->g2_blocks; b++) {
+        rs_encode(codewords + data_offset, layout->g2_data,
+                  gen, ec_per_block, ec_blocks_s[block_idx]);
+        data_offset += layout->g2_data;
+        block_idx++;
+    }
+
+    int out_pos = 0;
+    for (int i = 0; i < max_data_per_block; i++) {
+        for (int g = 0; g < layout->g1_blocks; g++) {
+            if (i < layout->g1_data) {
+                full_data[out_pos++] = codewords[g * layout->g1_data + i];
             }
-            for (int i = 0; i < ec_per_block; i++) {
-                full_data[total_data_cw + b + i * num_blocks] = ec_out[i];
+        }
+        for (int g = 0; g < layout->g2_blocks; g++) {
+            if (i < layout->g2_data) {
+                int blk_start = layout->g1_blocks * layout->g1_data + g * layout->g2_data;
+                full_data[out_pos++] = codewords[blk_start + i];
             }
+        }
+    }
+    for (int i = 0; i < ec_per_block; i++) {
+        for (int b = 0; b < total_blocks; b++) {
+            full_data[out_pos++] = ec_blocks_s[b][i];
         }
     }
 
