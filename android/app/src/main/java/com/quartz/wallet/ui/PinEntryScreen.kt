@@ -67,7 +67,7 @@ fun PinEntryScreen(
                     durationMillis = 400
                     for (i in 0..5) {
                         val sign = if (i % 2 == 0) 1f else -1f
-                        this[sign * 12f * (1f - i / 6f)] at (i * 70)
+                        sign * 12f * (1f - i / 6f) at (i * 70)
                     }
                 }
             )
@@ -212,10 +212,10 @@ fun PinEntryScreen(
                 }
             },
             onSubmit = {
+                val submittedPin = pin
                 if (Validation.isPinValid(submittedPin)) {
                     isSubmitting = true
                     error = null
-                    val submittedPin = pin
                     bleManager.unlockDevice(submittedPin) { success, remaining, deviceWiped ->
                         isSubmitting = false
                         attemptsLeft = remaining

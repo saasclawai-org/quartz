@@ -312,14 +312,29 @@ fun SeedProvisioningScreen(
     }
 }
 
-// Parse JSON seed QR payload
-// Format: {"v":1,"words":["word1","word2",...],"addr":"Qk..."}
+// Parse seed QR payload
+// New format: quartz-seed:word1 word2 ... word12
+// Legacy JSON format: {"v":1,"words":["word1","word2",...],"addr":"Qk..."}
 fun parseSeedQrPayload(payload: String): List<String> {
-    val words = mutableListOf<String>()
-    val regex = """"([a-z]+)"""".toRegex()
-    val wordsSection = payload.substringAfter("\"words\":[").substringBefore("]")
-    regex.findAll(wordsSection).forEach { match ->
-        words.add(match.groupValues[1])
+    val trimmed = payload.trim()
+    
+    // New compact format: quartz-seed:word1 word2 ...
+    if (trimmed.startsWith("quartz-seed:")) {
+        return trimmed.removePrefix("quartz-seed:").trim().split(" ").filter { it.isNotEmpty() }
     }
-    return words
+    
+    // Legacy JSON format
+    if (trimmed.startsWith("{")) {
+        val words = mutableListOf<String>()
+        val regex = """"([a-z]+)"""".toRegex()
+        val wordsSection = trimmed.substringAfter("\"words\":[").substringBefore("]")
+        regex.findAll(wordsSection).forEach { match ->
+            words.add(match.groupValues[1])
+        }
+        return words
+    }
+    
+    // Fallback: try space-separated words (raw BIP-39)
+    val parts = trimmed.split(" ").filter { it.matches(Regex("[a-z]+")) }
+    return if (parts.size == 12) parts else emptyList()
 }

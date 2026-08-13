@@ -24,6 +24,23 @@ import kotlinx.coroutines.launch
 fun QuartzWalletApp() {
     val pagerState = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bleManager = remember { QuartzBLEManager(context) }
+
+    // Navigation state for seed provisioning overlay
+    var showProvisioning by remember { mutableStateOf(false) }
+    var walletCreated by remember { mutableStateOf(false) }
+
+    if (showProvisioning) {
+        SeedProvisioningScreen(
+            bleManager = bleManager,
+            onDone = {
+                showProvisioning = false
+                walletCreated = true
+            }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -69,8 +86,11 @@ fun QuartzWalletApp() {
             modifier = Modifier.padding(padding)
         ) { page ->
             when (page) {
-                0 -> WalletScreen()
-                1 -> MinerScreen()
+                0 -> WalletScreen(
+                    walletCreated = walletCreated,
+                    onImport = { showProvisioning = true }
+                )
+                1 -> MinerScreen(bleManager = bleManager)
                 2 -> SettingsScreen()
             }
         }
@@ -78,8 +98,8 @@ fun QuartzWalletApp() {
 }
 
 @Composable
-fun WalletScreen() {
-    var hasWallet by remember { mutableStateOf(false) }
+fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
+    var hasWallet by remember { mutableStateOf(walletCreated) }
     var balance by remember { mutableStateOf("0.00") }
     var address by remember { mutableStateOf("Q7Xk9m2...3pQr") }
 
@@ -102,9 +122,9 @@ fun WalletScreen() {
             ) { Text("Create New Wallet", color = QuartzBg, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = { hasWallet = true },
+                onClick = onImport,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) { Text("Import Wallet") }
+            ) { Text("📷 Import Wallet (Scan QR)") }
         }
     } else {
         Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
@@ -178,10 +198,7 @@ fun WalletScreen() {
 }
 
 @Composable
-fun MinerScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val bleManager = remember { QuartzBLEManager(context) }
-
+fun MinerScreen(bleManager: QuartzBLEManager) {
     var isScanning by remember { mutableStateOf(false) }
     var isConnected by remember { mutableStateOf(false) }
     var stats by remember { mutableStateOf<MiningStats?>(null) }

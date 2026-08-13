@@ -109,16 +109,32 @@ class QuartzBLEManager(private val context: Context) {
         }
 
         Log.i(TAG, "Starting BLE scan for Quartz-Miner")
-        val filter = ScanFilter.Builder()
+        
+        // Scan by device name (more reliable than UUID filter — ESP32 may not
+        // advertise service UUID in advertisement packets)
+        val nameFilter = ScanFilter.Builder()
+            .setDeviceName("Quartz-Miner")
+            .build()
+        // Also scan by service UUID as fallback
+        val uuidFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+        // Broad name prefix filter
+        val prefixFilter = ScanFilter.Builder()
+            .setDeviceName("Quartz")
             .build()
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
-        scanner.startScan(listOf(filter), settings, scanCallback)
+        scanner.startScan(listOf(nameFilter, uuidFilter, prefixFilter), settings, scanCallback)
 
-        // Stop after 10s
-        handler.postDelayed({ stopScan() }, 10000)
+        // Stop after 15s and notify
+        handler.postDelayed({
+            stopScan()
+            if (connectedDevice == null) {
+                onError?.invoke("No Quartz device found. Make sure your ESP32 is powered on and broadcasting BLE.")
+            }
+        }, 15000)
     }
 
     @SuppressLint("MissingPermission")
@@ -576,72 +592,6 @@ class QuartzBLEManager(private val context: Context) {
                 SEED_UUID -> {
                     Log.i(TAG, "Seed write successful")
                     // If this was a recovery write, read the address back
-                    if (pendingRecoveryWords != null) {
-                        val service = gatt.getService(SERVICE_UUID)
-                        val addrChar = service?.getCharacteristic(ADDRESS_UUID)
-                        if (addrChar != null) {
-                            Log.i(TAG, "Reading address after recovery seed write")
-                            gatt.readCharacteristic(addrChar)
-                        } else {
-                            onRecoverResult?.invoke(false, null, "Address characteristic not found after recovery")
-                            pendingRecoveryWords = null
-                            onRecoverResult = null
-                        }
-                    }
-                }
-            }
-        }
-
-        // Android 13+ write callback
-        override fun onCharacteristicWrite(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-            status: Int
-        ) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                Log.e(TAG, "Characteristic write failed (new API): $status for ${characteristic.uuid}")
-                when (characteristic.uuid) {
-                    PIN_UNLOCK_UUID -> {
-                        onPinUnlockResult?.invoke(false, 0, false)
-                        onPinUnlockResult = null
-                    }
-                    PIN_SET_UUID -> {
-                        onPinSetResult?.invoke(false)
-                        onPinSetResult = null
-                    }
-                    SEED_UUID -> {
-                        if (pendingRecoveryWords != null) {
-                            onRecoverResult?.invoke(false, null, "Failed to write seed (GATT error $status)")
-                            pendingRecoveryWords = null
-                            onRecoverResult = null
-                        }
-                    }
-                }
-                return
-            }
-
-            when (characteristic.uuid) {
-                PIN_UNLOCK_UUID -> {
-                    if (value.size >= 3) {
-                        val success = value[0].toInt() != 0
-                        val attemptsLeft = value[1].toInt() and 0xFF
-                        val wiped = value[2].toInt() != 0
-                        Log.i(TAG, "PIN unlock result: success=$success, attempts=$attemptsLeft, wiped=$wiped")
-                        onPinUnlockResult?.invoke(success, attemptsLeft, wiped)
-                    } else {
-                        onPinUnlockResult?.invoke(true, 3, false)
-                    }
-                    onPinUnlockResult = null
-                }
-                PIN_SET_UUID -> {
-                    val success = value.isNotEmpty() && value[0].toInt() != 0
-                    Log.i(TAG, "PIN set result: success=$success")
-                    onPinSetResult?.invoke(success)
-                    onPinSetResult = null
-                }
-                SEED_UUID -> {
-                    Log.i(TAG, "Seed write successful (new API)")
                     if (pendingRecoveryWords != null) {
                         val service = gatt.getService(SERVICE_UUID)
                         val addrChar = service?.getCharacteristic(ADDRESS_UUID)
