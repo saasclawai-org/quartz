@@ -15,6 +15,7 @@ idf_component_register(
         "quartz_wots.c"
         "quartz_pay.c"
         "quartz_qr.c"
+        "qrcodegen.c"
         "quartz_agent.c"
         "quartz_sx1276.c"
         "quartz_ble.c"

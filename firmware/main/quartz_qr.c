@@ -15,6 +15,7 @@
  */
 
 #include "quartz_qr.h"
+#include "qrcodegen.h"
 #include "quartz_display.h"
 #include <string.h>
 #include <stdio.h>
@@ -406,210 +407,66 @@ int quartz_qr_display(
 ) {
     if (!data || scale < 1) return -1;
 
-    int data_len = strlen(data);
-    int version = quartz_qr_version_for_data(data_len, ecc);
-    if (version < 1) {
-#ifdef ESP_PLATFORM
-        ESP_LOGE(TAG, "Data too long for QR (len=%d)", data_len);
-#endif
+    /* Use Nayuki QR library for correct generation */
+    enum qrcodegen_Ecc nayuki_ecc;
+    switch (ecc) {
+        case QR_ECC_LOW: nayuki_ecc = qrcodegen_Ecc_LOW; break;
+        case QR_ECC_MEDIUM: nayuki_ecc = qrcodegen_Ecc_MEDIUM; break;
+        case QR_ECC_QUARTILE: nayuki_ecc = qrcodegen_Ecc_QUARTILE; break;
+        case QR_ECC_HIGH: nayuki_ecc = qrcodegen_Ecc_HIGH; break;
+        default: nayuki_ecc = qrcodegen_Ecc_HIGH; break;
+    }
+
+    uint8_t *qrcode = malloc(qrcodegen_BUFFER_LEN_FOR_VERSION(10));
+    uint8_t *tempBuf = malloc(qrcodegen_BUFFER_LEN_FOR_VERSION(10));
+    if (!qrcode || !tempBuf) {
+        free(qrcode); free(tempBuf);
         return -1;
     }
 
-    int size = qr_modules(version);
+    bool ok = qrcodegen_encodeText(data, tempBuf, qrcode,
+        nayuki_ecc, qrcodegen_VERSION_MIN, 10, qrcodegen_Mask_AUTO, true);
+
+    if (!ok) {
+#ifdef ESP_PLATFORM
+        ESP_LOGE(TAG, "QR encoding failed for data len=%zu", strlen(data));
+#endif
+        free(qrcode); free(tempBuf);
+        return -1;
+    }
+
+    int size = qrcodegen_getSize(qrcode);
+    int total_px = size * scale;
 
 #ifdef ESP_PLATFORM
-    ESP_LOGI(TAG, "QR v%d, %dx%d modules, data=%d bytes", version, size, size, data_len);
+    ESP_LOGI(TAG, "QR %dx%d modules, scale=%d, at (%d,%d)", size, size, scale, x, y);
 #endif
 
-    /* Initialize Galois field */
-    gf_init();
-
-    /* Build matrix */
-    qr_matrix_t mat;
-    memset(&mat, 0, sizeof(mat));
-    mat.version = version;
-    mat.size = size;
-
-    /* Place function patterns */
-    place_finder(&mat, 0, 0);
-    place_finder(&mat, 0, size - 7);
-    place_finder(&mat, size - 7, 0);
-    place_timing(&mat);
-    place_alignment(&mat);
-    reserve_format(&mat);
-    place_dark_module(&mat);
-
-    /* === Encode data === */
-    /* Byte mode: 4-bit mode indicator + char count + data + terminator + pad */
-
-    /* Total data codewords for this version+ecc */
-    int total_cw = qr_total_codewords[version - 1];
-    int ec_per_block = qr_ec_codewords[ecc][version - 1];
-    int num_blocks = qr_blocks[ecc][version - 1];
-    int total_ec = ec_per_block * num_blocks;
-    int total_data_cw = total_cw - total_ec;
-
-    /* Build bit stream */
-    uint8_t *codewords = calloc(total_cw, 1);
-    if (!codewords) return -1;
-
-    int bit_pos = 0;
-    uint8_t *bits = calloc(total_cw, 1);
-    if (!bits) { free(codewords); return -1; }
-
-    /* Mode indicator: byte mode = 0100 */
-    for (int i = 3; i >= 0; i--) {
-        if ((4 >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-        bit_pos++;
-    }
-
-    /* Character count (8 bits for v1-9, 16 for v10+) */
-    if (version < 10) {
-        for (int i = 7; i >= 0; i--) {
-            if ((data_len >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-            bit_pos++;
-        }
-    } else {
-        for (int i = 15; i >= 0; i--) {
-            if ((data_len >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-            bit_pos++;
-        }
-    }
-
-    /* Data bytes */
-    for (int i = 0; i < data_len; i++) {
-        for (int b = 7; b >= 0; b--) {
-            if ((data[i] >> b) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-            bit_pos++;
-        }
-    }
-
-    /* Terminator: up to 4 zero bits (zero XOR = no-op, just advance position) */
-    int total_data_bits = total_data_cw * 8;
-    for (int i = 0; i < 4 && bit_pos < total_data_bits; i++) {
-        bit_pos++;
-    }
-    /* Pad to byte boundary */
-    while (bit_pos < total_data_bits && bit_pos % 8 != 0) bit_pos++;
-
-    /* Pad bytes */
-    int cw_count = bit_pos / 8;
-    uint8_t pad[] = { 0xEC, 0x11 };
-    int pad_idx = 0;
-    while (cw_count < total_data_cw) {
-        bits[cw_count] = pad[pad_idx];
-        pad_idx = 1 - pad_idx;
-        cw_count++;
-    }
-    memcpy(codewords, bits, total_data_cw);
-    free(bits);
-
-    /* === Reed-Solomon ECC === */
-    uint8_t gen[32];
-    rs_generator(ec_per_block, gen);
-
-    /* Get block layout for this version + ecc */
-    const qr_block_layout_t *layout = &qr_block_layout[ecc][version - 1];
-    int total_blocks = layout->g1_blocks + layout->g2_blocks;
-
-    uint8_t *full_data = calloc(total_cw, 1);
-    if (!full_data) { free(codewords); return -1; }
-
-    /* Process each block: split data, compute ECC, interleave */
-    int data_offset = 0;
-    int max_data_per_block = layout->g1_data > layout->g2_data ? layout->g1_data : layout->g2_data;
-
-    /* Allocate per-block ECC output */
-    uint8_t ec_blocks[total_blocks][32];  /* max ec_per_block = 32 */
-    memset(ec_blocks, 0, sizeof(ec_blocks));
-
-    int block_idx = 0;
-
-    /* Group 1 blocks */
-    for (int b = 0; b < layout->g1_blocks; b++) {
-        rs_encode(codewords + data_offset, layout->g1_data,
-                  gen, ec_per_block, ec_blocks[block_idx]);
-        data_offset += layout->g1_data;
-        block_idx++;
-    }
-
-    /* Group 2 blocks */
-    for (int b = 0; b < layout->g2_blocks; b++) {
-        rs_encode(codewords + data_offset, layout->g2_data,
-                  gen, ec_per_block, ec_blocks[block_idx]);
-        data_offset += layout->g2_data;
-        block_idx++;
-    }
-
-    /* Interleave: first data codewords from all blocks (round-robin), then ECC */
-    int out_pos = 0;
-
-    /* Interleave data: take 1st cw from each block, then 2nd, etc. */
-    for (int i = 0; i < max_data_per_block; i++) {
-        int b = 0;
-        /* Group 1 blocks */
-        for (int g = 0; g < layout->g1_blocks; g++) {
-            if (i < layout->g1_data) {
-                int blk_start = g * layout->g1_data;
-                full_data[out_pos++] = codewords[blk_start + i];
-            }
-            b++;
-        }
-        /* Group 2 blocks */
-        for (int g = 0; g < layout->g2_blocks; g++) {
-            if (i < layout->g2_data) {
-                int blk_start = layout->g1_blocks * layout->g1_data + g * layout->g2_data;
-                full_data[out_pos++] = codewords[blk_start + i];
-            }
-            b++;
-        }
-    }
-
-    /* Interleave ECC: take 1st ec cw from each block, then 2nd, etc. */
-    for (int i = 0; i < ec_per_block; i++) {
-        for (int b = 0; b < total_blocks; b++) {
-            full_data[out_pos++] = ec_blocks[b][i];
-        }
-    }
-
-    /* Place data modules */
-    place_data(&mat, full_data, total_cw * 8);
-
-    /* Apply mask */
-    apply_mask(&mat);
-
-    /* Place format info */
-    place_format(&mat, ecc);
-
-    /* === Render to display === */
-    int total_size = size * scale;
-
-    /* Clear background area */
-    quartz_display_fill_rect(x - scale * 2, y - scale * 2,
-                             total_size + scale * 4, total_size + scale * 4, bg_color);
+    /* Clear background area with quiet zone */
+    int quiet = scale * 2;
+    quartz_display_fill_rect(x - quiet, y - quiet,
+                             total_px + quiet * 2, total_px + quiet * 2, bg_color);
 
     /* Draw modules */
     for (int r = 0; r < size; r++) {
         for (int c = 0; c < size; c++) {
-            uint16_t color = qr_matrix_get(&mat, r, c) ? fg_color : bg_color;
-            if (qr_matrix_get(&mat, r, c)) {
+            /* Nayuki uses (x, y) = (col, row) ordering */
+            if (qrcodegen_getModule(qrcode, c, r)) {
                 quartz_display_fill_rect(
                     x + c * scale,
                     y + r * scale,
                     scale, scale,
-                    color
-                );
+                    fg_color);
             }
         }
     }
 
-    free(codewords);
-    free(full_data);
-
 #ifdef ESP_PLATFORM
-    ESP_LOGI(TAG, "QR rendered at (%d,%d), %dx%d px", x, y, total_size, total_size);
+    ESP_LOGI(TAG, "QR rendered at (%d,%d), %dx%d px", x, y, total_px, total_px);
 #endif
 
+    free(qrcode);
+    free(tempBuf);
     return 0;
 }
 
@@ -618,159 +475,61 @@ int quartz_qr_display(
 int quartz_qr_serial(const char *data, qr_ecc_t ecc) {
     if (!data) return -1;
 
-    int data_len = strlen(data);
-    int version = quartz_qr_version_for_data(data_len, ecc);
-    if (version < 1) return -1;
-
-    int size = qr_modules(version);
-
-    gf_init();
-
-    qr_matrix_t mat;
-    memset(&mat, 0, sizeof(mat));
-    mat.version = version;
-    mat.size = size;
-
-    place_finder(&mat, 0, 0);
-    place_finder(&mat, 0, size - 7);
-    place_finder(&mat, size - 7, 0);
-    place_timing(&mat);
-    place_alignment(&mat);
-    reserve_format(&mat);
-    place_dark_module(&mat);
-
-    int total_cw = qr_total_codewords[version - 1];
-    int ec_per_block = qr_ec_codewords[ecc][version - 1];
-    const qr_block_layout_t *layout = &qr_block_layout[ecc][version - 1];
-    int total_blocks = layout->g1_blocks + layout->g2_blocks;
-    int total_data_cw = layout->g1_blocks * layout->g1_data + layout->g2_blocks * layout->g2_data;
-
-    uint8_t *codewords = calloc(total_cw, 1);
-    if (!codewords) return -1;
-
-    int bit_pos = 0;
-    uint8_t *bits = calloc(total_cw, 1);
-    if (!bits) { free(codewords); return -1; }
-
-    for (int i = 3; i >= 0; i--) {
-        if ((4 >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-        bit_pos++;
-    }
-    if (version < 10) {
-        for (int i = 7; i >= 0; i--) {
-            if ((data_len >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-            bit_pos++;
-        }
-    } else {
-        for (int i = 15; i >= 0; i--) {
-            if ((data_len >> i) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-            bit_pos++;
-        }
-    }
-    for (int i = 0; i < data_len; i++) {
-        for (int b = 7; b >= 0; b--) {
-            if ((data[i] >> b) & 1) bits[bit_pos / 8] |= 0x80 >> (bit_pos % 8);
-            bit_pos++;
-        }
-    }
-    int total_data_bits = total_data_cw * 8;
-    for (int i = 0; i < 4 && bit_pos < total_data_bits; i++) {
-        bit_pos++;
-    }
-    while (bit_pos < total_data_bits && bit_pos % 8 != 0) bit_pos++;
-    int cw_count = bit_pos / 8;
-    uint8_t pad[] = { 0xEC, 0x11 };
-    int pad_idx = 0;
-    while (cw_count < total_data_cw) {
-        bits[cw_count] = pad[pad_idx];
-        pad_idx = 1 - pad_idx;
-        cw_count++;
-    }
-    memcpy(codewords, bits, total_data_cw);
-    free(bits);
-
-    uint8_t gen[32];
-    rs_generator(ec_per_block, gen);
-
-    uint8_t *full_data = calloc(total_cw, 1);
-    if (!full_data) { free(codewords); return -1; }
-
-    int max_data_per_block = layout->g1_data > layout->g2_data ? layout->g1_data : layout->g2_data;
-    uint8_t ec_blocks_s[total_blocks][32];
-    memset(ec_blocks_s, 0, sizeof(ec_blocks_s));
-
-    int data_offset = 0;
-    int block_idx = 0;
-    for (int b = 0; b < layout->g1_blocks; b++) {
-        rs_encode(codewords + data_offset, layout->g1_data,
-                  gen, ec_per_block, ec_blocks_s[block_idx]);
-        data_offset += layout->g1_data;
-        block_idx++;
-    }
-    for (int b = 0; b < layout->g2_blocks; b++) {
-        rs_encode(codewords + data_offset, layout->g2_data,
-                  gen, ec_per_block, ec_blocks_s[block_idx]);
-        data_offset += layout->g2_data;
-        block_idx++;
+    /* Use Nayuki QR library */
+    enum qrcodegen_Ecc nayuki_ecc;
+    switch (ecc) {
+        case QR_ECC_LOW: nayuki_ecc = qrcodegen_Ecc_LOW; break;
+        case QR_ECC_MEDIUM: nayuki_ecc = qrcodegen_Ecc_MEDIUM; break;
+        case QR_ECC_QUARTILE: nayuki_ecc = qrcodegen_Ecc_QUARTILE; break;
+        case QR_ECC_HIGH: nayuki_ecc = qrcodegen_Ecc_HIGH; break;
+        default: nayuki_ecc = qrcodegen_Ecc_HIGH; break;
     }
 
-    int out_pos = 0;
-    for (int i = 0; i < max_data_per_block; i++) {
-        for (int g = 0; g < layout->g1_blocks; g++) {
-            if (i < layout->g1_data) {
-                full_data[out_pos++] = codewords[g * layout->g1_data + i];
-            }
-        }
-        for (int g = 0; g < layout->g2_blocks; g++) {
-            if (i < layout->g2_data) {
-                int blk_start = layout->g1_blocks * layout->g1_data + g * layout->g2_data;
-                full_data[out_pos++] = codewords[blk_start + i];
-            }
-        }
-    }
-    for (int i = 0; i < ec_per_block; i++) {
-        for (int b = 0; b < total_blocks; b++) {
-            full_data[out_pos++] = ec_blocks_s[b][i];
-        }
+    uint8_t *qrcode = malloc(qrcodegen_BUFFER_LEN_FOR_VERSION(10));
+    uint8_t *tempBuf = malloc(qrcodegen_BUFFER_LEN_FOR_VERSION(10));
+    if (!qrcode || !tempBuf) {
+        free(qrcode); free(tempBuf);
+        return -1;
     }
 
-    place_data(&mat, full_data, total_cw * 8);
-    apply_mask(&mat);
-    place_format(&mat, ecc);
+    bool ok = qrcodegen_encodeText(data, tempBuf, qrcode,
+        nayuki_ecc, qrcodegen_VERSION_MIN, 10, qrcodegen_Mask_AUTO, true);
 
-    free(codewords);
-    free(full_data);
+    if (!ok) {
+        free(qrcode); free(tempBuf);
+        return -1;
+    }
 
-    /* Output QR as ASCII art — simple ## for light, spaces for dark.
-     * Inverted display (dark background) for terminal scanning. */
+    int size = qrcodegen_getSize(qrcode);
+
+    /* Output QR as ASCII art */
     printf("\r\n");
-    printf("\r\n");
-    /* Border */
-    int border = 2;
-    for (int i = 0; i < border; i++) {
-        printf("          ");
-        for (int c = 0; c < size + border * 2; c++) printf("  ");
+    /* Top quiet zone (4 modules) */
+    for (int i = 0; i < 4; i++) {
+        for (int c = 0; c < size + 8; c++) printf("  ");
         printf("\r\n");
     }
     for (int r = 0; r < size; r++) {
-        printf("          ");
-        for (int i = 0; i < border; i++) printf("  ");
+        /* Left quiet zone */
+        for (int i = 0; i < 4; i++) printf("  ");
         for (int c = 0; c < size; c++) {
-            /* Inverted: dark module = space, light = ## */
-            /* This gives black background with white QR on dark terminals */
-            if (qr_matrix_get(&mat, r, c)) printf("  ");
-            else printf("##");
+            /* Standard: dark module = ##, light = space */
+            if (qrcodegen_getModule(qrcode, c, r)) printf("##");
+            else printf("  ");
         }
-        for (int i = 0; i < border; i++) printf("  ");
+        /* Right quiet zone */
+        for (int i = 0; i < 4; i++) printf("  ");
         printf("\r\n");
     }
-    for (int i = 0; i < border; i++) {
-        printf("          ");
-        for (int c = 0; c < size + border * 2; c++) printf("  ");
+    /* Bottom quiet zone */
+    for (int i = 0; i < 4; i++) {
+        for (int c = 0; c < size + 8; c++) printf("  ");
         printf("\r\n");
     }
     printf("\r\n");
     fflush(stdout);
 
+    free(qrcode);
+    free(tempBuf);
     return 0;
 }
