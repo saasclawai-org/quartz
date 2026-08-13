@@ -152519,6 +152519,18 @@
         "miner_id": "000000000000"
       },
       "tx_count": 1
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0005f10b2add0b78a2654bf048492e098765c36a4e795f00a5f09a3126fcdfe6",
+        "merkle_root": "b3881826cdd60ea37b0923c884c5bd1ddcb47e1fe252b41a163e0c601c1402df",
+        "timestamp": 1786618689,
+        "difficulty_target": 12,
+        "nonce": 1168,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 1
     }
   ],
   "balances": {
@@ -152526,7 +152538,7 @@
     "Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U": 571250000000,
     "e6eb2a4b765cdf5997dd67ed7817a10092": 8827500000000,
     "39759da3f3678b533399bdaeb1a2217ec8": 8818500000000,
-    "34ec900ac1cb2e79ebe4208c9ce577d9d2": 8791500000000,
+    "34ec900ac1cb2e79ebe4208c9ce577d9d2": 8795750000000,
     "7d85a40d82e87b90dce47d88234a85e7bb": 8786750000000,
     "decf6b973056cc06739ab4ad3e1b996704": 1089250000000,
     "98cb54d17059c9480de2d08db7eb716c6a": 374000000000,

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Quartz Wallet</string>
-    <style name="Theme.QuartzWallet" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#0A0A0F</item>
-        <item name="android:navigationBarColor">#12121A</item>
-        <item name="android:windowBackground">#0A0A0F</item>
-    </style>
-</resources>
