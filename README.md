@@ -1,6 +1,6 @@
 # 🔮 Quartz (QZ)
 
-**The quantum-safe, hardware-bound cryptocurrency. Better security economics than Bitcoin at 1/6,000th the energy cost.**
+**The solar-minable cryptocurrency. Mine with a $5 ESP32 and a solar panel.**
 
 [Website](https://quartz.preview.saasclaw.ai) · [Block Explorer](https://quartz.preview.saasclaw.ai/explorer/) · [Wallet](https://quartz.preview.saasclaw.ai/wallet/) · [Whitepaper](docs/WHITEPAPER.md)
 
@@ -14,20 +14,19 @@ Quartz is a decentralized cryptocurrency designed to be mined **exclusively** on
 
 | | Bitcoin | Helium | Quartz |
 |---|---|---|---|
-| Mining hardware | ASIC ($3,000+) | Hotspot ($400) | ESP32 ($15) |
-| Power consumption | 3,000W | 5W | 0.5W |
+| Mining hardware | ASIC ($3,000+) | Hotspot ($400) | ESP32 ($5) |
+| Power consumption | 3,000W | 5W | 0.5W (solar-friendly) |
 | GPU-farmable | No (ASIC) | N/A | **No (PUF-bound)** |
-| Quantum-safe wallets | No | No | **Yes (WOTS+)** |
-| Mesh networking | No | Yes (sub-GHz) | **Yes (LoRa)** |
-| Hardware wallet | $70 Ledger | N/A | **Built-in** |
-| Barrier to entry | High | Medium | **$15 + USB power** |
+| Mining requires display | No | No | **No** |
+| Barrier to entry | High | Medium | **$5 + solar** |
 
 ## Key Features
 
 - **SRAM PUF Mining** — Block hashes include a key derived from the ESP32's silicon. Each chip has a unique fingerprint that cannot be cloned, simulated, or extracted. Mining is physically impossible without the hardware.
-- **WOTS+ Quantum Wallets** — Hash-based signatures (not elliptic curve) that resist both classical and quantum attacks. Shor's algorithm can't break them. Grover's gives only quadratic speedup.
 - **CrystalHash PoW** — Memory-hard algorithm using ESP32's AES accelerator + PUF attestation per block.
-- **On-Chain Messaging** — Transactions carry an optional data field (up to 256 bytes). Send messages that are permanently recorded on the blockchain. Anti-spam via transaction fees.
+- **Solar-Minable** — 0.5W power draw means a $5 ESP32 + small solar panel mines 24/7. No grid power needed.
+- **Software Wallet** — Web and mobile wallet handle spending. Seed shown on serial at first boot, type it into your wallet app. ESP32 is a miner, not a signer.
+- **On-Chain Messaging** — Transactions carry an optional data field (up to 256 bytes). Send messages that are permanently recorded on the blockchain.
 - **LoRa Mesh** — Miners gossip over LoRa (2-15km range). No internet, WiFi, or cellular needed. Works offline in rural areas.
 - **Captive Portal WiFi** — First boot creates a WiFi hotspot. Connect your phone, enter your WiFi password, and the device auto-connects forever. No computer needed for setup.
 - **Fair Launch** — No premine, no ICO, no VC. MIT licensed. 42M total supply.
@@ -160,7 +159,7 @@ Three tiers, one firmware. Compile-time flags (`QUARTZ_HAS_DISPLAY`, `QUARTZ_HAS
 |---|---|---|---|---|
 | **ESP32-WROOM** | ~$5 | ❌ | ❌ | Entry miner — cheapest crypto hardware on Earth |
 | **Heltec WiFi LoRa 32 V3** | ~$15 | 0.96" OLED | SX1262 | Mesh miner — all three radios, solar-deployable |
-| **M5Stack Core** | ~$35 | 3.2" TFT 320×240 | ❌ | Hardware wallet — QR seed provisioning, transaction signing |
+| **M5Stack Core** | ~$35 | 3.2" TFT 320×240 | ❌ | Premium miner — dashboard display, same mining logic |
 
 **One codebase, three sdkconfig presets:**
 
@@ -185,13 +184,12 @@ See **[setup guide](https://quartz.preview.saasclaw.ai/setup.html)** for the com
 
 ```
 1. Flash firmware → ESP32
-2. Install Quartz app on Android
-3. Plug ESP32 into computer via USB
-4. Open serial terminal (115200 baud)
-5. ESP32 shows seed as QR code
-6. Scan QR with phone camera in app
-7. Write down 12 words → confirm 3 random words in app
-8. ✅ Mining starts automatically
+2. Plug in power (USB or solar)
+3. Open serial terminal (115200 baud)
+4. ESP32 shows 12-word seed phrase
+5. Write down seed → type 'confirm'
+6. ✅ Mining starts automatically
+7. Open web wallet → enter seed to send/receive QZ
 ```
 
 ### Flash an ESP32
@@ -207,15 +205,12 @@ python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash \
 
 ### Seed Phrase Security
 
-The seed phrase is shown as a **QR code** only — never as plain text over WiFi or Bluetooth.
+The seed phrase is shown on **serial output** on first boot. Write it down on paper and type `confirm` to continue. The seed repeats on every boot until confirmed.
 
-- **Serial terminal**: QR appears as ASCII art (scan with phone camera)
-- **M5Stack display**: QR on screen (scan with phone camera)
-- **BLE**: available only after bonding/pairing
+- **Primary**: Serial terminal (115200 baud) — plain text 12-word table
+- **Secondary (WIP)**: QR code on serial, BLE provisioning, M5Stack display
 
 The seed never goes over WiFi. The captive portal is for WiFi setup only.
-
-See the [Setup Guide](https://quartz.preview.saasclaw.ai/setup.html) for OS-specific instructions.
 
 ### Run a Node
 ```bash
@@ -228,33 +223,33 @@ python3 testnet.py
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    ESP32 MINER                       │
-│                                                      │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐ │
-│  │ CrystalHash│  │  WOTS+   │  │   SRAM PUF       │ │
-│  │   Miner   │  │ Quantum  │  │   Hardware       │ │
-│  │           │  │  Wallet  │  │   Binding        │ │
-│  └─────┬────┘  └────┬─────┘  └────────┬──────────┘ │
-│        │            │                  │            │
-│  ┌─────┴────┐  ┌────┴─────┐  ┌────────┴──────────┐ │
-│  │ AES-256  │  │ SHA-256  │  │  Fuzzy Extractor  │ │
-│  │ Scratchpad│  │ Chains  │  │  (NVS helper data)│ │
-│  └──────────┘  └──────────┘  └───────────────────┘ │
-│        │            │                  │            │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐ │
-│  │TFT Display│  │Encrypted │  │  WiFi Captive     │ │
-│  │(stats/seed│  │  Flash   │  │  Portal + Mining  │ │
-│  │ /mail/sign│  │(keys/NVS)│  │  Client (HTTP)    │ │
-│  └──────────┘  └──────────┘  └───────────────────┘ │
-└─────────────────────────────────────────────────────┘
-         │                    │                │
-    ┌────┴────┐         ┌─────┴─────┐    ┌─────┴─────┐
-    │  Phone  │         │  Other    │    │  Quartz   │
-    │  Wallet │         │  Miners   │    │  Node     │
-    │(watch-  │         │ (LoRa     │    │ (block    │
-    │  only)  │         │  gossip)  │    │  validation)│
-    └─────────┘         └───────────┘    └───────────┘
+┌──────────────────────────────────┐
+│          ESP32 MINER              │
+│                                   │
+│  ┌──────────┐  ┌───────────────┐ │
+│  │CrystalHash│  │   SRAM PUF    │ │
+│  │  Miner    │  │   Binding     │ │
+│  └─────┬─────┘  └───────┬───────┘ │
+│        │                │         │
+│  ┌─────┴─────┐  ┌──────┴────────┐│
+│  │ AES-256   │  │ WiFi Mining   ││
+│  │Scratchpad │  │ Client (HTTP) ││
+│  └───────────┘  └───────────────┘│
+│                                   │
+│  Seed on serial (first boot)     │
+│  Mining rewards → derived address │
+└───────────────┬───────────────────┘
+                │
+    ┌───────────┴───────────┐
+    │   Quartz Node          │
+    │   (block validation)   │
+    └───────────┬───────────┘
+                │
+    ┌───────────┴───────────┐
+    │  Web/Mobile Wallet     │
+    │  (send/receive QZ)     │
+    │  Seed → keys → signs   │
+    └───────────────────────┘
 ```
 
 ## Project Structure
