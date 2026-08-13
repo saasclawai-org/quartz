@@ -1,9 +1,12 @@
 package com.quartz.wallet.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,7 +35,9 @@ fun SeedProvisioningScreen(
     var confirmStep by remember { mutableIntStateOf(0) }
     var userInput by remember { mutableStateOf("") }
 
-    // ZXing barcode scanner launcher
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // ZXing barcode scanner launcher (declared first so permission callback can reference it)
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
         if (result.contents == null) {
             error = "Scan cancelled"
@@ -46,6 +51,24 @@ fun SeedProvisioningScreen(
                 error = "Invalid QR: expected 12 words, got ${words.size}"
                 phase = "error"
             }
+        }
+    }
+
+    // Camera permission launcher — launches scanner after permission granted
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val options = ScanOptions().apply {
+                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                setPrompt("Point camera at the QR code on your device screen")
+                setBeepEnabled(true)
+                setOrientationLocked(false)
+            }
+            scanLauncher.launch(options)
+        } else {
+            error = "Camera permission required to scan QR code"
+            phase = "error"
         }
     }
 
@@ -98,13 +121,21 @@ fun SeedProvisioningScreen(
                 // Option 1: Scan QR from device screen or serial terminal
                 Button(
                     onClick = {
-                        val options = ScanOptions().apply {
-                            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                            setPrompt("Point camera at the QR code on your device screen or serial terminal")
-                            setBeepEnabled(true)
-                            setOrientationLocked(false)
+                        // Check camera permission first, request if needed
+                        val hasCamera = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.CAMERA
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasCamera) {
+                            val options = ScanOptions().apply {
+                                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                setPrompt("Point camera at the QR code on your device screen")
+                                setBeepEnabled(true)
+                                setOrientationLocked(false)
+                            }
+                            scanLauncher.launch(options)
+                        } else {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                         }
-                        scanLauncher.launch(options)
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9933FF))
