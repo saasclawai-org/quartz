@@ -645,6 +645,62 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             self.chain.mempool.append(faucet_tx)
             self.json_response({"status": "queued", "amount": "1 QZ", "address": address})
 
+        elif path == '/api/v1/send':
+            # Broadcast a signed transaction
+            # Body: { "from": "Qk...", "to": "Qk...", "amount": 1.5, "signature": "hex", "public_key": "hex" }
+            from_addr = body.get('from', '')
+            to_addr = body.get('to', '')
+            amount_qz = float(body.get('amount', 0))
+            signature_hex = body.get('signature', '')
+            public_key_hex = body.get('public_key', '')
+            message_hex = body.get('message', '')  # pre-serialized tx message that was signed
+
+            if not from_addr or not to_addr or amount_qz <= 0:
+                self.json_error(400, "Missing from/to/amount")
+                return
+            if not signature_hex or not public_key_hex:
+                self.json_error(400, "Missing signature or public_key")
+                return
+
+            amount_sats = int(amount_qz * 1e8)
+
+            # Verify the signature
+            try:
+                from quartz.crypto import verify_signature, validate_address
+                pub_key = bytes.fromhex(public_key_hex)
+                sig = bytes.fromhex(signature_hex)
+                if message_hex:
+                    msg = bytes.fromhex(message_hex)
+                else:
+                    # Reconstruct the message that was signed
+                    msg = f"{from_addr}{to_addr}{amount_sats}".encode()
+
+                if not verify_signature(pub_key, msg, sig):
+                    self.json_error(400, "Invalid signature")
+                    return
+            except Exception as e:
+                self.json_error(400, f"Signature verification failed: {e}")
+                return
+
+            # Create and queue the transaction
+            tx = Transaction(
+                version=1,
+                inputs=[],
+                outputs=[(amount_sats, to_addr.encode()[:32])],
+                data=sig + pub_key,  # embed sig+pubkey for chain verification
+            )
+            self.chain.mempool.append(tx)
+
+            self.json_response({
+                "status": "queued",
+                "txid": tx.txid.hex()[:16],
+                "from": from_addr,
+                "to": to_addr,
+                "amount_qz": amount_qz,
+                "est_confirm_seconds": 30,
+            })
+            self.json_response({"status": "queued", "amount": "1 QZ", "address": address})
+
         elif path == '/api/v1/mine':
             # Manual mine trigger (demo)
             miner_idx = int(body.get('miner', 0)) if 'body' in dir() else 0
