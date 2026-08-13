@@ -369,17 +369,18 @@ static void mining_task(void *pvParameters) {
             int seed_version = quartz_qr_version_for_data(qlen, QR_ECC_HIGH);
             if (seed_version > 0) {
                 int seed_modules = 4 * seed_version + 17;
-                int seed_scale = 3;
+                int seed_scale = 4;
                 int seed_px = seed_modules * seed_scale;
-                /* Center horizontally, place near top */
+                /* Center horizontally, place near top with 4-module quiet zone */
                 int seed_x = (320 - seed_px) / 2;
-                int seed_y = 20;
+                int seed_y = 12;
 
-                /* Ensure QR fits on screen (240px tall) */
-                if (seed_y + seed_px > 210) {
-                    seed_scale = 2;
+                /* Ensure QR fits on screen (240px tall) with quiet zone */
+                if (seed_y + seed_px + seed_scale * 4 > 238) {
+                    seed_scale = 3;
                     seed_px = seed_modules * seed_scale;
                     seed_x = (320 - seed_px) / 2;
+                    seed_y = 16;
                 }
 
                 int seed_rc = quartz_qr_display(qr_payload, QR_ECC_HIGH,

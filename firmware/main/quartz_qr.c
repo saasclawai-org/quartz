@@ -442,21 +442,32 @@ int quartz_qr_display(
     ESP_LOGI(TAG, "QR %dx%d modules, scale=%d, at (%d,%d)", size, size, scale, x, y);
 #endif
 
-    /* Clear background area with quiet zone */
-    int quiet = scale * 2;
+    /* Clear background area with proper 4-module quiet zone */
+    int quiet = scale * 4;
     quartz_display_fill_rect(x - quiet, y - quiet,
                              total_px + quiet * 2, total_px + quiet * 2, bg_color);
 
-    /* Draw modules */
+    /* Draw modules as a single row-batched operation for SPI efficiency */
+    /* Instead of one fill_rect per module (2809 SPI transactions),
+     * build each row in a buffer and send horizontal runs in one shot */
     for (int r = 0; r < size; r++) {
-        for (int c = 0; c < size; c++) {
-            /* Nayuki uses (x, y) = (col, row) ordering */
+        int c = 0;
+        while (c < size) {
+            /* Find next dark module (run of dark modules) */
             if (qrcodegen_getModule(qrcode, c, r)) {
+                int run_start = c;
+                while (c < size && qrcodegen_getModule(qrcode, c, r)) {
+                    c++;
+                }
+                int run_len = c - run_start;
                 quartz_display_fill_rect(
-                    x + c * scale,
+                    x + run_start * scale,
                     y + r * scale,
-                    scale, scale,
+                    run_len * scale,
+                    scale,
                     fg_color);
+            } else {
+                c++;
             }
         }
     }
