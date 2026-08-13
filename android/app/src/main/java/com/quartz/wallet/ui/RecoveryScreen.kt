@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quartz.wallet.ble.QuartzBLEManager
 import com.quartz.wallet.ui.theme.*
+import com.quartz.wallet.util.Validation
 import kotlinx.coroutines.delay
 
 @Composable
@@ -40,7 +41,7 @@ fun RecoveryScreen(
     var signatureCount by remember { mutableStateOf<Int?>(null) }
     var success by remember { mutableStateOf(false) }
 
-    val allFilled = words.all { it.isNotBlank() }
+    val allFilled = Validation.isRecoveryFormValid(words.toList())
 
     Column(
         modifier = Modifier

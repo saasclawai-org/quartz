@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quartz.wallet.ble.QuartzBLEManager
 import com.quartz.wallet.ui.theme.*
+import com.quartz.wallet.util.Validation
 import kotlinx.coroutines.delay
 
 // Maximum PIN attempts before device wipe
@@ -211,7 +212,7 @@ fun PinEntryScreen(
                 }
             },
             onSubmit = {
-                if (pin.length >= MIN_PIN_LENGTH) {
+                if (Validation.isPinValid(submittedPin)) {
                     isSubmitting = true
                     error = null
                     val submittedPin = pin
@@ -233,7 +234,7 @@ fun PinEntryScreen(
                         }
                     }
                 } else {
-                    error = "PIN must be at least $MIN_PIN_LENGTH digits"
+                    error = "PIN must be 4–8 digits"
                     shakeTrigger++
                 }
             },
