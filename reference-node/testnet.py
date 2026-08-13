@@ -629,21 +629,20 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             })
 
         elif path == '/api/v1/faucet':
-            # Testnet faucet — send 1 QZ to an address
-            content_length = int(self.headers['Content-Length'])
-            body = json.loads(self.rfile.read(content_length))
-            address = body.get('address')
+            # Testnet faucet — send test QZ to an address
+            # body already parsed at top of do_POST
+            address = body.get('address', '').strip()
             if not address:
                 self.json_error(400, "Missing address")
                 return
-            # Create a simple transaction to the address
-            faucet_tx = Transaction(
-                version=1,
-                inputs=[],
-                outputs=[(1 * 10**8, bytes.fromhex(address.zfill(32)[:64].encode().hex()))],
-            )
-            self.chain.mempool.append(faucet_tx)
-            self.json_response({"status": "queued", "amount": "1 QZ", "address": address})
+            # Credit the address directly in the chain state
+            # This is testnet-only — no real signing needed
+            if address not in self.chain.balances:
+                self.chain.balances[address] = 0
+            self.chain.balances[address] += 100 * 10**8  # 100 test QZ
+            # Save state
+            self.chain.save()
+            self.json_response({"status": "ok", "amount": "100 QZ", "address": address})
 
         elif path == '/api/v1/send':
             # Broadcast a signed transaction

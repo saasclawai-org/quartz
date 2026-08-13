@@ -163750,7 +163750,7 @@
         "nonce": 6182,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163762,7 +163762,7 @@
         "nonce": 1146,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163774,7 +163774,7 @@
         "nonce": 6933,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163786,7 +163786,7 @@
         "nonce": 4471,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163798,7 +163798,7 @@
         "nonce": 5929,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163810,7 +163810,7 @@
         "nonce": 899,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163822,7 +163822,7 @@
         "nonce": 1111,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163834,7 +163834,7 @@
         "nonce": 1182,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163846,7 +163846,7 @@
         "nonce": 2673,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163858,7 +163858,7 @@
         "nonce": 1627,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163870,7 +163870,7 @@
         "nonce": 1398,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163882,7 +163882,7 @@
         "nonce": 6329,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163894,7 +163894,7 @@
         "nonce": 14698,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163906,7 +163906,7 @@
         "nonce": 3684,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163918,7 +163918,7 @@
         "nonce": 2970,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163930,7 +163930,7 @@
         "nonce": 6339,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163942,7 +163942,7 @@
         "nonce": 1562,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163954,7 +163954,7 @@
         "nonce": 4573,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163966,7 +163966,7 @@
         "nonce": 1983,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
     },
     {
       "header": {
@@ -163978,37 +163978,398 @@
         "nonce": 3689,
         "miner_id": "000000000000"
       },
-      "tx_count": 1
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "00035512a236239b17106dcb5766ee4308eb6b389abaef4c6ff21f752146f534",
+        "merkle_root": "60b5ec2652eed9f063ca8615e479bec79434d0cd1f39dca6544d37f955ce02ad",
+        "timestamp": 1786642998,
+        "difficulty_target": 12,
+        "nonce": 7556,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000e4157f216cde912f46e42533a4e42d38b296c8acfcf17eb87e821d2c903f2",
+        "merkle_root": "1acf89f58315e1b5a1e519ebba1092650c2407ad3d8a847e164b55818eca71ba",
+        "timestamp": 1786643028,
+        "difficulty_target": 12,
+        "nonce": 6726,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0002d85ee902c9ef031d8db1639464f28045db8d61a7ca74210f36098d3f1b85",
+        "merkle_root": "34b3e5f375f981fb8e36b441dada4cb8f28373399f0e32da8aeac2a22e6bb257",
+        "timestamp": 1786643058,
+        "difficulty_target": 12,
+        "nonce": 4791,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000ab86340e64c551ff16a99a08058047eec018d461d6c42dcda25ed299a8e41",
+        "merkle_root": "45597be69bbcce8bc9923c2675afe2d835ce985cad878430f6967860be46526d",
+        "timestamp": 1786643088,
+        "difficulty_target": 12,
+        "nonce": 7275,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000fd67198207402f50f353bd916362dd0871ce8b1c400ad52717a180db776c5",
+        "merkle_root": "8d30cc3b8a7db4c0a85a023da177b62ef8852c71c8ef433d7d7c8c4516e396f9",
+        "timestamp": 1786643118,
+        "difficulty_target": 12,
+        "nonce": 7767,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0002b29e8a55bcaa67b931b17df4fedacfe85ded8788b1f8b11ef035c4c03e22",
+        "merkle_root": "ae58c7dc08e70c32d472d160e7273b09c080667506e3f662f7e37fa6ad381f22",
+        "timestamp": 1786643119,
+        "difficulty_target": 12,
+        "nonce": 3493,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0004998a459ba0373a3038fa38fc9773b1c37ee319280447a2c4893ddfbc8857",
+        "merkle_root": "4d672d1bcc094b5d25f6f0f9be630895782068ae5acc64f46fbbeeab68ba8e2a",
+        "timestamp": 1786643148,
+        "difficulty_target": 12,
+        "nonce": 4197,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0009a049668ad944e15a38cf90612eb316093664632f735c73ada8beadd1e06d",
+        "merkle_root": "386011527cbcba4e49fce10d2818b0cb3ac0bab9bf71fc7eea6c26c5c077433f",
+        "timestamp": 1786643175,
+        "difficulty_target": 12,
+        "nonce": 1430,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000bda37d543252f2b635dde303b2d086396ea725780b4e4e463f7f099c2ebf3",
+        "merkle_root": "5cb48056c4c509b0f6c6a8793c35fca3aeee55bb0f6c0ae0fc7f4b69f8ba16a3",
+        "timestamp": 1786643178,
+        "difficulty_target": 12,
+        "nonce": 779,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000149ab1a9af334eb5cc5d688bc34997658f9aa27509583320c67640943e623",
+        "merkle_root": "1aef2c1df4a988f14f6526184d676c29041fc8eaa6deaa79dc7dd02cffdbf447",
+        "timestamp": 1786643209,
+        "difficulty_target": 12,
+        "nonce": 11035,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000a1629a5695456a02a93d4c8f3d49b0b16efdf5996c1ff14d0a14a94fe9a88",
+        "merkle_root": "8cd723c3322f0c31559de0673d5daaac8320670a95b5706ad8cb2c8d3249f583",
+        "timestamp": 1786643239,
+        "difficulty_target": 12,
+        "nonce": 345,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000e93911664551d04e384ebdfc460ec9a454f7a3e848cb8852a30361f911593",
+        "merkle_root": "b976aef9c7315e41dd55756a2993ebf983fe59a2a4debd9e9c6ac971794cba92",
+        "timestamp": 1786643269,
+        "difficulty_target": 12,
+        "nonce": 7903,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000640c9f67a664d9bfef5252642062067e902ee06b5bccdfb5cdb56714764c4",
+        "merkle_root": "64fbc6a8a9fe872679e57cf88878aa60713a21aa2a3bb9db3a822a4829e73bdc",
+        "timestamp": 1786643272,
+        "difficulty_target": 12,
+        "nonce": 2291,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000daac9ce6a0c501f0add9eb8030efad052af5f25e3a6bc5a096eb6070873d6",
+        "merkle_root": "b2ec0520a41d53ad0c431f64be48e4cab1d88317ec98e085df9002276cc026e0",
+        "timestamp": 1786643299,
+        "difficulty_target": 12,
+        "nonce": 2337,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000e8204bdf7d927faf378a7af8ec5cab26517273523a6aaebc86434004cc0c0",
+        "merkle_root": "b44c4c1430221d9540593aa926612b2a897ff3c5d7b2de6d8ed5196011eb9de6",
+        "timestamp": 1786643329,
+        "difficulty_target": 12,
+        "nonce": 4901,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0002de257a0e4fc1cab16d7ccf74948e1b9788d73f0eab430db0b2c2a188c633",
+        "merkle_root": "5c7ba911aecc2dfe517833f1e9321d26a84ef86bbe4194597f6fd8a44e0d9096",
+        "timestamp": 1786643331,
+        "difficulty_target": 12,
+        "nonce": 4315,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000d547956dd2f1b86cdef9046b4df7f569080bf3afc200844fa6e95c4d03f33",
+        "merkle_root": "3d24d79c4f873ed496a526c3ca81e0e56cd3960e652df820a4b8c6c31d09cd23",
+        "timestamp": 1786643359,
+        "difficulty_target": 12,
+        "nonce": 364,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0009726371d4e91887e14778f962159640563c0a0e6a0fd65a136bafbb6281db",
+        "merkle_root": "c336655b87234d18b41c1d9552d52e4d043e350ee2f4ff67e24afbb79fcca2ca",
+        "timestamp": 1786643389,
+        "difficulty_target": 12,
+        "nonce": 3602,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0009d79ae8340fb3f74203a279d358b537e11f2e99738ce14382bc87def66fd1",
+        "merkle_root": "8ac6d6a5776b16019cf785e3fab5b1352cae70efdb5a9e1015e21607317d4d1a",
+        "timestamp": 1786643419,
+        "difficulty_target": 12,
+        "nonce": 4033,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000809fdd7d0368ae0dbb556211150efcf15cf1bcf666f1df6005b494e6c117a",
+        "merkle_root": "b4377d59f3350c29a0b752916490efec7aa77a702c6e83753bb35b1180127a74",
+        "timestamp": 1786643449,
+        "difficulty_target": 12,
+        "nonce": 78,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000802c21a7da418c7f61f602edf5ed9c9cd6d84d6733eaf22ca42e6ff69e019",
+        "merkle_root": "c1400ac99e1078c8604d6e9a86ef7fa9b4a4eb471b0f891f157026063ffb121d",
+        "timestamp": 1786643476,
+        "difficulty_target": 12,
+        "nonce": 711,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000536166f112e28490df97b50f3f4b92b1c717741512500d90477828f5e8a94",
+        "merkle_root": "5bd827a81a8d26d75fb48515ca6921e12c34cc110674c7b5c26edc6ed7001570",
+        "timestamp": 1786643479,
+        "difficulty_target": 12,
+        "nonce": 280,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "00023d656d8dde82fa903845e01c691bf23b3a36c0437d73a45c82e3a0e34771",
+        "merkle_root": "6bed0a0001e4db52d172616ca377eac90f759fb492245f22db3214fca947c96d",
+        "timestamp": 1786643505,
+        "difficulty_target": 12,
+        "nonce": 1934,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000a5a81902cec112e0e6cc6d5df6f698b7d32c2b4af9ddda4df30916c8e1709",
+        "merkle_root": "2e7874a36b0d7727854eb7184eb6c9cd9eeb42aa85824ede7f36e87fb014bb21",
+        "timestamp": 1786643509,
+        "difficulty_target": 12,
+        "nonce": 493,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000d6ddedb8b432d8060214f8c3394d10f10cd9373c596743727511f0fac7ddd",
+        "merkle_root": "289148a420b83735b44be290c6e28bad846583281cad8a1a6c00af53b66f9a59",
+        "timestamp": 1786643540,
+        "difficulty_target": 12,
+        "nonce": 5621,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "00015b2216180c371c72c6ceb2b2af1ad1153675fc7e3b418345033ec031b32b",
+        "merkle_root": "e0405e3fca042722ded5986c1a3b5aa92b7f24e4b23c9517590e0796c9bfb5e3",
+        "timestamp": 1786643572,
+        "difficulty_target": 12,
+        "nonce": 8410,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000c4a17031e09b09c215219e035c817585489c6ae566c3028d5dc42cb06b418",
+        "merkle_root": "fa802eb9ba05b8eefba73e0acba430c4e1b0a219cd686e640a81d95d8ba51f45",
+        "timestamp": 1786643602,
+        "difficulty_target": 12,
+        "nonce": 439,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000988ac9045a93e045f1d90542d9d0698efb49e913461750a6f2fa5dca3beed",
+        "merkle_root": "e13349b915d18490cc53246d503927beff6661a82c39de2dead23a4711768758",
+        "timestamp": 1786643633,
+        "difficulty_target": 12,
+        "nonce": 2264,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "000b324bb43aa648fb4350757b8a64a9bc2aa85cf2397135ba89ed722239e587",
+        "merkle_root": "835e42349d6bd98d59cece49be8626b5344eb1a398ac0b5795b636d1abc3f011",
+        "timestamp": 1786643663,
+        "difficulty_target": 12,
+        "nonce": 296,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
+    },
+    {
+      "header": {
+        "version": 1,
+        "prev_block_hash": "0005da9fff4d3d323c3bc66df0f49993d89cda0fb2f3231705271823d050f655",
+        "merkle_root": "96932978479783acae70903fe8a5e73c78cdb674a205a37993339230d26dbd55",
+        "timestamp": 1786643666,
+        "difficulty_target": 12,
+        "nonce": 1690,
+        "miner_id": "000000000000"
+      },
+      "tx_count": 0
     }
   ],
   "balances": {
-    "81aeb43a861a6d4dfe4a43eafa7cd16914": 9525000000000,
+    "81aeb43a861a6d4dfe4a43eafa7cd16914": 9546250000000,
     "Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U": 571250000000,
-    "e6eb2a4b765cdf5997dd67ed7817a10092": 9511750000000,
-    "39759da3f3678b533399bdaeb1a2217ec8": 9502750000000,
-    "34ec900ac1cb2e79ebe4208c9ce577d9d2": 9480000000000,
-    "7d85a40d82e87b90dce47d88234a85e7bb": 9471000000000,
+    "e6eb2a4b765cdf5997dd67ed7817a10092": 9533000000000,
+    "39759da3f3678b533399bdaeb1a2217ec8": 9524000000000,
+    "34ec900ac1cb2e79ebe4208c9ce577d9d2": 9497000000000,
+    "7d85a40d82e87b90dce47d88234a85e7bb": 9488000000000,
     "decf6b973056cc06739ab4ad3e1b996704": 1089250000000,
     "98cb54d17059c9480de2d08db7eb716c6a": 374000000000,
     "eb2d6fbe68a4f7bd9e64e6fae8330dd132": 386750000000,
     "45c7820fba215c3d53f640bbe8a65ad423": 650250000000,
     "f7b7d729d828af5b41ff1399e19922b620": 697000000000,
-    "7ab7fb0e93d746ba95eb98bb2803d1e1c3": 5856500000000,
-    "3c7c1165d27dbf944fe823fada9dfb7f64": 2724250000000
+    "7ab7fb0e93d746ba95eb98bb2803d1e1c3": 5886250000000,
+    "3c7c1165d27dbf944fe823fada9dfb7f64": 2724250000000,
+    "R4HJkJnpbjeT9xXfckcYPAKUqcPtCTvg8T": 10000000000
   },
   "known_miners": [
-    "517746697a41",
+    "517935584d38",
     "52384b344176",
-    "aabbcc010002",
-    "aabbcc010006",
-    "aabbcc010005",
+    "517746697a41",
     "aabbcc010001",
-    "517255474b55",
-    "aabbcc010004",
-    "aabbcc010003",
-    "51726b45454d",
     "52353152774c",
-    "517935584d38"
+    "aabbcc010002",
+    "aabbcc010005",
+    "517255474b55",
+    "aabbcc010006",
+    "51726b45454d",
+    "aabbcc010004",
+    "aabbcc010003"
   ],
   "current_difficulty": 12
 }
