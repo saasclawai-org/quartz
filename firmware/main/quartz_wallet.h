@@ -24,6 +24,7 @@ typedef enum {
     QZ_WALLET_ERR_CORRUPT    = -3,  // data integrity check failed
     QZ_WALLET_ERR_AUTH       = -4,  // BLE connection not authenticated
     QZ_WALLET_ERR_LOCKED     = -5,  // wallet locked, needs unlock
+    QZ_WALLET_ERR_INVALID    = -6,  // invalid input
 } quartz_wallet_err_t;
 
 /**

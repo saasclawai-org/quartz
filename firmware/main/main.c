@@ -326,16 +326,15 @@ static void mining_task(void *pvParameters) {
         char words[12][12];
         werr = quartz_wallet_get_seed_phrase_for_backup(words, 12);
         if (werr == QZ_WALLET_OK) {
-            /* Build seed QR payload: JSON with words + address */
-            char qr_payload[256];
-            int qlen = snprintf(qr_payload, sizeof(qr_payload),
-                "{\"v\":1,\"words\":[");
+            /* Build seed QR payload: compact BIP-39 format (space-separated words)
+             * No JSON wrapper — keeps payload under 100 chars so it fits even
+             * at QR_ECC_HIGH (v10 max=119). Address is derivable from seed. */
+            char qr_payload[200];
+            int qlen = snprintf(qr_payload, sizeof(qr_payload), "quartz-seed:");
             for (int i = 0; i < 12; i++) {
                 qlen += snprintf(qr_payload + qlen, sizeof(qr_payload) - qlen,
-                    "\"%s\"%s", words[i], (i < 11) ? "," : "");
+                    "%s%s", words[i], (i < 11) ? " " : "");
             }
-            qlen += snprintf(qr_payload + qlen, sizeof(qr_payload) - qlen,
-                "],\"addr\":\"%s\"}", quartz_wallet_get_address());
 
             /* === SECURE CHANNELS ONLY === */
             /* NO captive portal — seed never goes over WiFi */
@@ -365,10 +364,45 @@ static void mining_task(void *pvParameters) {
 #ifdef QUARTZ_HAS_DISPLAY
             /* Show QR on display — phone scans directly */
             quartz_display_clear(0xFFFF);  /* white background */
-            quartz_qr_display(qr_payload, QR_ECC_HIGH,
-                             (320 - 200) / 2, 30, 3,
-                             0x0000, 0xFFFF);  /* black on white */
-            quartz_display_draw_text(40, 250, "Scan with Quartz app", 0x0000, 0xFFFF);
+
+            /* Calculate QR size dynamically based on actual version */
+            int seed_version = quartz_qr_version_for_data(qlen, QR_ECC_HIGH);
+            if (seed_version > 0) {
+                int seed_modules = 4 * seed_version + 17;
+                int seed_scale = 3;
+                int seed_px = seed_modules * seed_scale;
+                /* Center horizontally, place near top */
+                int seed_x = (320 - seed_px) / 2;
+                int seed_y = 20;
+
+                /* Ensure QR fits on screen (240px tall) */
+                if (seed_y + seed_px > 210) {
+                    seed_scale = 2;
+                    seed_px = seed_modules * seed_scale;
+                    seed_x = (320 - seed_px) / 2;
+                }
+
+                int seed_rc = quartz_qr_display(qr_payload, QR_ECC_HIGH,
+                                 seed_x, seed_y, seed_scale,
+                                 0x0000, 0xFFFF);
+                if (seed_rc != 0) {
+                    /* Fallback: try ECC_MEDIUM which has more capacity */
+                    seed_version = quartz_qr_version_for_data(qlen, QR_ECC_MEDIUM);
+                    if (seed_version > 0) {
+                        seed_modules = 4 * seed_version + 17;
+                        seed_px = seed_modules * seed_scale;
+                        seed_x = (320 - seed_px) / 2;
+                        quartz_qr_display(qr_payload, QR_ECC_MEDIUM,
+                                         seed_x, seed_y, seed_scale,
+                                         0x0000, 0xFFFF);
+                    }
+                }
+                /* Instruction text below QR, ON-SCREEN */
+                quartz_display_draw_text(60, 218, "Scan with Quartz app", 0x0000, 0xFFFF);
+            } else {
+                quartz_display_draw_text(20, 100, "Seed too long for QR", 0xF800, 0xFFFF);
+                quartz_display_draw_text(20, 120, "Use serial or BLE", 0x0000, 0xFFFF);
+            }
 #endif
 
             /* Channel 3: BLE (bonded only — app must pair first) */

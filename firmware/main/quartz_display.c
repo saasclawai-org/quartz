@@ -522,6 +522,7 @@ qz_screen_t quartz_display_get_screen(void) { return s_screen; }
 #define COL_RED    0xF800
 #define COL_WHITE  0xFFFF
 #define COL_GRAY   0x8410
+#define COL_DARKGRAY 0x4208
 
 /* === Splash Screen === */
 void quartz_display_splash(void) {

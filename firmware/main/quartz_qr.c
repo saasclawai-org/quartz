@@ -618,30 +618,8 @@ int quartz_qr_serial(const char *data, qr_ecc_t ecc) {
     free(codewords);
     free(full_data);
 
-    /* Output QR as ASCII art using block characters */
-    /* Top quiet zone */
-    printf("\n");
-    for (int i = 0; i < 2; i++) printf("          \n");
-
-    /* Each row uses two terminal lines with Unicode half-blocks */
-    /* ▀ = top dark, ▄ = bottom dark, █ = both dark, space = both light */
-    for (int r = 0; r < size; r += 2) {
-        printf("          ");
-        for (int c = 0; c < size; c++) {
-            int top = qr_matrix_get(&mat, r, c);
-            int bot = (r + 1 < size) ? qr_matrix_get(&mat, r + 1, c) : 0;
-            /* Dark module on white background = inverted */
-            /* Print inverted (white QR on black) for better scanning */
-            if (top && bot) printf("  ");
-            else if (top && !bot) printf(" \n");  /* can't do half-block easily, use spaces/dots */
-            else if (!top && bot) printf("\n ");
-            else printf("##");
-        }
-        printf("\n");
-    }
-
-    /* Actually, let's use a simpler approach: ## for dark, space for light */
-    /* Redo with simple ASCII that phones can scan */
+    /* Output QR as ASCII art — simple ## for light, spaces for dark.
+     * Inverted display (dark background) for terminal scanning. */
     printf("\r\n");
     printf("\r\n");
     /* Border */
