@@ -663,11 +663,24 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
 
             amount_sats = int(amount_qz * 1e8)
 
+            # Check sender has enough balance
+            sender_balance = self.chain.balances.get(from_addr, 0)
+            if sender_balance < amount_sats:
+                self.json_error(400, f"Insufficient balance: {sender_balance / 1e8} QZ < {amount_qz} QZ")
+                return
+
             # Verify the signature
             try:
-                from quartz.crypto import verify_signature, validate_address
+                from quartz.crypto import verify_signature, validate_address, public_key_to_address
                 pub_key = bytes.fromhex(public_key_hex)
                 sig = bytes.fromhex(signature_hex)
+                
+                # Verify the public key matches the sender address
+                derived_addr = public_key_to_address(pub_key)
+                if derived_addr != from_addr:
+                    self.json_error(400, "Public key does not match sender address")
+                    return
+                
                 if message_hex:
                     msg = bytes.fromhex(message_hex)
                 else:
@@ -681,17 +694,25 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 self.json_error(400, f"Signature verification failed: {e}")
                 return
 
-            # Create and queue the transaction
+            # Move balance immediately (testnet simplified TX)
+            self.chain.balances[from_addr] = sender_balance - amount_sats
+            if to_addr not in self.chain.balances:
+                self.chain.balances[to_addr] = 0
+            self.chain.balances[to_addr] += amount_sats
+
+            # Create transaction record
             tx = Transaction(
                 version=1,
                 inputs=[],
                 outputs=[(amount_sats, to_addr.encode()[:32])],
-                data=sig + pub_key,  # embed sig+pubkey for chain verification
+                data=sig + pub_key,
             )
-            self.chain.mempool.append(tx)
+
+            # Save state
+            self.chain.save()
 
             self.json_response({
-                "status": "queued",
+                "status": "sent",
                 "txid": tx.txid.hex()[:16],
                 "from": from_addr,
                 "to": to_addr,
