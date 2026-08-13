@@ -131,6 +131,7 @@ fun SeedProvisioningScreen(
                                 setPrompt("Point camera at the QR code on your device screen")
                                 setBeepEnabled(true)
                                 setOrientationLocked(false)
+                                setTimeout(30000L)
                             }
                             scanLauncher.launch(options)
                         } else {
@@ -143,9 +144,27 @@ fun SeedProvisioningScreen(
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text("📷 Scan Seed QR Code", fontSize = 18.sp)
                         Text(
-                            "Point camera at QR on device screen or serial terminal",
+                            "Point camera at QR on device screen",
                             fontSize = 12.sp,
                             color = Color(0xFFCCCCCC)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Option 1b: Manual entry — type/paste seed from phone camera scan
+                OutlinedButton(
+                    onClick = { phase = "manual_entry" },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00D4AA))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("⌨️ Type Seed Manually", fontSize = 16.sp)
+                        Text(
+                            "Scan with phone camera, then paste/type the 12 words",
+                            fontSize = 12.sp,
+                            color = Color(0xFF888888)
                         )
                     }
                 }
@@ -322,6 +341,61 @@ fun SeedProvisioningScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9933FF))
                 ) {
                     Text("Continue to Dashboard")
+                }
+            }
+
+            "manual_entry" -> {
+                Text(
+                    "Enter your 12-word seed phrase",
+                    fontSize = 18.sp,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Tip: Scan the QR with your phone's camera app, copy the text, and paste it here.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF888888),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = userInput,
+                    onValueChange = { userInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("quartz-seed:word1 word2 ... or just the 12 words") },
+                    minLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF9933FF),
+                        unfocusedBorderColor = Color(0xFF444466),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        val words = parseSeedQrPayload(userInput)
+                        if (words.size == 12) {
+                            seedWords = words
+                            error = null
+                            phase = "display"
+                        } else {
+                            error = "Expected 12 words, got ${words.size}. Check your input."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9933FF))
+                ) {
+                    Text("Import Seed")
+                }
+                error?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(it, color = Color.Red, fontSize = 14.sp)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = { phase = "choice" }) {
+                    Text("Back", color = Color.Gray)
                 }
             }
 
