@@ -340,70 +340,48 @@ static void mining_task(void *pvParameters) {
             /* NO captive portal — seed never goes over WiFi */
             /* NO unbonded BLE — seed char only readable after pairing */
 
-            /* Channel 1: Serial QR code (scan with phone app camera) */
+            /* === SEED BACKUP — Serial is the primary channel === */
+            /* On first boot, seed words are shown on serial output until confirmed.
+             * Display shows a simple prompt. QR/BLE remain available but secondary. */
+
+            /* Channel 1: Serial output (PRIMARY) — plain text words */
             ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "╔══════════════════════════════════════╗");
-            ESP_LOGI(TAG, "║   🔮 QUARTZ WALLET — SEED QR CODE    ║");
-            ESP_LOGI(TAG, "║   Scan with Quartz app camera        ║");
-            ESP_LOGI(TAG, "╚══════════════════════════════════════╝");
+            ESP_LOGI(TAG, "╔════════════════════════════════════════════╗");
+            ESP_LOGI(TAG, "║   🔮 QUARTZ WALLET — SEED PHRASE           ║");
+            ESP_LOGI(TAG, "║   WRITE DOWN THESE 12 WORDS                ║");
+            ESP_LOGI(TAG, "╚════════════════════════════════════════════╝");
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "Address: %s", quartz_wallet_get_address());
             ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "Open the Quartz app → Scan Seed QR → point camera at the QR below:");
-            ESP_LOGI(TAG, "");
-
-            /* Output QR code as ASCII art on serial terminal */
-            quartz_qr_serial(qr_payload, QR_ECC_HIGH);
-
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "Or scan the QR on the device screen with your phone camera.");
-            ESP_LOGI(TAG, "After writing down your seed, confirm in the app or type 'confirm' + Enter.");
-            ESP_LOGI(TAG, "");
-
-            /* Channel 2: Display QR code (M5Stack with screen) */
-#ifdef QUARTZ_HAS_DISPLAY
-            /* Show QR on display — phone scans directly */
-            quartz_display_clear(0xFFFF);  /* white background */
-
-            /* Calculate QR size dynamically based on actual version */
-            int seed_version = quartz_qr_version_for_data(qlen, QR_ECC_HIGH);
-            if (seed_version > 0) {
-                int seed_modules = 4 * seed_version + 17;
-                int seed_scale = 4;
-                int seed_px = seed_modules * seed_scale;
-                /* Center horizontally, place near top with 4-module quiet zone */
-                int seed_x = (320 - seed_px) / 2;
-                int seed_y = 12;
-
-                /* Ensure QR fits on screen (240px tall) with quiet zone */
-                if (seed_y + seed_px + seed_scale * 4 > 238) {
-                    seed_scale = 3;
-                    seed_px = seed_modules * seed_scale;
-                    seed_x = (320 - seed_px) / 2;
-                    seed_y = 16;
-                }
-
-                int seed_rc = quartz_qr_display(qr_payload, QR_ECC_HIGH,
-                                 seed_x, seed_y, seed_scale,
-                                 0x0000, 0xFFFF);
-                if (seed_rc != 0) {
-                    /* Fallback: try ECC_MEDIUM which has more capacity */
-                    seed_version = quartz_qr_version_for_data(qlen, QR_ECC_MEDIUM);
-                    if (seed_version > 0) {
-                        seed_modules = 4 * seed_version + 17;
-                        seed_px = seed_modules * seed_scale;
-                        seed_x = (320 - seed_px) / 2;
-                        quartz_qr_display(qr_payload, QR_ECC_MEDIUM,
-                                         seed_x, seed_y, seed_scale,
-                                         0x0000, 0xFFFF);
-                    }
-                }
-                /* Instruction text below QR, ON-SCREEN */
-                quartz_display_draw_text(60, 218, "Scan with Quartz app", 0x0000, 0xFFFF);
-            } else {
-                quartz_display_draw_text(20, 100, "Seed too long for QR", 0xF800, 0xFFFF);
-                quartz_display_draw_text(20, 120, "Use serial or BLE", 0x0000, 0xFFFF);
+            ESP_LOGI(TAG, "  ┌─────────┬─────────────┐");
+            ESP_LOGI(TAG, "  │  Word   │   Value     │");
+            ESP_LOGI(TAG, "  ├─────────┼─────────────┤");
+            for (int i = 0; i < 12; i++) {
+                ESP_LOGI(TAG, "  │  %2d     │  %-10s │", i + 1, words[i]);
             }
+            ESP_LOGI(TAG, "  └─────────┴─────────────┘");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "⚠️  Anyone with these words controls your wallet.");
+            ESP_LOGI(TAG, "⚠️  Write them down on paper. Do not screenshot.");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Type 'confirm' + Enter after writing down your seed.");
+            ESP_LOGI(TAG, "This message will repeat on every boot until confirmed.");
+            ESP_LOGI(TAG, "");
+
+            /* Also output as QR on serial for those who want it */
+            ESP_LOGI(TAG, "── QR code (optional) ──");
+            quartz_qr_serial(qr_payload, QR_ECC_HIGH);
+            ESP_LOGI(TAG, "");
+
+            /* Channel 2: Display — simple prompt, check serial for words (WIP: QR display) */
+#ifdef QUARTZ_HAS_DISPLAY
+            quartz_display_clear(QZ_COLOR_BLACK);
+            quartz_display_draw_text(40, 60, "🔮 QUARTZ WALLET", QZ_COLOR_PURPLE, QZ_COLOR_BLACK);
+            quartz_display_draw_text(20, 100, "Seed phrase on serial!", QZ_COLOR_YELLOW, QZ_COLOR_BLACK);
+            quartz_display_draw_text(10, 130, "Open serial monitor", 0xAAAAAA, QZ_COLOR_BLACK);
+            quartz_display_draw_text(20, 150, "to see your 12 words", 0xAAAAAA, QZ_COLOR_BLACK);
+            quartz_display_draw_text(10, 190, "Type 'confirm' + Enter", 0x00FF00, QZ_COLOR_BLACK);
+            quartz_display_draw_text(30, 210, "after writing down", 0x00FF00, QZ_COLOR_BLACK);
 #endif
 
             /* Channel 3: BLE (bonded only — app must pair first) */
