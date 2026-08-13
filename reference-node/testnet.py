@@ -698,7 +698,6 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 "amount_qz": amount_qz,
                 "est_confirm_seconds": 30,
             })
-            self.json_response({"status": "queued", "amount": "1 QZ", "address": address})
 
         elif path == '/api/v1/mine':
             # Manual mine trigger (demo)
