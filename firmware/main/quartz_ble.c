@@ -285,7 +285,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             return;
         }
         s_gatts_if = gatts_if;
-        esp_ble_gatts_create_attr_tab(gatts_if, s_attr_db, QUARTZ_IDX_NB, 0);
+        esp_ble_gatts_create_attr_tab(s_attr_db, gatts_if, QUARTZ_IDX_NB, 0);
         break;
 
     case ESP_GATTS_CREAT_ATTR_TAB_EVT:
