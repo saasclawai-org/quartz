@@ -615,8 +615,136 @@ void quartz_display_mining_stats(
 #endif
 }
 
+/* === Identity Screen (boot default) ===
+ * Design: the hero is the identity — enrolled status + device ID.
+ * Hashrate is deliberately a small gray line (it pays nothing).
+ */
+void quartz_display_id_screen(
+    bool enrolled,
+    const uint8_t device_id[32],
+    uint32_t uptime_sec,
+    uint32_t hash_rate,
+    const char *wallet_address)
+{
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+
+    quartz_display_clear(COL_BG);
+
+    /* Top bar */
+    quartz_display_fill_rect(0, 0, DISP_W, 24, COL_ACCENT);
+    quartz_display_draw_text_s(8, 4, "QUARTZ", COL_WHITE, COL_ACCENT);
+    if (enrolled) {
+        quartz_display_draw_text_s(DISP_W - 96, 4, "ENROLLED", COL_GREEN, COL_ACCENT);
+        quartz_display_draw_text_s(DISP_W - 22, 4, "OK", COL_GREEN, COL_ACCENT);
+    } else {
+        quartz_display_draw_text_s(DISP_W - 76, 4, "DORMANT", COL_YELLOW, COL_ACCENT);
+    }
+    quartz_display_fill_rect(0, 24, DISP_W, 2, COL_ACCENT);
+
+    /* Device ID — hero */
+    char buf[40];
+    quartz_display_draw_text_s(8, 36, "DEVICE ID", COL_GRAY, COL_BG);
+    snprintf(buf, sizeof(buf), "QZ-%02X%02X%02X%02X",
+             device_id[0], device_id[1], device_id[2], device_id[3]);
+    quartz_display_draw_text_l(8, 52, buf, COL_CYAN, COL_BG);
+
+    /* Uptime — identity age */
+    uint32_t days = uptime_sec / 86400;
+    uint32_t hrs  = (uptime_sec % 86400) / 3600;
+    uint32_t mins = (uptime_sec % 3600) / 60;
+    if (days > 0) snprintf(buf, sizeof(buf), "%lud %luh", days, hrs);
+    else if (hrs > 0) snprintf(buf, sizeof(buf), "%luh %lum", hrs, mins);
+    else snprintf(buf, sizeof(buf), "%lum", mins);
+    quartz_display_draw_text_s(8, 96, "UPTIME", COL_GRAY, COL_BG);
+    quartz_display_draw_text_l(8, 110, buf, COL_WHITE, COL_BG);
+
+    /* Hashrate — demoted on purpose */
+    snprintf(buf, sizeof(buf), "%lu H/s", hash_rate);
+    quartz_display_draw_text_s(230, 110, buf, COL_GRAY, COL_BG);
+
+    /* Wallet (truncated) */
+    quartz_display_draw_text_s(8, 150, "WALLET", COL_GRAY, COL_BG);
+    if (wallet_address && strlen(wallet_address) > 34) {
+        char short_addr[20];
+        memcpy(short_addr, wallet_address, 8);
+        short_addr[8] = '.'; short_addr[9] = '.'; short_addr[10] = '.';
+        memcpy(short_addr + 11, wallet_address + strlen(wallet_address) - 6, 6);
+        short_addr[17] = '\0';
+        quartz_display_draw_text_s(8, 166, short_addr, COL_YELLOW, COL_BG);
+    } else if (wallet_address) {
+        quartz_display_draw_text_s(8, 166, wallet_address, COL_YELLOW, COL_BG);
+    }
+
+    /* Button hints */
+    quartz_display_fill_rect(0, 220, DISP_W, 20, COL_CARD);
+    quartz_display_draw_text_s(8, 223, "[A] Pay", COL_ACCENT, COL_CARD);
+    quartz_display_draw_text_s(120, 223, "[B] Next", COL_GRAY, COL_CARD);
+    quartz_display_draw_text_s(230, 223, "[C] -", COL_DARKGRAY, COL_CARD);
+#endif
+}
+
+/* === Fleet Screen ===
+ * The shared goal: enrolled devices ticking toward the listing gate.
+ */
+void quartz_display_fleet_screen(
+    uint32_t member_count,
+    uint32_t my_shares,
+    uint64_t rewards_qz_milli,
+    uint32_t blocks_found)
+{
+#ifdef ESP_PLATFORM
+    if (!s_ready) return;
+
+    quartz_display_clear(COL_BG);
+
+    /* Top bar */
+    quartz_display_fill_rect(0, 0, DISP_W, 24, COL_ACCENT);
+    quartz_display_draw_text_s(8, 4, "QUARTZ", COL_WHITE, COL_ACCENT);
+    quartz_display_draw_text_s(DISP_W - 52, 4, "FLEET", COL_CYAN, COL_ACCENT);
+    quartz_display_fill_rect(0, 24, DISP_W, 2, COL_ACCENT);
+
+    /* Fleet count — hero, with goal */
+    char buf[40];
+    quartz_display_draw_text_s(8, 36, "ENROLLED DEVICES", COL_GRAY, COL_BG);
+    snprintf(buf, sizeof(buf), "%lu / 100", member_count);
+    quartz_display_draw_text_l(8, 52, buf, member_count >= 100 ? COL_GREEN : COL_CYAN, COL_BG);
+
+    /* Progress bar toward the goal */
+    quartz_display_fill_rect(8, 84, 304, 12, COL_CARD);
+    uint32_t bar_w = (member_count * 304) / 100;
+    if (bar_w > 304) bar_w = 304;
+    if (bar_w > 0) quartz_display_fill_rect(8, 84, bar_w, 12, COL_GREEN);
+
+    /* Stats row */
+    quartz_display_draw_text_s(8, 116, "SHARES", COL_GRAY, COL_BG);
+    snprintf(buf, sizeof(buf), "%lu", my_shares);
+    quartz_display_draw_text_l(8, 130, buf, COL_WHITE, COL_BG);
+
+    quartz_display_draw_text_s(120, 116, "REWARDS", COL_GRAY, COL_BG);
+    snprintf(buf, sizeof(buf), "%llu.%02llu",
+             rewards_qz_milli / 1000, (rewards_qz_milli % 1000) / 10);
+    quartz_display_draw_text_l(120, 130, buf, COL_GREEN, COL_BG);
+    quartz_display_draw_text_s(120 + strlen(buf) * 14 + 4, 136, "QZ", COL_GRAY, COL_BG);
+
+    quartz_display_draw_text_s(240, 116, "BLOCKS", COL_GRAY, COL_BG);
+    snprintf(buf, sizeof(buf), "%lu", blocks_found);
+    quartz_display_draw_text_l(240, 130, buf, COL_WHITE, COL_BG);
+
+    /* Note line */
+    quartz_display_draw_text_s(8, 176, "100 devices unlocks exchange listings", COL_DARKGRAY, COL_BG);
+
+    /* Button hints */
+    quartz_display_fill_rect(0, 220, DISP_W, 20, COL_CARD);
+    quartz_display_draw_text_s(8, 223, "[A] Pay", COL_ACCENT, COL_CARD);
+    quartz_display_draw_text_s(120, 223, "[B] Next", COL_GRAY, COL_CARD);
+    quartz_display_draw_text_s(230, 223, "[C] -", COL_DARKGRAY, COL_CARD);
+#endif
+}
+
 /* === QR Payment Screen === */
-void quartz_display_qr_payment(const char *address, float amount) {
+void quartz_display_qr_payment(const char *address, float amount)
+{
 #ifdef ESP_PLATFORM
     if (!s_ready) return;
 

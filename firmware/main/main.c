@@ -185,6 +185,16 @@ static void poll_buttons(void) {
         } else if (quartz_display_get_screen() == QZ_SCREEN_PAYMENT) {
             s_payment_amount += 0.1f;
             quartz_display_qr_payment(quartz_wallet_get_address(), s_payment_amount);
+        } else {
+            /* Rotate: ID → FLEET → MINING → ID */
+            qz_screen_t cur = quartz_display_get_screen();
+            if (cur == QZ_SCREEN_ID) {
+                quartz_display_set_screen(QZ_SCREEN_FLEET);
+            } else if (cur == QZ_SCREEN_FLEET) {
+                quartz_display_set_screen(QZ_SCREEN_MINING);
+            } else if (cur == QZ_SCREEN_MINING) {
+                quartz_display_set_screen(QZ_SCREEN_ID);
+            }
         }
         return;
     }
@@ -205,7 +215,7 @@ static void poll_buttons(void) {
                     quartz_wallet_reset_pin_attempts();
                     ESP_LOGI(TAG, "PIN correct via M5Stack buttons");
                     quartz_display_clear(QZ_COLOR_BLACK);
-                    quartz_display_set_screen(QZ_SCREEN_MINING);
+                    quartz_display_set_screen(QZ_SCREEN_ID);
                 } else {
                     ESP_LOGW(TAG, "Wrong PIN via buttons");
                     quartz_wallet_record_failed_pin();
@@ -539,9 +549,15 @@ static void mining_task(void *pvParameters) {
 
     ESP_LOGI(TAG, "Mining started!");
 
-    /* Draw initial mining screen immediately */
+    /* Draw identity screen immediately — it's the boot default */
 #ifdef QUARTZ_HAS_DISPLAY
-    quartz_display_mining_stats(0, 0, 0, 0, quartz_wallet_get_address());
+    {
+        uint8_t devid[32] = {0};
+        quartz_attest_get_device_id(devid);
+        quartz_display_set_screen(QZ_SCREEN_ID);
+        quartz_display_id_screen(quartz_attest_is_provisioned(), devid, 0, 0,
+                                 quartz_wallet_get_address());
+    }
 #endif
 
     uint8_t header[80] = {0};
@@ -629,7 +645,19 @@ static void mining_task(void *pvParameters) {
                      hps, s_hash_count, nonce);
 
 #ifdef QUARTZ_HAS_DISPLAY
-            if (quartz_display_get_screen() == QZ_SCREEN_MINING) {
+            qz_screen_t cur = quartz_display_get_screen();
+            if (cur == QZ_SCREEN_ID) {
+                uint8_t devid[32] = {0};
+                quartz_attest_get_device_id(devid);
+                quartz_display_id_screen(quartz_attest_is_provisioned(), devid,
+                                         uptime, hps, quartz_wallet_get_address());
+            } else if (cur == QZ_SCREEN_FLEET) {
+                qz_pool_stats_t pst;
+                quartz_pool_get_stats(&pst);
+                quartz_display_fleet_screen(pst.member_count, pst.my_shares,
+                                            pst.rewards_earned_qz * 1000,
+                                            pst.blocks_found);
+            } else if (cur == QZ_SCREEN_MINING) {
                 quartz_display_mining_stats(
                     s_hash_count,
                     hps,

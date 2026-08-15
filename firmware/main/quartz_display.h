@@ -37,6 +37,22 @@ void quartz_display_init(void);
 /* Clear screen with color */
 void quartz_display_clear(uint16_t color);
 
+/* Identity screen — boot default. Hero: enrollment status + device ID.
+ * Hashrate intentionally demoted to a small line. */
+void quartz_display_id_screen(
+    bool enrolled,
+    const uint8_t device_id[32],
+    uint32_t uptime_sec,
+    uint32_t hash_rate,
+    const char *wallet_address);
+
+/* Fleet screen — network progress toward the 100-device goal. */
+void quartz_display_fleet_screen(
+    uint32_t member_count,
+    uint32_t my_shares,
+    uint64_t rewards_qz_milli,
+    uint32_t blocks_found);
+
 /* Fill a rectangle */
 void quartz_display_fill_rect(int x, int y, int w, int h, uint16_t color);
 
@@ -97,12 +113,14 @@ void quartz_display_qr_payment(const char *address, float amount);
 
 /* Screen navigation */
 typedef enum {
-    QZ_SCREEN_MINING = 0,
-    QZ_SCREEN_WALLET = 1,
-    QZ_SCREEN_MESSAGES = 2,
-    QZ_SCREEN_PAYMENT = 3,
-    QZ_SCREEN_PIN_ENTRY = 4,
-    QZ_SCREEN_RECOVERY = 5,
+    QZ_SCREEN_ID = 0,          /* Identity — boot default */
+    QZ_SCREEN_MINING = 1,
+    QZ_SCREEN_FLEET = 2,       /* Fleet / network progress */
+    QZ_SCREEN_WALLET = 3,
+    QZ_SCREEN_MESSAGES = 4,
+    QZ_SCREEN_PAYMENT = 5,
+    QZ_SCREEN_PIN_ENTRY = 6,
+    QZ_SCREEN_RECOVERY = 7,
     QZ_SCREEN_COUNT,
 } qz_screen_t;
 
