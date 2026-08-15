@@ -439,7 +439,7 @@ int quartz_qr_display(
     int total_px = size * scale;
 
 #ifdef ESP_PLATFORM
-    ESP_LOGI(TAG, "QR %dx%d modules, scale=%d, at (%d,%d)", size, size, scale, x, y);
+    ESP_LOGD(TAG, "QR %dx%d modules, scale=%d, at (%d,%d)", size, size, scale, x, y);
 #endif
 
     /* Clear background area with proper 4-module quiet zone */
@@ -473,7 +473,7 @@ int quartz_qr_display(
     }
 
 #ifdef ESP_PLATFORM
-    ESP_LOGI(TAG, "QR rendered at (%d,%d), %dx%d px", x, y, total_px, total_px);
+    ESP_LOGD(TAG, "QR rendered at (%d,%d), %dx%d px", x, y, total_px, total_px);
 #endif
 
     free(qrcode);
