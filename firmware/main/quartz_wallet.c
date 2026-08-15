@@ -232,6 +232,17 @@ quartz_wallet_err_t quartz_wallet_load(void) {
         return QZ_WALLET_ERR_CORRUPT;
     }
 
+    /* Restore failed-PIN counter so power-cycling can't reset it.
+     * (Brute-force fix: 10 wrong PINs = wipe, per LIFETIME, not per boot.) */
+    uint8_t stored_fails = 0;
+    if (nvs_get_u8(handle, NVS_KEY_PIN_FAIL, &stored_fails) == ESP_OK) {
+        s_pin_attempts = stored_fails;
+        if (s_pin_attempts > 0) {
+            ESP_LOGW(TAG, "PIN attempt counter restored: %d/%d",
+                     s_pin_attempts, PIN_MAX_ATTEMPTS);
+        }
+    }
+
     uint8_t flags = 0;
     nvs_get_u8(handle, NVS_KEY_FLAGS, &flags);
     nvs_close(handle);

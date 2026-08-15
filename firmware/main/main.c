@@ -24,6 +24,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
@@ -231,6 +232,85 @@ static void poll_buttons(void) {
             quartz_display_qr_payment(quartz_wallet_get_address(), s_payment_amount);
         }
         return;
+    }
+}
+
+/* === Persistent serial commands (available while mining) ===
+ * Post-setup the old first-boot command loop never ran — 'setpin' was
+ * unreachable on an existing wallet. This fixes that. */
+static char s_cmd_buf[64];
+static int  s_cmd_pos = 0;
+static bool s_serial_unlocked = false;
+
+static void quartz_serial_command(const char *cmd)
+{
+    if (strncasecmp(cmd, "setpin ", 7) == 0) {
+        const char *pin = cmd + 7;
+        if (quartz_wallet_has_pin() && !s_serial_unlocked) {
+            ESP_LOGE(TAG, "PIN already set — unlock first: 'pin <current PIN>'");
+            return;
+        }
+        if (strlen(pin) < 4 || strlen(pin) > 8) {
+            ESP_LOGE(TAG, "PIN must be 4-8 digits");
+            return;
+        }
+        quartz_wallet_set_pin(pin);
+        s_serial_unlocked = true;
+        ESP_LOGI(TAG, "✅ PIN set");
+    } else if (strncasecmp(cmd, "pin ", 4) == 0) {
+        const char *pin = cmd + 4;
+        if (quartz_wallet_check_pin(pin) == QZ_WALLET_OK) {
+            quartz_wallet_reset_pin_attempts();
+            s_serial_unlocked = true;
+            ESP_LOGI(TAG, "✅ Unlocked (serial session)");
+        } else {
+            ESP_LOGW(TAG, "❌ Wrong PIN (%d/10 lifetime attempts used)",
+                     quartz_wallet_pin_attempts());
+            if (quartz_wallet_record_failed_pin()) {
+                ESP_LOGE(TAG, "🚨 MAX ATTEMPTS — WALLET WIPED");
+            }
+        }
+    } else if (strcasecmp(cmd, "pinstatus") == 0) {
+        ESP_LOGI(TAG, "PIN: %s | failed attempts: %d/10 | serial: %s",
+                 quartz_wallet_has_pin() ? "SET" : "NONE",
+                 quartz_wallet_pin_attempts(),
+                 s_serial_unlocked ? "unlocked" : "locked");
+    } else if (strcasecmp(cmd, "seed") == 0) {
+        if (quartz_wallet_has_pin() && !s_serial_unlocked) {
+            ESP_LOGE(TAG, "Locked — unlock first: 'pin <digits>'");
+            return;
+        }
+        char words[12][12];
+        if (quartz_wallet_get_seed_phrase_for_backup(words, 12) == QZ_WALLET_OK) {
+            ESP_LOGW(TAG, "=== SEED PHRASE — write on paper, never type it in ===");
+            for (int i = 0; i < 12; i++) {
+                ESP_LOGI(TAG, "%2d. %s", i + 1, words[i]);
+            }
+            quartz_wallet_wipe_seed_phrase(words);
+            if (!quartz_wallet_has_pin()) {
+                ESP_LOGW(TAG, "⚠ No PIN set — protect this: 'setpin <4-8 digits>'");
+            }
+        } else {
+            ESP_LOGE(TAG, "No wallet on device");
+        }
+    } else if (strcasecmp(cmd, "help") == 0) {
+        ESP_LOGI(TAG, "Commands: setpin <digits> | pin <digits> | pinstatus | seed | help");
+    }
+}
+
+static void quartz_serial_poll(void)
+{
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) == 1) {
+        if (ch == '\n' || ch == '\r') {
+            if (s_cmd_pos > 0) {
+                s_cmd_buf[s_cmd_pos] = '\0';
+                quartz_serial_command(s_cmd_buf);
+                s_cmd_pos = 0;
+            }
+        } else if (s_cmd_pos < (int)sizeof(s_cmd_buf) - 1) {
+            s_cmd_buf[s_cmd_pos++] = ch;
+        }
     }
 }
 
@@ -547,7 +627,7 @@ static void mining_task(void *pvParameters) {
     s_start_time = esp_timer_get_time() / 1000000;
     s_hash_count = 0;
 
-    ESP_LOGI(TAG, "Mining started!");
+    ESP_LOGI(TAG, "Mining started! (serial: 'help' for commands — setpin/seed/pinstatus)");
 
     /* Draw identity screen immediately — it's the boot default */
 #ifdef QUARTZ_HAS_DISPLAY
@@ -570,6 +650,7 @@ static void mining_task(void *pvParameters) {
     uint32_t last_work_fetch = 0;
 
     while (s_mining) {
+        quartz_serial_poll();
         /* Fetch new work every 30 seconds or on first iteration */
         uint32_t now = esp_timer_get_time() / 1000000;
         if (quartz_wifi_is_connected() && (!have_work || (now - last_work_fetch) > 30)) {
@@ -722,6 +803,9 @@ void app_main(void) {
 
     /* Initialize NVS */
     init_nvs();
+
+    /* Serial console: non-blocking so the mining loop can poll for commands */
+    fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 
     /* Initialize display FIRST so we can show portal/splash */
     /* Initialize display (skip on headless boards like LilyGO T3) */
