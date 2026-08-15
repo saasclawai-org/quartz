@@ -12,8 +12,8 @@ android {
         applicationId = "com.quartz.wallet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -54,6 +54,9 @@ dependencies {
 
     // Security — EncryptedSharedPreferences for key storage
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Ed25519 (software wallet)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
     // QR codes
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")

@@ -16,7 +16,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quartz.wallet.ble.MiningStats
 import com.quartz.wallet.ble.QuartzBLEManager
+import com.quartz.wallet.data.WalletStore
+import com.quartz.wallet.wallet.SoftwareWallet
 import com.quartz.wallet.ui.theme.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.AnnotatedString
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,12 +104,70 @@ fun QuartzWalletApp() {
 
 @Composable
 fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
-    var hasWallet by remember { mutableStateOf(walletCreated) }
-    var balance by remember { mutableStateOf("0.00") }
-    var address by remember { mutableStateOf("Q7Xk9m2...3pQr") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
-    if (!hasWallet) {
-        Column(
+    var hasWallet by remember { mutableStateOf(WalletStore(context).hasWallet()) }
+    var address by remember { mutableStateOf(WalletStore(context).getAddress()) }
+    var balanceSats by remember { mutableStateOf<Long?>(null) }
+    var txCount by remember { mutableStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
+    var statusMsg by remember { mutableStateOf<String?>(null) }
+
+    // Create flow
+    var pendingWallet by remember { mutableStateOf<SoftwareWallet.NewWallet?>(null) }
+    var backedUp by remember { mutableStateOf(false) }
+
+    // Restore flow
+    var showRestore by remember { mutableStateOf(false) }
+    var restoreWords by remember { mutableStateOf(List(12) { "" }) }
+    var restoreError by remember { mutableStateOf<String?>(null) }
+
+    var showReceive by remember { mutableStateOf(false) }
+    var showSend by remember { mutableStateOf(false) }
+
+    // BLE provisioning may have created a wallet — re-check when told so
+    LaunchedEffect(walletCreated) {
+        val store = WalletStore(context)
+        if (store.hasWallet()) {
+            hasWallet = true
+            address = store.getAddress()
+        }
+    }
+
+    fun refreshBalance() {
+        val addr = address ?: return
+        refreshing = true
+        scope.launch {
+            SoftwareWallet.fetchBalance(addr).onSuccess {
+                balanceSats = it.balanceSats
+                txCount = it.txCount
+            }.onFailure { statusMsg = it.message }
+            refreshing = false
+        }
+    }
+
+    LaunchedEffect(address) { if (address != null) refreshBalance() }
+
+    val pending = pendingWallet
+    when {
+        // ── Seed reveal (create flow, step 2) ──────────────────────
+        pending != null -> SeedRevealScreen(
+            words = pending.words,
+            backedUp = backedUp,
+            onChecked = { backedUp = it },
+            onConfirm = {
+                SoftwareWallet.save(context, pending)
+                pendingWallet = null
+                backedUp = false
+                hasWallet = true
+                address = pending.address
+            }
+        )
+
+        // ── Onboarding ─────────────────────────────────────────────
+        !hasWallet -> Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
@@ -116,50 +179,83 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                 color = QuartzMuted, fontSize = 15.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 8.dp, bottom = 32.dp))
             Button(
-                onClick = { hasWallet = true },
+                onClick = { pendingWallet = SoftwareWallet.create() },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
             ) { Text("Create New Wallet", color = QuartzBg, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
+                onClick = { showRestore = true },
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) { Text("🗝 Restore from Seed Phrase") }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
                 onClick = onImport,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) { Text("📷 Import Wallet (Scan QR)") }
+            ) { Text("📷 Import Wallet (Scan QR / ESP32)") }
         }
-    } else {
-        Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-            // Balance card
+
+        // ── Wallet view ────────────────────────────────────────────
+        else -> Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = QuartzCard),
                 shape = MaterialTheme.shapes.large
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
-                    Text("Total Balance", color = QuartzMuted, fontSize = 14.sp)
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(balance, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold)
-                        Text(" QZ", color = QuartzAccent, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Total Balance", color = QuartzMuted, fontSize = 14.sp,
+                            modifier = Modifier.weight(1f))
+                        if (refreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp, color = QuartzAccent
+                            )
+                        } else {
+                            TextButton(onClick = { refreshBalance() }) {
+                                Text("↻", color = QuartzMuted, fontSize = 18.sp)
+                            }
+                        }
                     }
-                    Text("≈ \$0.00 USD", color = QuartzMuted, fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            balanceSats?.let { formatQz(it) } ?: "…",
+                            fontSize = 40.sp, fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(" QZ", color = QuartzAccent, fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+                    }
                     Spacer(Modifier.height(16.dp))
                     Surface(color = QuartzBg, shape = MaterialTheme.shapes.medium) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth(),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                .fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(address, color = QuartzMuted, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, modifier = Modifier.weight(1f))
+                            Text(
+                                address ?: "",
+                                color = QuartzMuted, fontSize = 12.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                modifier = Modifier.weight(1f)
+                            )
                             Text("📋", color = QuartzAccent)
                         }
                     }
                 }
             }
 
+            statusMsg?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, color = QuartzOrange, fontSize = 13.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth())
+            }
+
             Spacer(Modifier.height(20.dp))
 
-            // Action buttons
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
-                    onClick = {},
+                    onClick = { showReceive = true },
                     modifier = Modifier.weight(1f).height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = QuartzCard),
                     shape = MaterialTheme.shapes.medium
@@ -170,7 +266,7 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                     }
                 }
                 Button(
-                    onClick = {},
+                    onClick = { showSend = true },
                     modifier = Modifier.weight(1f).height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = QuartzCard),
                     shape = MaterialTheme.shapes.medium
@@ -191,12 +287,275 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("📋", fontSize = 48.sp, modifier = Modifier.alpha(0.3f))
-                Text("No transactions yet", color = QuartzMuted, fontSize = 14.sp)
+                Text(
+                    if (txCount > 0) "$txCount transaction${if (txCount == 1) "" else "s"} on-chain" else "No transactions yet",
+                    color = QuartzMuted, fontSize = 14.sp
+                )
             }
         }
     }
+
+    // ── Restore dialog ────────────────────────────────────────────
+    if (showRestore) {
+        AlertDialog(
+            onDismissRequest = { showRestore = false; restoreError = null },
+            title = { Text("🗝 Restore Wallet") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Enter your 12-word seed phrase",
+                        fontSize = 13.sp, color = QuartzMuted,
+                        modifier = Modifier.padding(bottom = 12.dp))
+                    for (row in 0 until 4) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (col in 0 until 3) {
+                                val i = row * 3 + col
+                                OutlinedTextField(
+                                    value = restoreWords[i],
+                                    onValueChange = { v -> restoreWords = restoreWords.toMutableList().also { it[i] = v.trim().lowercase() } },
+                                    label = { Text("${i + 1}", fontSize = 10.sp) },
+                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    restoreError?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, color = QuartzOrange, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        restoreError = null
+                        try {
+                            val wallet = SoftwareWallet.restore(restoreWords)
+                            SoftwareWallet.save(context, wallet)
+                            hasWallet = true
+                            address = wallet.address
+                            showRestore = false
+                        } catch (e: IllegalArgumentException) {
+                            restoreError = e.message
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                ) { Text("Restore", color = QuartzBg) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestore = false; restoreError = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // ── Receive dialog ────────────────────────────────────────────
+    if (showReceive && address != null) {
+        AlertDialog(
+            onDismissRequest = { showReceive = false },
+            title = { Text("📥 Receive QZ") },
+            text = {
+                Column {
+                    Text("Your address:", fontSize = 13.sp, color = QuartzMuted)
+                    Spacer(Modifier.height(6.dp))
+                    Surface(color = QuartzBg, shape = MaterialTheme.shapes.medium) {
+                        Text(
+                            address!!,
+                            fontSize = 13.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            clipboard.setText(AnnotatedString(address!!))
+                            android.widget.Toast.makeText(context, "Address copied", android.widget.Toast.LENGTH_SHORT).show()
+                        }, modifier = Modifier.weight(1f)) { Text("📋 Copy") }
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                SoftwareWallet.faucet(address!!).onSuccess {
+                                    statusMsg = "🚰 Faucet: $it"
+                                    android.widget.Toast.makeText(context, "Faucet sent — refresh in ~30s", android.widget.Toast.LENGTH_SHORT).show()
+                                    refreshBalance()
+                                }.onFailure { statusMsg = "Faucet: ${it.message}" }
+                            }
+                        }, modifier = Modifier.weight(1f)) { Text("🚰 Testnet Faucet") }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showReceive = false }) { Text("Close") } }
+        )
+    }
+
+    // ── Send dialog ───────────────────────────────────────────────
+    if (showSend) {
+        SendDialog(
+            address = address ?: "",
+            balanceSats = balanceSats ?: 0,
+            onDismiss = { showSend = false },
+            onSent = { msg -> showSend = false; statusMsg = msg; refreshBalance() }
+        )
+    }
 }
 
+@Composable
+private fun SeedRevealScreen(
+    words: List<String>,
+    backedUp: Boolean,
+    onChecked: (Boolean) -> Unit,
+    onConfirm: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())
+    ) {
+        Text("🔮", fontSize = 48.sp)
+        Spacer(Modifier.height(8.dp))
+        Text("Your Seed Phrase", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Write these 12 words down on paper. They are the ONLY way to recover your wallet.",
+            color = QuartzOrange, fontSize = 14.sp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+        Text("Never share them. Never screenshot them.",
+            color = QuartzMuted, fontSize = 13.sp,
+            modifier = Modifier.padding(bottom = 20.dp))
+
+        for (row in 0 until 4) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (col in 0 until 3) {
+                    val i = row * 3 + col
+                    Surface(
+                        color = QuartzCard,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${i + 1}. ", color = QuartzMuted, fontSize = 12.sp)
+                            Text(words[i], fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = backedUp, onCheckedChange = onChecked)
+            Text("I have written down my seed phrase", fontSize = 14.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onConfirm,
+            enabled = backedUp,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = QuartzAccent,
+                disabledContainerColor = QuartzCard
+            )
+        ) { Text("Confirm & Open Wallet", color = QuartzBg, fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun SendDialog(
+    address: String,
+    balanceSats: Long,
+    onDismiss: () -> Unit,
+    onSent: (String) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var toAddress by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var sending by remember { mutableStateOf(false) }
+
+    val keys = remember(address) { SoftwareWallet.load(context) }
+    val watchOnly = keys == null
+
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text("📤 Send QZ") },
+        text = {
+            Column {
+                if (watchOnly) {
+                    Text("This is a hardware (ESP32) wallet — sending requires the device. Keys are not on this phone.",
+                        color = QuartzOrange, fontSize = 14.sp)
+                } else {
+                    OutlinedTextField(
+                        value = toAddress,
+                        onValueChange = { toAddress = it.trim() },
+                        label = { Text("Recipient address") },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Amount (QZ)") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Available: ${formatQz(balanceSats)} QZ · fee 0.00001 QZ",
+                        fontSize = 12.sp, color = QuartzMuted
+                    )
+                    error?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, color = QuartzOrange, fontSize = 13.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (!watchOnly) {
+                Button(
+                    onClick = {
+                        error = null
+                        val amt = amount.toDoubleOrNull()
+                        val sats = amt?.let { (it * 1e8).toLong() } ?: 0
+                        when {
+                            sats <= 0 -> error = "Enter a valid amount"
+                            toAddress.isEmpty() -> error = "Enter a recipient address"
+                            sats + SoftwareWallet.FEE_SATS > balanceSats ->
+                                error = "Insufficient balance (need amount + fee)"
+                            else -> {
+                                sending = true
+                                val (priv, _, from) = keys!!
+                                scope.launch {
+                                    SoftwareWallet.send(priv, from, toAddress, sats)
+                                        .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
+                                        .onFailure { e -> error = e.message; sending = false }
+                                }
+                            }
+                        }
+                    },
+                    enabled = !sending,
+                    colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                ) { Text(if (sending) "Sending…" else "Send", color = QuartzBg) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!sending) onDismiss() }) { Text("Cancel") }
+        }
+    )
+}
+
+private fun formatQz(sats: Long): String {
+    val qz = sats / 1e8
+    val s = String.format(java.util.Locale.US, if (qz == Math.floor(qz) && qz < 1e9) "%.0f" else "%.8f", qz)
+    return s.trimEnd('0').trimEnd('.')
+}
 @Composable
 fun MinerScreen(bleManager: QuartzBLEManager) {
     var isScanning by remember { mutableStateOf(false) }
