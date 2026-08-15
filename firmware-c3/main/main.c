@@ -272,6 +272,7 @@ static void console_task(void *pvParameters) {
             ESP_LOGI(TAG, "  address              show wallet address");
             ESP_LOGI(TAG, "  seed                 show backup phrase (unlocks via PIN if set)");
             ESP_LOGI(TAG, "  recover <12 words>   replace wallet from seed phrase, then reboot");
+            ESP_LOGI(TAG, "  send <addr> <amount> sign + broadcast tx (e.g. send Qk... 1.5)");
             ESP_LOGI(TAG, "  pin <digits>         unlock (if PIN set)");
             ESP_LOGI(TAG, "  setpin <digits>      set/change PIN");
             ESP_LOGI(TAG, "  pinstatus            PIN state");
@@ -333,6 +334,112 @@ static void console_task(void *pvParameters) {
                     ESP_LOGE(TAG, "❌ Restore failed (code %d)", rerr);
                 }
             }
+        } else if (strncasecmp(line, "send ", 5) == 0) {
+            /* send <to_address> <amount_qz> — signs on-device, broadcasts via node */
+            char to[40];
+            long long sats = 0;
+            int frac = 0;
+            bool dot = false, ok = true;
+
+            const char *p = line + 5;
+            while (*p == ' ') p++;
+            char *sp = strchr(p, ' ');
+            if (!sp) {
+                ESP_LOGE(TAG, "Usage: send <address> <amount_qz>  (e.g. send QkAbc... 1.5)");
+                goto console_next;
+            }
+            size_t alen = (size_t)(sp - p);
+            if (alen == 0 || alen >= sizeof(to)) {
+                ESP_LOGE(TAG, "Bad address");
+                goto console_next;
+            }
+            memcpy(to, p, alen);
+            to[alen] = '\0';
+            const char *amt = sp + 1;
+
+            /* Parse decimal amount into integer sats (no float math) */
+            for (const char *q = amt; *q && *q != ' '; q++) {
+                if (*q == '.') {
+                    if (dot) { ok = false; break; }
+                    dot = true;
+                    continue;
+                }
+                if (*q < '0' || *q > '9') { ok = false; break; }
+                if (dot) {
+                    if (frac >= 8) { ok = false; break; }  /* max 8 decimals */
+                    frac++;
+                }
+                sats = sats * 10 + (*q - '0');
+            }
+            for (int i = frac; i < 8; i++) sats *= 10;  /* scale to sats */
+
+            if (!ok || sats <= 0) {
+                ESP_LOGE(TAG, "Bad amount (max 8 decimals)");
+                goto console_next;
+            }
+            if (quartz_wallet_has_pin() && !quartz_ble_is_unlocked()) {
+                ESP_LOGW(TAG, "PIN set — 'pin <digits>' first");
+                goto console_next;
+            }
+            {
+                const char *from = quartz_wallet_get_address();
+                const uint8_t *pub = quartz_wallet_get_pubkey();
+                if (!from || !pub) {
+                    ESP_LOGE(TAG, "No wallet");
+                    goto console_next;
+                }
+
+                /* message = "<from><to><amount_sats>" — exact node format */
+                char sats_str[24], msg[128], msg_hex[257],
+                     sig_hex[129], pub_hex[65], amount_qz[32];
+                snprintf(sats_str, sizeof(sats_str), "%lld", sats);
+                snprintf(msg, sizeof(msg), "%s%s%s", from, to, sats_str);
+
+                uint8_t sig[64];
+                if (quartz_wallet_sign((const uint8_t *)msg, strlen(msg), sig) != QZ_WALLET_OK) {
+                    ESP_LOGE(TAG, "Signing failed");
+                    goto console_next;
+                }
+                static const char hx[] = "0123456789abcdef";
+                for (int i = 0; i < 64; i++) {
+                    sig_hex[i * 2] = hx[sig[i] >> 4];
+                    sig_hex[i * 2 + 1] = hx[sig[i] & 0xF];
+                }
+                sig_hex[128] = '\0';
+                for (int i = 0; i < 32; i++) {
+                    pub_hex[i * 2] = hx[pub[i] >> 4];
+                    pub_hex[i * 2 + 1] = hx[pub[i] & 0xF];
+                }
+                pub_hex[64] = '\0';
+                for (size_t i = 0; i < strlen(msg); i++) {
+                    msg_hex[i * 2] = hx[(uint8_t)msg[i] >> 4];
+                    msg_hex[i * 2 + 1] = hx[(uint8_t)msg[i] & 0xF];
+                }
+                msg_hex[strlen(msg) * 2] = '\0';
+
+                /* sats -> QZ decimal string, trailing zeros stripped */
+                long long whole = sats / 100000000LL, rem = sats % 100000000LL;
+                snprintf(amount_qz, sizeof(amount_qz), "%lld.%08lld", whole, rem);
+                for (char *e = amount_qz + strlen(amount_qz) - 1; *e == '0'; e--) *e = '\0';
+                if (amount_qz[strlen(amount_qz) - 1] == '.') amount_qz[strlen(amount_qz) - 1] = '\0';
+
+                char body[768], response[1024];
+                snprintf(body, sizeof(body),
+                         "{\"from\":\"%s\",\"to\":\"%s\",\"amount\":%s,"
+                         "\"signature\":\"%s\",\"public_key\":\"%s\",\"message\":\"%s\"}",
+                         from, to, amount_qz, sig_hex, pub_hex, msg_hex);
+
+                ESP_LOGI(TAG, "Sending %s QZ to %s ...", amount_qz, to);
+                int rc = quartz_http_request("POST", "/api/v1/send", body, response, sizeof(response));
+                if (rc < 0) {
+                    ESP_LOGE(TAG, "Node unreachable (rc=%d) — WiFi connected?", rc);
+                } else {
+                    ESP_LOGI(TAG, "Node: %s", response);
+                    if (strstr(response, "\"txid\"")) {
+                        ESP_LOGI(TAG, "✅ Sent — pending in mempool, mined within ~30s");
+                    }
+                }
+            }
         } else if (strncasecmp(line, "pin ", 4) == 0) {
             if (quartz_wallet_check_pin(line + 4) == QZ_WALLET_OK) {
                 quartz_wallet_reset_pin_attempts();
@@ -351,6 +458,8 @@ static void console_task(void *pvParameters) {
                      quartz_wallet_pin_attempts(),
                      quartz_ble_is_unlocked() ? "YES" : "NO");
         }
+console_next:
+        ;
     }
 }
 
@@ -846,7 +955,7 @@ void app_main(void) {
     }
 
     /* Serial console — always available */
-    xTaskCreatePinnedToCore(console_task, "quartz_console", 4096, NULL, 2, NULL,
+    xTaskCreatePinnedToCore(console_task, "quartz_console", 6144, NULL, 2, NULL,
 #if CONFIG_FREERTOS_UNICORE
         tskNO_AFFINITY
 #else
