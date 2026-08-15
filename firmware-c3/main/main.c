@@ -35,6 +35,7 @@
 #include "driver/gpio.h"
 #include "driver/adc.h"
 #include "nvs_flash.h"
+#include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -238,6 +239,118 @@ static void init_nvs(void) {
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
+    }
+}
+
+/* ============================================================
+ * Serial Console — always-on command interface
+ * Runs as its own task; mining keeps running.
+ * Commands: help | address | seed | recover <12 words> | pin <d> | setpin <d> | pinstatus
+ * ============================================================ */
+static void console_task(void *pvParameters) {
+    static char line[256];
+    int pos = 0;
+
+    ESP_LOGI(TAG, "Console ready — type 'help'");
+
+    for (;;) {
+        char ch;
+        int n = read(STDIN_FILENO, &ch, 1);
+        if (n != 1) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        if (ch != '\n' && ch != '\r') {
+            if (pos < (int)sizeof(line) - 1) line[pos++] = ch;
+            continue;
+        }
+        line[pos] = '\0';
+        pos = 0;
+
+        if (strcasecmp(line, "help") == 0) {
+            ESP_LOGI(TAG, "Commands:");
+            ESP_LOGI(TAG, "  address              show wallet address");
+            ESP_LOGI(TAG, "  seed                 show backup phrase (unlocks via PIN if set)");
+            ESP_LOGI(TAG, "  recover <12 words>   replace wallet from seed phrase, then reboot");
+            ESP_LOGI(TAG, "  pin <digits>         unlock (if PIN set)");
+            ESP_LOGI(TAG, "  setpin <digits>      set/change PIN");
+            ESP_LOGI(TAG, "  pinstatus            PIN state");
+        } else if (strcasecmp(line, "address") == 0) {
+            ESP_LOGI(TAG, "Address: %s", quartz_wallet_get_address());
+        } else if (strcasecmp(line, "seed") == 0) {
+            if (quartz_wallet_has_pin() && !quartz_ble_is_unlocked()) {
+                ESP_LOGW(TAG, "PIN set — 'pin <digits>' first");
+            } else {
+                char words[12][12];
+                if (quartz_wallet_get_seed_phrase_for_backup(words, 12) == QZ_WALLET_OK) {
+                    ESP_LOGI(TAG, "Seed phrase:");
+                    for (int i = 0; i < 12; i += 4) {
+                        ESP_LOGI(TAG, "  %2d %-11s %2d %-11s %2d %-11s %2d %s",
+                                 i + 1, words[i], i + 2, words[i + 1],
+                                 i + 3, words[i + 2], i + 4, words[i + 3]);
+                    }
+                    if (!quartz_wallet_has_canonical_entropy()) {
+                        ESP_LOGW(TAG, "⚠️ LEGACY wallet — this phrase CANNOT restore it.");
+                        ESP_LOGW(TAG, "   Use 'recover <12 words>' to migrate to a canonical wallet.");
+                    }
+                } else {
+                    ESP_LOGE(TAG, "No wallet");
+                }
+            }
+        } else if (strncasecmp(line, "recover ", 8) == 0) {
+            /* recover word1 word2 ... word12 */
+            char words[12][12];
+            int wi = 0;
+            char *tok = line + 8;
+            bool ok = true;
+            while (wi < 12 && ok) {
+                while (*tok == ' ') tok++;
+                if (*tok == '\0') { ok = false; break; }
+                char *end = strchr(tok, ' ');
+                size_t len = end ? (size_t)(end - tok) : strlen(tok);
+                if (len == 0 || len > 11) { ok = false; break; }
+                memcpy(words[wi], tok, len);
+                words[wi][len] = '\0';
+                for (char *p = words[wi]; *p; p++) *p = tolower((unsigned char)*p);
+                wi++;
+                tok = end ? end + 1 : tok + len;
+            }
+            if (!ok || wi != 12 || *tok != '\0') {
+                ESP_LOGE(TAG, "Usage: recover <12 words>");
+            } else if (quartz_wallet_has_pin() && !quartz_ble_is_unlocked()) {
+                ESP_LOGW(TAG, "PIN set — 'pin <digits>' first");
+            } else {
+                bool testnet = quartz_wallet_is_testnet();
+                quartz_wallet_err_t rerr = quartz_wallet_restore(words, testnet);
+                if (rerr == QZ_WALLET_OK) {
+                    ESP_LOGI(TAG, "✅ Wallet restored — new address: %s", quartz_wallet_get_address());
+                    ESP_LOGI(TAG, "Rebooting in 2s...");
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    esp_restart();
+                } else if (rerr == QZ_WALLET_ERR_INVALID) {
+                    ESP_LOGE(TAG, "❌ Invalid seed phrase (bad word or checksum)");
+                } else {
+                    ESP_LOGE(TAG, "❌ Restore failed (code %d)", rerr);
+                }
+            }
+        } else if (strncasecmp(line, "pin ", 4) == 0) {
+            if (quartz_wallet_check_pin(line + 4) == QZ_WALLET_OK) {
+                quartz_wallet_reset_pin_attempts();
+                quartz_ble_force_unlock();
+                ESP_LOGI(TAG, "✅ PIN correct — device unlocked");
+            } else {
+                ESP_LOGW(TAG, "❌ Wrong PIN (attempt %d/10)", quartz_wallet_pin_attempts() + 1);
+                quartz_wallet_record_failed_pin();
+            }
+        } else if (strncasecmp(line, "setpin ", 7) == 0) {
+            quartz_wallet_set_pin(line + 7);
+            ESP_LOGI(TAG, "PIN set");
+        } else if (strcasecmp(line, "pinstatus") == 0) {
+            ESP_LOGI(TAG, "PIN: %s, attempts: %d/10, unlocked: %s",
+                     quartz_wallet_has_pin() ? "SET" : "NONE",
+                     quartz_wallet_pin_attempts(),
+                     quartz_ble_is_unlocked() ? "YES" : "NO");
+        }
     }
 }
 
@@ -731,6 +844,15 @@ void app_main(void) {
 #endif
         quartz_wifi_wait_connected(15000);
     }
+
+    /* Serial console — always available */
+    xTaskCreatePinnedToCore(console_task, "quartz_console", 4096, NULL, 2, NULL,
+#if CONFIG_FREERTOS_UNICORE
+        tskNO_AFFINITY
+#else
+        0
+#endif
+    );
 
     /* Start mining task — Core 1 on dual-core ESP32 (Core 0 = WiFi/BLE/display),
      * no affinity on single-core chips like C3 */

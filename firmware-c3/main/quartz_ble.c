@@ -446,6 +446,10 @@ void quartz_ble_set_address(const char *address) {
     }
 }
 
+void quartz_ble_force_unlock(void) {
+    s_device_unlocked = true;
+}
+
 bool quartz_ble_is_connected(void) {
     return s_connected;
 }

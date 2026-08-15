@@ -30,6 +30,7 @@ void quartz_ble_update_stats(uint32_t hash_count, uint32_t hash_rate,
 void quartz_ble_set_address(const char *address);
 
 /* Check if BLE is connected */
+void quartz_ble_force_unlock(void);
 bool quartz_ble_is_connected(void);
 
 /* Provisioning: get seed phrase over BLE (only works once, before confirmation) */

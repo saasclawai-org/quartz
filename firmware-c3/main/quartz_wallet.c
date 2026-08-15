@@ -13,6 +13,7 @@
  */
 
 #include "quartz_wallet.h"
+#include "quartz_bip39.h"
 #include "quartz.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
@@ -40,6 +41,8 @@ static const char *TAG = "QUARTZ_WALLET";
 
 static uint8_t s_private_key[ED25519_PRIVATE_KEY_SIZE];
 static uint8_t s_public_key[ED25519_PUBLIC_KEY_SIZE];
+static uint8_t s_wallet_entropy[16];   // BIP-39 entropy — seed phrase derivable iff present
+static bool s_has_entropy = false;     // false for legacy (pre-canonical) wallets
 static char s_address[36];  // Base58 address string
 static bool s_wallet_initialized = false;
 
@@ -53,6 +56,7 @@ static bool s_wallet_initialized = false;
 #define NVS_KEY_PIN_HASH  "pin_hash"   // 32 bytes SHA-256(salt + pin)
 #define NVS_KEY_PIN_SALT  "pin_salt"   // 16 bytes random salt
 #define NVS_KEY_PIN_FAIL  "pin_fails"  // uint8_t failed attempt count
+#define NVS_KEY_ENTROPY   "entropy"    // 16-byte BIP-39 entropy (canonical wallets)
 
 #define PIN_MAX_ATTEMPTS  10
 
@@ -168,13 +172,17 @@ static void derive_address(const uint8_t pubkey[32], bool testnet, char *out, si
 // ============================================================
 
 quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
-    // 1. Generate 32 bytes of true random for Ed25519 seed
-    quartz_rng(s_private_key, ED25519_PRIVATE_KEY_SIZE);
+    // 1. Generate 16 bytes of true random — the BIP-39 entropy.
+    //    The wallet key is derived canonically from it, so the 12-word
+    //    backup phrase restores this exact wallet on phone/node/other device.
+    quartz_rng(s_wallet_entropy, 16);
+    if (!quartz_bip39_entropy_to_privkey(s_wallet_entropy, s_private_key)) {
+        ESP_LOGE(TAG, "Canonical key derivation failed");
+        return QZ_WALLET_ERR_STORAGE;
+    }
+    s_has_entropy = true;
 
     // 2. Derive Ed25519 public key from private seed
-    //    (Uses micro-ecc or esp_tinycrypt in production)
-    //    Placeholder: use mbedtls or link a compact Ed25519 impl
-    //    For now, we store the seed and derive pubkey via crypto library
     quartz_ed25519_keypair(s_private_key, s_public_key);
 
     // 3. Derive Quartz address
@@ -190,6 +198,7 @@ quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
 
     nvs_set_blob(handle, NVS_KEY_PRIV, s_private_key, ED25519_PRIVATE_KEY_SIZE);
     nvs_set_blob(handle, NVS_KEY_PUB, s_public_key, ED25519_PUBLIC_KEY_SIZE);
+    nvs_set_blob(handle, NVS_KEY_ENTROPY, s_wallet_entropy, 16);
 
     uint8_t flags = FLAG_MINING_ENABLED | (testnet ? FLAG_TESTNET : 0);
     nvs_set_u8(handle, NVS_KEY_FLAGS, flags);
@@ -234,6 +243,15 @@ quartz_wallet_err_t quartz_wallet_load(void) {
 
     uint8_t flags = 0;
     nvs_get_u8(handle, NVS_KEY_FLAGS, &flags);
+
+    // Canonical wallets store their BIP-39 entropy — the seed phrase restores
+    // them. Legacy wallets (raw RNG key) don't; their backup words remain lossy.
+    size_t ent_len = 16;
+    if (nvs_get_blob(handle, NVS_KEY_ENTROPY, s_wallet_entropy, &ent_len) == ESP_OK
+        && ent_len == 16) {
+        s_has_entropy = true;
+    }
+
     nvs_close(handle);
 
     bool testnet = flags & FLAG_TESTNET;
@@ -272,6 +290,14 @@ const uint8_t *quartz_wallet_get_pubkey(void) {
     return s_public_key;
 }
 
+bool quartz_wallet_has_canonical_entropy(void) {
+    return s_has_entropy;
+}
+
+bool quartz_wallet_is_testnet(void) {
+    return s_address[0] == 'T';  /* testnet addresses start with T (0x7F) */
+}
+
 const char *quartz_wallet_get_address(void) {
     if (!s_wallet_initialized) return NULL;
     return s_address;
@@ -300,9 +326,22 @@ quartz_wallet_err_t quartz_wallet_get_seed_phrase_for_backup(
 ) {
     if (!s_wallet_initialized) return QZ_WALLET_ERR_NOT_FOUND;
 
-    // Convert private key bytes to BIP39 mnemonic
-    // (uses the official BIP39 wordlist + checksum)
-    quartz_privkey_to_mnemonic(s_private_key, words, max_word_len);
+    if (s_has_entropy) {
+        // Canonical wallet: words derive from stored entropy — restore works
+        // on phone/node/any device (BIP-39 + SLIP-0010 m/44'/789'/0'/0'/0').
+        char tmp[QZ_BIP39_WORDS][QZ_BIP39_WORD_MAX];
+        if (!quartz_bip39_entropy_to_words(s_wallet_entropy, tmp)) {
+            return QZ_WALLET_ERR_CORRUPT;
+        }
+        for (int i = 0; i < 12; i++) {
+            strncpy(words[i], tmp[i], max_word_len - 1);
+            words[i][max_word_len - 1] = '\0';
+        }
+    } else {
+        // LEGACY (pre-canonical) wallet: raw RNG key, words encode only the
+        // first 16 bytes. Phrase CANNOT restore this wallet — display only.
+        quartz_privkey_to_mnemonic(s_private_key, words, max_word_len);
+    }
 
     ESP_LOGW(TAG, "Seed phrase generated for ONE-TIME backup display");
     ESP_LOGW(TAG, "After user confirms backup, mnemonic MUST be wiped from RAM");
@@ -314,6 +353,43 @@ void quartz_wallet_wipe_seed_phrase(char words[12][12]) {
     // Securely zero the mnemonic buffer
     memset(words, 0, 12 * 12);
     ESP_LOGI(TAG, "Seed phrase wiped from RAM");
+}
+
+// ============================================================
+// Restore — Import Wallet from Seed Phrase (canonical derivation)
+// ============================================================
+
+quartz_wallet_err_t quartz_wallet_restore(const char words[12][12], bool testnet) {
+    uint8_t entropy[16];
+    uint8_t priv[32];
+
+    if (!quartz_bip39_words_to_entropy(words, entropy)) {
+        return QZ_WALLET_ERR_INVALID;
+    }
+    if (!quartz_bip39_entropy_to_privkey(entropy, priv)) {
+        return QZ_WALLET_ERR_STORAGE;
+    }
+
+    memcpy(s_private_key, priv, 32);
+    quartz_ed25519_keypair(s_private_key, s_public_key);
+    derive_address(s_public_key, testnet, s_address, sizeof(s_address));
+    memcpy(s_wallet_entropy, entropy, 16);
+    s_has_entropy = true;
+    s_wallet_initialized = true;
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) return QZ_WALLET_ERR_STORAGE;
+    nvs_set_blob(handle, NVS_KEY_PRIV, s_private_key, 32);
+    nvs_set_blob(handle, NVS_KEY_PUB, s_public_key, 32);
+    nvs_set_blob(handle, NVS_KEY_ENTROPY, s_wallet_entropy, 16);
+    uint8_t flags = FLAG_MINING_ENABLED | (testnet ? FLAG_TESTNET : 0);
+    nvs_set_u8(handle, NVS_KEY_FLAGS, flags);
+    nvs_commit(handle);
+    nvs_close(handle);
+
+    ESP_LOGI(TAG, "Wallet restored from seed phrase: %s", s_address);
+    return QZ_WALLET_OK;
 }
 
 // ============================================================

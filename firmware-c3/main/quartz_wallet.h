@@ -36,6 +36,16 @@ typedef enum {
  */
 quartz_wallet_err_t quartz_wallet_generate(bool testnet);
 
+/** Import a wallet from a 12-word seed phrase (canonical BIP-39 + SLIP-0010).
+ *  Rejects invalid words/checksum with QZ_WALLET_ERR_INVALID. */
+quartz_wallet_err_t quartz_wallet_restore(const char words[12][12], bool testnet);
+
+/** True if the wallet stores BIP-39 entropy (seed phrase restores it). */
+bool quartz_wallet_has_canonical_entropy(void);
+
+/** True if current wallet is a testnet wallet. */
+bool quartz_wallet_is_testnet(void);
+
 /**
  * Load existing wallet from NVS (called on boot).
  *
