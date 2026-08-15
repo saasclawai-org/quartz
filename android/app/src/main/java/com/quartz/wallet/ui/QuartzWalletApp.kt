@@ -35,6 +35,9 @@ fun QuartzWalletApp() {
     // Navigation state for seed provisioning overlay
     var showProvisioning by remember { mutableStateOf(false) }
     var walletCreated by remember { mutableStateOf(false) }
+    // Bumped when the wallet is deleted — forces WalletScreen to rebuild
+    // from storage (shows onboarding again instead of stale state)
+    var walletEpoch by remember { mutableIntStateOf(0) }
 
     if (showProvisioning) {
         SeedProvisioningScreen(
@@ -91,12 +94,17 @@ fun QuartzWalletApp() {
             modifier = Modifier.padding(padding)
         ) { page ->
             when (page) {
-                0 -> WalletScreen(
-                    walletCreated = walletCreated,
-                    onImport = { showProvisioning = true }
-                )
+                0 -> key(walletEpoch) {
+                    WalletScreen(
+                        walletCreated = walletCreated,
+                        onImport = { showProvisioning = true }
+                    )
+                }
                 1 -> MinerScreen(bleManager = bleManager)
-                2 -> SettingsScreen()
+                2 -> SettingsScreen(onWalletDeleted = {
+                    walletCreated = false
+                    walletEpoch++
+                })
             }
         }
     }
@@ -750,7 +758,13 @@ fun formatUptime(seconds: Long): String {
 }
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { WalletStore(context) }
+    var showConfirm by remember { mutableStateOf(false) }
+    var confirmText by remember { mutableStateOf("") }
+    var deleted by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
         Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(24.dp))
@@ -778,9 +792,64 @@ fun SettingsScreen() {
         }
         Spacer(Modifier.height(12.dp))
         Button(
-            onClick = {},
+            onClick = {
+                deleted = false
+                confirmText = ""
+                showConfirm = true
+            },
+            enabled = store.hasWallet(),
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = QuartzOrange)
-        ) { Text("🗑 Delete Wallet") }
+        ) { Text(if (store.hasWallet()) "🗑 Delete Wallet" else "🗑 No Wallet on This Phone") }
+
+        if (!store.hasWallet()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (deleted) "✓ Wallet deleted. Go to the Wallet tab to create or restore one."
+                else "No wallet found on this phone.",
+                color = QuartzMuted, fontSize = 13.sp
+            )
+        }
+    }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false; confirmText = "" },
+            title = { Text("Delete wallet?") },
+            text = {
+                Column {
+                    Text("This permanently removes your seed phrase and keys from this phone.", fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Your QZ is ONLY recoverable with your 12-word backup phrase. " +
+                        "If you don't have it written down, it will be gone forever.",
+                        color = QuartzOrange, fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = confirmText,
+                        onValueChange = { confirmText = it },
+                        label = { Text("Type DELETE to confirm") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        store.deleteWallet()
+                        showConfirm = false
+                        confirmText = ""
+                        deleted = true
+                        onWalletDeleted()
+                    },
+                    enabled = confirmText.trim() == "DELETE"
+                ) { Text("Delete", color = QuartzOrange, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false; confirmText = "" }) { Text("Cancel") }
+            }
+        )
     }
 }
