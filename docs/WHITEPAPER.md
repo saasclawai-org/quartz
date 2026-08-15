@@ -78,7 +78,7 @@ UTXO-based, Bitcoin-compatible:
 | Locktime | 4 bytes | |
 
 **Supply:** 42,000,000 QZ (42 million)
-**Block reward:** 50 QZ initially to miner, halving every 210,000 blocks (~8 years)
+**Block reward:** 42.5 QZ initially to miner, halving every 210,000 blocks (~8 years)
 **Smallest unit:** 1 qz-sat = 10⁻⁸ QZ
 **Dev fund:** None (0%). 100% of block rewards go to miners. Pure fair launch.
 **Founder timelock:** All coins mined by the project founder are locked via CLTV for 2 years (525,600 blocks). Consensus-enforced, no override.
@@ -151,17 +151,17 @@ ESP32 nodes operate in one of three modes:
 | Dev Fund | **0%** — killed, pure fair launch |
 | Premine | 0 |
 | Founder Timelock | 2-year CLTV on all founder-mined coins |
-| PUF Block Reward (Era 1) | 50 QZ |
-| Block Reward (PUF-required) | 50 QZ |
-| Miner Share | 85% of every block |
-| Mesh Relayer Pool | 10% of every block |
-| Quantum Security Pool | 5% of every block |
+| PUF Block Reward (Era 1) | 42.5 QZ |
+| Block Reward (PUF-required) | 42.5 QZ |
+| Miner Share | **100% of every block** (pre-mesh-fork) |
+| Mesh Relayer Pool | 10% — design preserved, **deferred to a future hard fork** |
+| Quantum Security Pool | **0% — dropped** (see Emission Decision) |
 | Halving Period | 210,000 blocks (~8 years at 2min blocks) |
 | Block Time | 120 seconds |
 | Difficulty Retarget | 144 blocks (~48 hours) |
 | PUF Required | **Block 1. No exceptions.** |
 | Smallest Unit | 0.00000001 QZ (1 quartz-sat) |
-| Early Adopter Bonus | First 1,000 PUF devices: 2x for 30 days |
+| Early Adopter Bonus | Removed — violated coinbase validation |
 | Bug Bounty | Community-funded |
 
 ### Token Distribution
@@ -186,7 +186,15 @@ This is strictly stronger than Bitcoin's model. Satoshi made a social promise no
 
 ### Early Adopter Bonus
 
-The first 1,000 unique ESP32 devices (by PUF fingerprint) that mine a PUF-attested block receive **2x reward** for their first 30 days of mining. This bootstraps network hashpower and rewards early hardware participants.
+**Removed.** The originally-planned 2x bonus for the first 1,000 PUF devices paid above the coinbase schedule, which the consensus engine correctly rejects. Fair launch means one schedule for everyone, from block 1.
+
+### Emission Decision (2026-08-15)
+
+Decided on testnet, carried into mainnet genesis:
+
+1. **Base emission is 42.5 QZ/block** (Era 1), halving every 210,000 blocks. The original 50 QZ schedule never minted 50 — the relayer and quantum shares had no recipients — so the schedule now states what the chain actually pays. Verified: no block in the first 20,194 ever paid above it.
+2. **The Quantum Security Pool is dropped.** A protocol tax minting to an address with no spender is dead supply; a founder-governed fund contradicts the 0%-dev-fund fair launch. Quantum readiness (WOTS+ migration) remains an engineering commitment — funded by transparent donations and audits, not by emission.
+3. **The Mesh Relayer Pool is preserved in design, deferred in payment.** It activates only by hard fork, only when a real LoRa mesh fleet carries live traffic and relay-share accounting is validated in-block. Paying it before that would mint to nothing; designing it now keeps the off-grid roadmap honest.
 
 ### Quantum Mining Eras
 
@@ -194,10 +202,10 @@ Quartz requires PUF attestation from block 1. There are no non-PUF blocks. The e
 
 | Era | Block Range | Block Reward | Approx Years |
 |-----|-----------|-------------|-------------|
-| 1 | 0 – 210,000 | 50 QZ | 0–8 |
-| 2 | 210,001 – 420,000 | 25 QZ | 8–16 |
-| 3 | 420,001 – 630,000 | 12.5 QZ | 16–24 |
-| 4 | 630,001 – 840,000 | 6.25 QZ | 24–32 |
+| 1 | 0 – 210,000 | 42.5 QZ | 0–8 |
+| 2 | 210,001 – 420,000 | 21.25 QZ | 8–16 |
+| 3 | 420,001 – 630,000 | 10.625 QZ | 16–24 |
+| 4 | 630,001 – 840,000 | 5.3125 QZ | 24–32 |
 | 5+ | ... | halves | ... |
 
 Every block in every era requires a valid PUF attestation from a physical ESP32 chip. No exceptions, no grace period, no non-PUF path.
@@ -205,19 +213,19 @@ Every block in every era requires a valid PUF attestation from a physical ESP32 
 ### Reward Split
 
 ```
-Every block (50 QZ, Era 1):
-├── Miner:          42.5 QZ  (85%)
-├── Mesh Relayers:   5.0 QZ  (10%)
-└── Quantum Pool:    2.5 QZ  (5%)
+Every block (42.5 QZ, Era 1) — pre-mesh-fork:
+└── Miner:          42.5 QZ  (100%)
 
-Early adopter bonus: +50 QZ (inflation-funded, first 1000 PUF devices, 30 days)
+At the future mesh fork (activation height set by that fork):
+├── Miner:          90% of block reward
+└── Mesh Relayers:  10% of block reward (in-block-validated relay shares)
 ```
 
-All blocks require PUF attestation. There is no non-PUF reward tier.
+All blocks require PUF attestation. There is no non-PUF reward tier, no early-adopter bonus, and no quantum pool.
 
 ### Mesh Relayer Pool (10%)
 
-Every block splits 10% of its reward to LoRa mesh relayers. The pool coordinator (elected every 16 blocks) distributes shares proportionally to nodes that relayed the most block headers and transactions during that epoch. This incentivizes infrastructure without requiring mining hardware:
+**Status: design preserved, payment deferred** until a hard fork activates it (see Emission Decision). When active, every block splits 10% of its reward to LoRa mesh relayers. The pool coordinator (elected every 16 blocks) distributes shares proportionally to nodes that relayed the most block headers and transactions during that epoch, with relay shares validated in-block. This incentivizes infrastructure without requiring mining hardware:
 
 - $4 ESP32 + $6 LoRa module = passive relay income
 - No mining, just block/tx propagation
@@ -226,12 +234,13 @@ Every block splits 10% of its reward to LoRa mesh relayers. The pool coordinator
 
 ### Quantum Security Pool (5%)
 
-Five percent of every block funds long-term quantum security:
+**Status: dropped from the protocol (2026-08-15).** The originally planned five-percent tax would have minted to an unspendable pool address on a network with no pool infrastructure — or to a founder-governed fund, which contradicts the 0%-dev-fund fair launch. Quantum readiness is pursued off-chain:
 
 - **WOTS+ key rotation subsidies** — helps active miners afford address rotation
 - **Third-party security audits** — NIST and academic researchers
 - **Future signature upgrades** — if a stronger hash-based scheme emerges
-- **Governance**: On-chain voting by QZ holders starting Era 2. Era 1 governed by multi-sig of founding developers.
+
+Funded, if at all, by transparent community donations — never by protocol emission.
 
 ### Token Distribution
 
@@ -239,7 +248,7 @@ Five percent of every block funds long-term quantum security:
 - **No dev fund** — 0% to developers, founders, or investors
 - **No ICO** — no token sale, no fundraising
 - **No founder allocation** — founder mines like everyone else
-- **100% of rewards** go to miners, relayers, and quantum security
+- **100% of rewards** go to miners (relayers, once the mesh fork activates)
 
 ## Wallet & Key Management
 

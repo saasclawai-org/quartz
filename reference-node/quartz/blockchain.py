@@ -16,17 +16,24 @@ TX_INPUT_SIZE = 129   # 32 + 1 + 64 + 32
 TX_OUTPUT_SIZE = 40   # 8 + 32
 BLOCK_TIME = 120
 HALVING_INTERVAL = 210_000
-INITIAL_REWARD = 50 * 10**8  # 50 QZ in quartz-sats
+INITIAL_REWARD = 4_250_000_000   # 42.5 QZ in quartz-sats — EMISSION DECISION 2026-08-15 (see CONSENSUS.md §Emission)
 TOTAL_SUPPLY = 42_000_000 * 10**8
 EARLY_BONUS_MINERS = 1000  # first 1000 unique PUF-registered ESP32s
 EARLY_BONUS_DAYS = 30
 DIFFICULTY_BITS = 20
 RETARGET_PERIOD = 144
 
-# --- New tokenomics constants ---
-MINER_SHARE = 0.85       # 85% to miner
-RELAYER_SHARE = 0.10     # 10% to mesh relayer pool
-QUANTUM_SHARE = 0.05     # 5% to quantum security pool
+# --- Tokenomics shares ---
+# EMISSION DECISION 2026-08-15 (testnet era, carried into mainnet genesis):
+#   - Quantum Security Pool (5%): DROPPED from the protocol.
+#   - Mesh Relayer Pool (10%): design preserved, payment DEFERRED to a future
+#     hard fork that activates only when a real LoRa mesh fleet exists and
+#     relay-share accounting is validated in-block (see WHITEPAPER.md §Mesh
+#     Relayer Pool). Until then RELAYER_SHARE stays 0.
+#   - Until the fork: 100% of emission to miners (42.5 QZ Era-1 base).
+MINER_SHARE = 1.0        # pre-fork: miners take the full emission
+RELAYER_SHARE = 0.0      # 0.10 activates at the future mesh fork
+QUANTUM_SHARE = 0.0      # dropped entirely
 DEV_FUND_REWARD = 0      # Dev fund killed
 PUF_REWARD_MULT = 1.0    # PUF blocks get full reward
 # PUF is required from block 1. No non-PUF mining. Ever.
@@ -188,7 +195,9 @@ def get_block_reward(height: int, has_puf: bool = True) -> int:
 def split_block_reward(total_reward: int) -> tuple:
     """Split block reward: (miner, relayer_pool, quantum_pool).
 
-    Returns tuple of (miner_amount, relayer_amount, quantum_amount).
+    EMISSION DECISION 2026-08-15: pre-fork, miners take 100% (relayer share
+    deferred to the future mesh fork, quantum share dropped). Post-fork this
+    function is where the relayer activation lands.
     """
     miner = int(total_reward * MINER_SHARE)
     relayer = int(total_reward * RELAYER_SHARE)
@@ -214,14 +223,14 @@ def get_miner_reward(height: int, has_puf: bool = True, is_empty: bool = False,
 
 
 def get_relayer_reward(height: int, has_puf: bool = True) -> int:
-    """Calculate mesh relayer pool reward (10% of total)."""
+    """Mesh relayer pool reward — 0 until the future mesh fork activates it."""
     total = get_block_reward(height, has_puf)
     _, relayer, _ = split_block_reward(total)
     return relayer
 
 
 def get_quantum_pool_reward(height: int, has_puf: bool = True) -> int:
-    """Calculate quantum security pool reward (5% of total)."""
+    """Quantum security pool reward — always 0. Pool dropped 2026-08-15."""
     total = get_block_reward(height, has_puf)
     _, _, quantum = split_block_reward(total)
     return quantum
