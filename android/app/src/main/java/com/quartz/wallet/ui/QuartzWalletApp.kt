@@ -126,6 +126,7 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
 
     var showReceive by remember { mutableStateOf(false) }
     var showSend by remember { mutableStateOf(false) }
+    var fauceting by remember { mutableStateOf(false) }
 
     // BLE provisioning may have created a wallet — re-check when told so
     LaunchedEffect(walletCreated) {
@@ -249,6 +250,64 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                 Spacer(Modifier.height(8.dp))
                 Text(it, color = QuartzOrange, fontSize = 13.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth())
+            }
+
+            // Zero balance — offer the testnet faucet prominently
+            if (balanceSats == 0L && !refreshing) {
+                Spacer(Modifier.height(16.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                    shape = MaterialTheme.shapes.large
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("🚰", fontSize = 32.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "This wallet is new — it has no testnet QZ yet.",
+                            fontSize = 14.sp, textAlign = TextAlign.Center
+                        )
+                        Text(
+                            "Use the faucet to get 100 test QZ.",
+                            fontSize = 13.sp, color = QuartzMuted, textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                val addr = address ?: return@Button
+                                fauceting = true
+                                scope.launch {
+                                    SoftwareWallet.faucet(addr)
+                                        .onSuccess {
+                                            statusMsg = "🚰 Faucet sent 100 QZ — refreshing in ~35s"
+                                            android.widget.Toast.makeText(
+                                                context, "Faucet sent — confirm in ~35s", android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                        .onFailure { statusMsg = "Faucet: ${it.message}" }
+                                    fauceting = false
+                                    refreshing = true
+                                    kotlinx.coroutines.delay(40_000)
+                                    SoftwareWallet.fetchBalance(addr).onSuccess {
+                                        balanceSats = it.balanceSats
+                                        txCount = it.txCount
+                                    }
+                                    refreshing = false
+                                }
+                            },
+                            enabled = !fauceting,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                        ) {
+                            Text(
+                                if (fauceting) "Requesting…" else "Get 100 Test QZ",
+                                color = QuartzBg, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(20.dp))
