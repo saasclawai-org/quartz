@@ -506,6 +506,9 @@ static void mining_task(void *pvParameters) {
                 int n = read(STDIN_FILENO, &ch, 1);
                 if (n == 1) {
                     if (ch == '\n' || ch == '\r') {
+                        /* Echo newline */
+                        char nl = '\n';
+                        write(STDOUT_FILENO, &nl, 1);
                         serial_buf[serial_pos] = '\0';
                         /* Serial commands */
                         if (strcasecmp(serial_buf, "confirm") == 0) {
@@ -542,6 +545,16 @@ static void mining_task(void *pvParameters) {
                         serial_pos = 0;
                         serial_buf[0] = '\0';
                     } else if (serial_pos < (int)sizeof(serial_buf) - 1) {
+                        serial_buf[serial_pos++] = ch;
+                    } else if (ch == 0x7f || ch == 0x08) {
+                        /* Backspace */
+                        if (serial_pos > 0) {
+                            serial_pos--;
+                            write(STDOUT_FILENO, "\b \b", 3);
+                        }
+                    } else if (serial_pos < (int)sizeof(serial_buf) - 1) {
+                        /* Echo character as typed */
+                        write(STDOUT_FILENO, &ch, 1);
                         serial_buf[serial_pos++] = ch;
                     }
                 }
