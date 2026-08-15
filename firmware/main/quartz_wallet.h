@@ -164,9 +164,24 @@ void quartz_ed25519_sign(const uint8_t privkey[32],
                           uint8_t signature[64]);
 
 /**
- * Convert private key bytes to BIP39 mnemonic words.
+ * Convert 16 bytes of entropy to BIP39 mnemonic words.
  * Uses official 2048-word English wordlist with SHA-256 checksum.
  */
+void quartz_entropy_to_mnemonic(const uint8_t entropy[16],
+                                 char words[12][12],
+                                 size_t max_word_len);
+
+/**
+ * Derive Ed25519 keypair from BIP39 mnemonic words.
+ * Pipeline: words → PBKDF2 → SLIP-0010 m/44'/789'/0'/0'/0' → Ed25519.
+ * Same words produce the same key in any standard wallet.
+ */
+void quartz_bip39_derive_key(const char words[12][12],
+                              uint8_t privkey[32],
+                              uint8_t pubkey[32]);
+
+/* Deprecated: old one-way privkey→mnemonic encoding. */
+/* Kept for reference but not used by new wallet generation. */
 void quartz_privkey_to_mnemonic(const uint8_t privkey[32],
                                  char words[12][12],
                                  size_t max_word_len);

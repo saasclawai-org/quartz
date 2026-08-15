@@ -41,6 +41,7 @@ static const char *TAG = "QUARTZ_WALLET";
 static uint8_t s_private_key[ED25519_PRIVATE_KEY_SIZE];
 static uint8_t s_public_key[ED25519_PUBLIC_KEY_SIZE];
 static char s_address[36];  // Base58 address string
+static char s_mnemonic_words[12][12];  // BIP39 mnemonic (persisted to NVS)
 static bool s_wallet_initialized = false;
 
 // ============================================================
@@ -53,6 +54,7 @@ static bool s_wallet_initialized = false;
 #define NVS_KEY_PIN_HASH  "pin_hash"   // 32 bytes SHA-256(salt + pin)
 #define NVS_KEY_PIN_SALT  "pin_salt"   // 16 bytes random salt
 #define NVS_KEY_PIN_FAIL  "pin_fails"  // uint8_t failed attempt count
+#define NVS_KEY_MNEMONIC  "mnemonic"   // 12 words × 12 bytes = 144 bytes
 
 #define PIN_MAX_ATTEMPTS  10
 
@@ -168,19 +170,24 @@ static void derive_address(const uint8_t pubkey[32], bool testnet, char *out, si
 // ============================================================
 
 quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
-    // 1. Generate 32 bytes of true random for Ed25519 seed
-    quartz_rng(s_private_key, ED25519_PRIVATE_KEY_SIZE);
+    // 1. Generate 16 bytes of true random entropy (128-bit security)
+    uint8_t entropy[16];
+    quartz_rng(entropy, 16);
 
-    // 2. Derive Ed25519 public key from private seed
-    //    (Uses micro-ecc or esp_tinycrypt in production)
-    //    Placeholder: use mbedtls or link a compact Ed25519 impl
-    //    For now, we store the seed and derive pubkey via crypto library
-    quartz_ed25519_keypair(s_private_key, s_public_key);
+    // 2. Encode as BIP39 mnemonic (12 words with checksum)
+    //    Store words for the one-time seed display
+    quartz_entropy_to_mnemonic(entropy, s_mnemonic_words, sizeof(s_mnemonic_words[0]));
+    memset(entropy, 0, sizeof(entropy));  // wipe entropy after encoding
 
-    // 3. Derive Quartz address
+    // 3. Derive Ed25519 keypair from mnemonic via standard BIP39→BIP44
+    //    Same words → same key in any standard wallet (web, mobile, hardware)
+    quartz_bip39_derive_key((const char (*)[12])s_mnemonic_words,
+                            s_private_key, s_public_key);
+
+    // 4. Derive Quartz address from public key
     derive_address(s_public_key, testnet, s_address, sizeof(s_address));
 
-    // 4. Persist to encrypted NVS
+    // 5. Persist to NVS
     nvs_handle_t handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) {
@@ -190,6 +197,7 @@ quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
 
     nvs_set_blob(handle, NVS_KEY_PRIV, s_private_key, ED25519_PRIVATE_KEY_SIZE);
     nvs_set_blob(handle, NVS_KEY_PUB, s_public_key, ED25519_PUBLIC_KEY_SIZE);
+    nvs_set_blob(handle, NVS_KEY_MNEMONIC, s_mnemonic_words, sizeof(s_mnemonic_words));
 
     uint8_t flags = FLAG_MINING_ENABLED | (testnet ? FLAG_TESTNET : 0);
     nvs_set_u8(handle, NVS_KEY_FLAGS, flags);
@@ -199,9 +207,9 @@ quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
 
     s_wallet_initialized = true;
 
-    ESP_LOGI(TAG, "Wallet generated on-device");
+    ESP_LOGI(TAG, "Wallet generated via BIP39→BIP44→Ed25519");
     ESP_LOGI(TAG, "Address: %s", s_address);
-    ESP_LOGI(TAG, "Private key NEVER exported — stored in encrypted flash");
+    ESP_LOGI(TAG, "Seed phrase is standard BIP39 — importable in any wallet");
 
     return QZ_WALLET_OK;
 }
@@ -241,6 +249,15 @@ quartz_wallet_err_t quartz_wallet_load(void) {
             ESP_LOGW(TAG, "PIN attempt counter restored: %d/%d",
                      s_pin_attempts, PIN_MAX_ATTEMPTS);
         }
+    }
+
+    /* Restore mnemonic words (for PIN-gated 'seed' re-show command) */
+    size_t mnem_size = sizeof(s_mnemonic_words);
+    if (nvs_get_blob(handle, NVS_KEY_MNEMONIC, s_mnemonic_words, &mnem_size) != ESP_OK) {
+        /* Pre-BIP39 wallet: no stored mnemonic. Device can still mine/sign
+         * but 'seed' command won't work. Re-generate wallet to get BIP39. */
+        memset(s_mnemonic_words, 0, sizeof(s_mnemonic_words));
+        ESP_LOGW(TAG, "No mnemonic in NVS (pre-BIP39 wallet) — seed re-show unavailable");
     }
 
     uint8_t flags = 0;
@@ -311,11 +328,19 @@ quartz_wallet_err_t quartz_wallet_get_seed_phrase_for_backup(
 ) {
     if (!s_wallet_initialized) return QZ_WALLET_ERR_NOT_FOUND;
 
-    // Convert private key bytes to BIP39 mnemonic
-    // (uses the official BIP39 wordlist + checksum)
-    quartz_privkey_to_mnemonic(s_private_key, words, max_word_len);
+    // Return the stored BIP39 mnemonic (generated at wallet creation time)
+    // This is the SAME 12 words that any standard wallet would derive from.
+    if (s_mnemonic_words[0][0] == '\0') {
+        ESP_LOGE(TAG, "No mnemonic stored (pre-BIP39 wallet) — re-generate wallet");
+        return QZ_WALLET_ERR_NOT_FOUND;
+    }
 
-    ESP_LOGW(TAG, "Seed phrase generated for ONE-TIME backup display");
+    for (int i = 0; i < 12; i++) {
+        strncpy(words[i], s_mnemonic_words[i], max_word_len - 1);
+        words[i][max_word_len - 1] = '\0';
+    }
+
+    ESP_LOGW(TAG, "Seed phrase displayed for backup (BIP39 standard)");
     ESP_LOGW(TAG, "After user confirms backup, mnemonic MUST be wiped from RAM");
 
     return QZ_WALLET_OK;

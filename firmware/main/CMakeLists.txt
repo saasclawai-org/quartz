@@ -9,6 +9,7 @@ idf_component_register(
         "quartz_storage.c"
         "quartz_wallet.c"
         "quartz_crypto.c"
+        "quartz_bip39.c"
         "quartz_display.c"
         "quartz_wifi.c"
         "quartz_puf.c"
