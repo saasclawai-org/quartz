@@ -116,9 +116,9 @@ power-on from deep-sleep/soft-reset, so the port is mechanical, but it
 - **Upstream drift** — NerdMiner is actively developed (June 2026 commits).
   Graft should be a thin overlay branch rebased on their releases, not a
   hard fork; keep our diff under ~1k lines so rebases stay cheap.
-- **License** — NerdMiner is **MIT**; Quartz is **AGPL-3.0**. Compatible:
-  we keep their MIT notices and license our additions AGPL. No copyleft
-  friction either direction. (Earlier assumption of "GPL family" was wrong.)
+- **License** — NerdMiner is **MIT**; Quartz is **MIT** (LICENSE corrected
+  2026-08-15; README/whitepaper had said MIT all along). Same license both
+  sides — no friction at all.
 
 ## 8. The pitch (draft for community post — wordsmith before shipping)
 
