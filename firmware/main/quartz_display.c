@@ -574,37 +574,35 @@ void quartz_display_mining_stats(
     /* Separator */
     quartz_display_fill_rect(0, 24, DISP_W, 2, COL_ACCENT);
 
-    /* Hashrate — large DejaVu */
+    /* Hashrate — large */
     char buf[32];
     snprintf(buf, sizeof(buf), "%lu", hash_rate);
-    quartz_display_draw_text_s(8, 30, "HASHRATE", COL_GRAY, COL_BG);
-    quartz_display_draw_text_l(8, 44, buf, COL_CYAN, COL_BG);
-    int hlen = strlen(buf) * 16;
-    quartz_display_draw_text_s(8 + hlen, 50, "H/s", COL_GRAY, COL_BG);
+    quartz_display_draw_text_l(8, 30, "HASHRATE", COL_WHITE, COL_BG);
+    quartz_display_draw_big_text(8, 50, buf, COL_CYAN, COL_BG);
 
     /* Blocks found */
     snprintf(buf, sizeof(buf), "%lu", blocks_found);
-    quartz_display_draw_text_s(8, 70, "BLOCKS", COL_GRAY, COL_BG);
-    quartz_display_draw_text_l(8, 84, buf, COL_GREEN, COL_BG);
+    quartz_display_draw_text_l(8, 104, "BLOCKS", COL_WHITE, COL_BG);
+    quartz_display_draw_big_text(8, 124, buf, COL_GREEN, COL_BG);
 
     /* Uptime */
     uint32_t hrs = uptime_sec / 3600;
     uint32_t mins = (uptime_sec % 3600) / 60;
     snprintf(buf, sizeof(buf), "%luh %lum", hrs, mins);
-    quartz_display_draw_text_s(170, 70, "UPTIME", COL_GRAY, COL_BG);
-    quartz_display_draw_text_l(170, 84, buf, COL_WHITE, COL_BG);
+    quartz_display_draw_text_l(170, 104, "UPTIME", COL_WHITE, COL_BG);
+    quartz_display_draw_big_text(170, 124, buf, COL_WHITE, COL_BG);
 
     /* Wallet address (truncated) */
-    quartz_display_draw_text_s(8, 130, "WALLET", COL_GRAY, COL_BG);
+    quartz_display_draw_text_l(8, 168, "WALLET", COL_WHITE, COL_BG);
     if (wallet_address && strlen(wallet_address) > 34) {
         char short_addr[20];
         memcpy(short_addr, wallet_address, 8);
         short_addr[8] = '.'; short_addr[9] = '.'; short_addr[10] = '.';
         memcpy(short_addr + 11, wallet_address + strlen(wallet_address) - 6, 6);
         short_addr[17] = '\0';
-        quartz_display_draw_text_s(8, 146, short_addr, COL_YELLOW, COL_BG);
+        quartz_display_draw_text_l(8, 188, short_addr, COL_YELLOW, COL_BG);
     } else if (wallet_address) {
-        quartz_display_draw_text_s(8, 146, wallet_address, COL_YELLOW, COL_BG);
+        quartz_display_draw_text_l(8, 188, wallet_address, COL_YELLOW, COL_BG);
     }
 
     /* Button hints at bottom */
@@ -642,12 +640,12 @@ void quartz_display_id_screen(
     }
     quartz_display_fill_rect(0, 24, DISP_W, 2, COL_ACCENT);
 
-    /* Device ID — hero */
+    /* Device ID — hero (16×32 big font) */
     char buf[40];
-    quartz_display_draw_text_s(8, 36, "DEVICE ID", COL_GRAY, COL_BG);
+    quartz_display_draw_text_l(8, 36, "DEVICE ID", COL_WHITE, COL_BG);
     snprintf(buf, sizeof(buf), "QZ-%02X%02X%02X%02X",
              device_id[0], device_id[1], device_id[2], device_id[3]);
-    quartz_display_draw_text_l(8, 52, buf, COL_CYAN, COL_BG);
+    quartz_display_draw_big_text(8, 56, buf, COL_CYAN, COL_BG);
 
     /* Uptime — identity age */
     uint32_t days = uptime_sec / 86400;
@@ -656,24 +654,24 @@ void quartz_display_id_screen(
     if (days > 0) snprintf(buf, sizeof(buf), "%lud %luh", days, hrs);
     else if (hrs > 0) snprintf(buf, sizeof(buf), "%luh %lum", hrs, mins);
     else snprintf(buf, sizeof(buf), "%lum", mins);
-    quartz_display_draw_text_s(8, 96, "UPTIME", COL_GRAY, COL_BG);
-    quartz_display_draw_text_l(8, 110, buf, COL_WHITE, COL_BG);
+    quartz_display_draw_text_l(8, 104, "UPTIME", COL_WHITE, COL_BG);
+    quartz_display_draw_big_text(8, 124, buf, COL_GREEN, COL_BG);
 
     /* Hashrate — demoted on purpose */
     snprintf(buf, sizeof(buf), "%lu H/s", hash_rate);
-    quartz_display_draw_text_s(230, 110, buf, COL_GRAY, COL_BG);
+    quartz_display_draw_text_s(230, 36, buf, COL_GRAY, COL_BG);
 
     /* Wallet (truncated) */
-    quartz_display_draw_text_s(8, 150, "WALLET", COL_GRAY, COL_BG);
+    quartz_display_draw_text_l(8, 168, "WALLET", COL_WHITE, COL_BG);
     if (wallet_address && strlen(wallet_address) > 34) {
         char short_addr[20];
         memcpy(short_addr, wallet_address, 8);
         short_addr[8] = '.'; short_addr[9] = '.'; short_addr[10] = '.';
         memcpy(short_addr + 11, wallet_address + strlen(wallet_address) - 6, 6);
         short_addr[17] = '\0';
-        quartz_display_draw_text_s(8, 166, short_addr, COL_YELLOW, COL_BG);
+        quartz_display_draw_text_l(8, 188, short_addr, COL_YELLOW, COL_BG);
     } else if (wallet_address) {
-        quartz_display_draw_text_s(8, 166, wallet_address, COL_YELLOW, COL_BG);
+        quartz_display_draw_text_l(8, 188, wallet_address, COL_YELLOW, COL_BG);
     }
 
     /* Button hints */
@@ -706,33 +704,32 @@ void quartz_display_fleet_screen(
 
     /* Fleet count — hero, with goal */
     char buf[40];
-    quartz_display_draw_text_s(8, 36, "ENROLLED DEVICES", COL_GRAY, COL_BG);
-    snprintf(buf, sizeof(buf), "%lu / 100", member_count);
-    quartz_display_draw_text_l(8, 52, buf, member_count >= 100 ? COL_GREEN : COL_CYAN, COL_BG);
+    quartz_display_draw_text_l(8, 36, "ENROLLED DEVICES", COL_WHITE, COL_BG);
+    snprintf(buf, sizeof(buf), "%lu/100", member_count);
+    quartz_display_draw_big_text(8, 58, buf, member_count >= 100 ? COL_GREEN : COL_CYAN, COL_BG);
 
     /* Progress bar toward the goal */
-    quartz_display_fill_rect(8, 84, 304, 12, COL_CARD);
+    quartz_display_fill_rect(8, 100, 304, 14, COL_CARD);
     uint32_t bar_w = (member_count * 304) / 100;
     if (bar_w > 304) bar_w = 304;
-    if (bar_w > 0) quartz_display_fill_rect(8, 84, bar_w, 12, COL_GREEN);
+    if (bar_w > 0) quartz_display_fill_rect(8, 100, bar_w, 14, COL_GREEN);
 
     /* Stats row */
-    quartz_display_draw_text_s(8, 116, "SHARES", COL_GRAY, COL_BG);
+    quartz_display_draw_text_s(8, 128, "SHARES", COL_GRAY, COL_BG);
     snprintf(buf, sizeof(buf), "%lu", my_shares);
-    quartz_display_draw_text_l(8, 130, buf, COL_WHITE, COL_BG);
+    quartz_display_draw_big_text(8, 142, buf, COL_WHITE, COL_BG);
 
-    quartz_display_draw_text_s(120, 116, "REWARDS", COL_GRAY, COL_BG);
+    quartz_display_draw_text_s(118, 128, "REWARDS", COL_GRAY, COL_BG);
     snprintf(buf, sizeof(buf), "%llu.%02llu",
              rewards_qz_milli / 1000, (rewards_qz_milli % 1000) / 10);
-    quartz_display_draw_text_l(120, 130, buf, COL_GREEN, COL_BG);
-    quartz_display_draw_text_s(120 + strlen(buf) * 14 + 4, 136, "QZ", COL_GRAY, COL_BG);
+    quartz_display_draw_big_text(118, 142, buf, COL_GREEN, COL_BG);
 
-    quartz_display_draw_text_s(240, 116, "BLOCKS", COL_GRAY, COL_BG);
+    quartz_display_draw_text_s(248, 128, "BLOCKS", COL_GRAY, COL_BG);
     snprintf(buf, sizeof(buf), "%lu", blocks_found);
-    quartz_display_draw_text_l(240, 130, buf, COL_WHITE, COL_BG);
+    quartz_display_draw_big_text(248, 142, buf, COL_WHITE, COL_BG);
 
     /* Note line */
-    quartz_display_draw_text_s(8, 176, "100 devices unlocks exchange listings", COL_DARKGRAY, COL_BG);
+    quartz_display_draw_text_s(8, 190, "100 devices unlocks exchange listings", COL_DARKGRAY, COL_BG);
 
     /* Button hints */
     quartz_display_fill_rect(0, 220, DISP_W, 20, COL_CARD);
