@@ -113,8 +113,13 @@ class QuartzChain:
         print(f"   Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(genesis.header.timestamp))}")
         self.save()
 
-    def mine_block(self, miner_id: bytes, miner_name: str = ""):
-        """Mine a new block (simulated ESP32 mining)."""
+    def mine_block(self, miner_id: bytes, miner_name: str = "", miner_addr: str = None):
+        """Mine a new block (simulated ESP32 mining).
+
+        miner_addr: real wallet address (Qk.../Qw...) to credit the reward to.
+        When omitted (simulated fleet), falls back to the synthetic
+        sha256(miner_id) address as before.
+        """
         height = len(self.blocks)
         prev_block = self.blocks[-1]
 
@@ -167,9 +172,12 @@ class QuartzChain:
                 block.header.nonce = 0
                 attempts = 0
 
-        # Update balances
-        miner_addr = hashlib.sha256(miner_id).hexdigest()[:34]
-        self.balances[miner_addr] = self.balances.get(miner_addr, 0) + miner_reward
+        # Update balances — credit the REAL wallet address when the miner
+        # provided one (hardware submit sends it). Synthetic sha256 address
+        # is only a fallback for the simulated fleet.
+        # (Fix: rewards were landing at sha256(addr[:6]) — unspendable.)
+        credit_addr = miner_addr or hashlib.sha256(miner_id).hexdigest()[:34]
+        self.balances[credit_addr] = self.balances.get(credit_addr, 0) + miner_reward
         if dev_reward > 0 and self.dev_wallet:
             dev_addr = self.dev_wallet['address']
             self.balances[dev_addr] = self.balances.get(dev_addr, 0) + dev_reward
@@ -619,7 +627,7 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             self.chain.miner_stats[key]['blocks_found'] = self.chain.miner_stats[key].get('blocks_found', 0) + 1
 
             # Accept the share and mine a real block
-            block = self.chain.mine_block(miner_id, f"ESP32-{job_id[:8]}")
+            block = self.chain.mine_block(miner_id, f"ESP32-{job_id[:8]}", miner_addr=miner_addr or None)
 
             self.json_response({
                 "status": "accepted",
