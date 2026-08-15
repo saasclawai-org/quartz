@@ -544,8 +544,6 @@ static void mining_task(void *pvParameters) {
                         }
                         serial_pos = 0;
                         serial_buf[0] = '\0';
-                    } else if (serial_pos < (int)sizeof(serial_buf) - 1) {
-                        serial_buf[serial_pos++] = ch;
                     } else if (ch == 0x7f || ch == 0x08) {
                         /* Backspace */
                         if (serial_pos > 0) {
@@ -834,7 +832,8 @@ void app_main(void) {
     /* Initialize NVS */
     init_nvs();
 
-    /* Serial console: non-blocking so the mining loop can poll for commands */
+    /* Serial console: non-blocking so both the seed-confirmation loop
+     * AND the mining loop can poll for commands without blocking */
     fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 
     /* Initialize display FIRST so we can show portal/splash */
