@@ -303,12 +303,23 @@ static void quartz_serial_poll(void)
     char ch;
     while (read(STDIN_FILENO, &ch, 1) == 1) {
         if (ch == '\n' || ch == '\r') {
+            /* Echo newline so the command is visually complete */
+            char nl = '\n';
+            write(STDOUT_FILENO, &nl, 1);
             if (s_cmd_pos > 0) {
                 s_cmd_buf[s_cmd_pos] = '\0';
                 quartz_serial_command(s_cmd_buf);
                 s_cmd_pos = 0;
             }
+        } else if (ch == 0x7f || ch == 0x08) {
+            /* Backspace — echo erase */
+            if (s_cmd_pos > 0) {
+                s_cmd_pos--;
+                write(STDOUT_FILENO, "\b \b", 3);
+            }
         } else if (s_cmd_pos < (int)sizeof(s_cmd_buf) - 1) {
+            /* Echo character as typed (works in any terminal, zero config) */
+            write(STDOUT_FILENO, &ch, 1);
             s_cmd_buf[s_cmd_pos++] = ch;
         }
     }
@@ -722,8 +733,14 @@ static void mining_task(void *pvParameters) {
             uint32_t uptime = (esp_timer_get_time() / 1000000) - s_start_time;
             uint32_t hps = (uptime > 0) ? (s_hash_count / uptime) : 0;
             g_last_hps = hps;
-            ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, nonce %llu",
-                     hps, s_hash_count, nonce);
+            /* Serial log once a minute — display keeps refreshing every pass,
+             * but the console no longer drowns out typed commands */
+            static uint32_t s_last_log_uptime = 0;
+            if (uptime - s_last_log_uptime >= 60) {
+                s_last_log_uptime = uptime;
+                ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, uptime %luh%lum",
+                         hps, s_hash_count, uptime / 3600, (uptime % 3600) / 60);
+            }
 
 #ifdef QUARTZ_HAS_DISPLAY
             qz_screen_t cur = quartz_display_get_screen();

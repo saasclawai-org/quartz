@@ -393,7 +393,7 @@ static int http_request(const char *method, const char *path,
     }
     struct in_addr **addr_list = (struct in_addr **)he->h_addr_list;
     addr.sin_addr = *addr_list[0];
-    ESP_LOGI(TAG, "DNS: %s -> %s", NODE_HOST, inet_ntoa(addr.sin_addr));
+    ESP_LOGD(TAG, "DNS: %s -> %s", NODE_HOST, inet_ntoa(addr.sin_addr));
 
     /* Set timeout */
     struct timeval tv = {.tv_sec = 5, .tv_usec = 0};
@@ -528,8 +528,12 @@ int quartz_mining_get_work(qz_block_template_t *tmpl) {
     json_find_string(response, "job_id", tmpl->job_id, sizeof(tmpl->job_id));
 
     g_mining_state = QZ_MINING_HAS_WORK;
-    ESP_LOGI(TAG, "Got work: height=%d job=%s target=%d",
-             tmpl->height, tmpl->job_id, tmpl->target_bits);
+    /* Log only on new block height — job refreshes of the same block stay quiet */
+    static int s_last_logged_height = -1;
+    if ((int)tmpl->height != s_last_logged_height) {
+        s_last_logged_height = (int)tmpl->height;
+        ESP_LOGI(TAG, "Got work: height=%d target=%d", tmpl->height, tmpl->target_bits);
+    }
 
     return 0;
 }
