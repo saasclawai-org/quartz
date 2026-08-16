@@ -1163,7 +1163,20 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, indent=2).encode())
 
     def json_error(self, code, message):
-        self.json_response({"error": message}, code)
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": message}, indent=2).encode())
+
+    def do_OPTIONS(self):
+        # CORS preflight — allow all origins, methods, headers
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Max-Age', '86400')
+        self.end_headers()
 
     def log_message(self, format, *args):
         pass  # suppress default logging
