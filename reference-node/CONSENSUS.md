@@ -160,7 +160,7 @@ total_fees   = sum(fees of all non-coinbase txs)
 coinbase_output = total_reward + total_fees
 
 split (pre-mesh-fork):
-  miner   = 100% of total_reward   (42.5 QZ Era-1 base)
+  miner   = 100% of total_reward   (42 QZ Era-1 base)
   relayer = 0   (design preserved, deferred — see Emission Decision)
   quantum = 0   (dropped)
 ```
@@ -177,6 +177,7 @@ Decided on testnet, carried into mainnet genesis:
 1. **Base emission = 42.5 QZ/block** (Era 1), halving every 210,000 blocks.
    The previous 50 QZ nominal schedule minted only 42.5 in practice because
    neither pool had recipients; the schedule now states reality.
+   *(Superseded next day — see §4.3.2.)*
 2. **Quantum Security Pool (5%): dropped.** No on-chain quantum tax. The
    WOTS+ migration mission continues as an engineering roadmap item funded
    by transparent donations/audits, not by protocol emission.
@@ -188,6 +189,20 @@ Decided on testnet, carried into mainnet genesis:
    centrally-controlled address — worse than not paying it.
 4. **No early-adopter 2× bonus** — removed earlier (it violated coinbase
    validation); blocks pay exactly the schedule + fees.
+
+### 4.3.2 Supply Retune (2026-08-16)
+
+Base emission set to **42 QZ/block, halving every 500,000 blocks** →
+total supply lands **exactly 42,000,000 QZ** (42 × 500,000 × 2).
+
+- The 42.5/210k interim summed to ~17.85M; the paper's 42M never matched
+  any schedule. This closes the last emission paper-vs-chain drift.
+- It is a 1.2% trim, not an expansion.
+- Applied before the first halving, so no historical halving boundary moved.
+- Historical note: blocks 0 to ~20,250 paid 42.5 QZ under the interim
+  schedule. They are honored as-loaded (the loader does not re-validate
+  historical coinbases; reorg windows never reach back that far).
+- At the future mesh fork the split becomes 37.8 QZ miner / 4.2 QZ relayer.
 
 ## 5. Fork Choice & Reorgs
 

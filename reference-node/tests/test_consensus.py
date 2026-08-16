@@ -78,7 +78,7 @@ class TestUTXOSet:
 
 class TestTransactionValidation:
     def test_valid_coinbase(self):
-        tx = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 0)
+        tx = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 0)
         is_valid, fee, spends, creates, reason = validate_transaction(tx, UTXOSet(), is_coinbase=True)
         assert is_valid, f"coinbase should be valid: {reason}"
         assert fee == 0
@@ -302,7 +302,7 @@ class TestBlockValidation:
                 break
             genesis.header.nonce += 1
 
-        coinbase = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 1)
+        coinbase = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 1)
         block = self._mine_test_block(genesis, [coinbase])
 
         utxos = UTXOSet()
@@ -321,7 +321,7 @@ class TestBlockValidation:
         genesis.header.nonce = 0
         genesis.build_header()
 
-        coinbase = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 1)
+        coinbase = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 1)
         block = Block(
             header=BlockHeader(
                 version=1,
@@ -347,7 +347,7 @@ class TestBlockValidation:
         genesis.header.difficulty_target = 12
         genesis.build_header()
 
-        coinbase = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 1)
+        coinbase = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 1)
         # Build on a WRONG prev hash, but mine it to valid PoW so we
         # reach the linkage check instead of failing PoW first.
         block = self._mine_test_block_from_prev(
@@ -409,7 +409,7 @@ class TestBlockValidation:
         genesis.header.difficulty_target = 12
         genesis.build_header()
 
-        coinbase = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 1)
+        coinbase = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 1)
         block = self._mine_test_block(genesis, [coinbase], difficulty=12)
 
         is_valid, reason, _ = validate_block(
@@ -430,7 +430,7 @@ class TestConsensusEngine:
         genesis = Block.create_genesis()
         genesis.header.timestamp = int(time.time())
         genesis.header.difficulty_target = 12
-        genesis.transactions = [Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 0)]
+        genesis.transactions = [Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 0)]
         genesis.build_header()
 
         target = 1 << (256 - 12)
@@ -463,7 +463,7 @@ class TestConsensusEngine:
         )
 
         # Build a new block
-        coinbase = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 1)
+        coinbase = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 1)
         header = BlockHeader(
             version=1,
             prev_block_hash=genesis.header.hash,
@@ -495,7 +495,7 @@ class TestConsensusEngine:
             retarget_period=144,
         )
 
-        coinbase = Transaction.coinbase(b'\x00' * 6, 4_250_000_000, 1)
+        coinbase = Transaction.coinbase(b'\x00' * 6, 4_200_000_000, 1)
         header = BlockHeader(
             version=1,
             prev_block_hash=b'\xFF' * 32,  # wrong
@@ -532,7 +532,7 @@ class TestConsensusEngine:
 
     def _mine_on(self, prev_block, height, difficulty=12, miner_id=b'\x00' * 6):
         """Mine a coinbase-only block on top of prev_block."""
-        coinbase = Transaction.coinbase(miner_id, 4_250_000_000, height)
+        coinbase = Transaction.coinbase(miner_id, 4_200_000_000, height)
         header = BlockHeader(
             version=1,
             prev_block_hash=prev_block.header.hash,

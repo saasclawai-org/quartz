@@ -15,8 +15,8 @@ HEADER_SIZE = 80
 TX_INPUT_SIZE = 129   # 32 + 1 + 64 + 32
 TX_OUTPUT_SIZE = 40   # 8 + 32
 BLOCK_TIME = 120
-HALVING_INTERVAL = 210_000
-INITIAL_REWARD = 4_250_000_000   # 42.5 QZ in quartz-sats — EMISSION DECISION 2026-08-15 (see CONSENSUS.md §Emission)
+HALVING_INTERVAL = 500_000      # SUPPLY RETUNE 2026-08-16: 42 QZ × 500k × 2 = 42M cap exactly
+INITIAL_REWARD = 4_200_000_000   # 42 QZ in quartz-sats — see CONSENSUS.md §4.3 (Emission) / §4.3.2 (Retune)
 TOTAL_SUPPLY = 42_000_000 * 10**8
 EARLY_BONUS_MINERS = 1000  # first 1000 unique PUF-registered ESP32s
 EARLY_BONUS_DAYS = 30
@@ -30,7 +30,7 @@ RETARGET_PERIOD = 144
 #     hard fork that activates only when a real LoRa mesh fleet exists and
 #     relay-share accounting is validated in-block (see WHITEPAPER.md §Mesh
 #     Relayer Pool). Until then RELAYER_SHARE stays 0.
-#   - Until the fork: 100% of emission to miners (42.5 QZ Era-1 base).
+#   - Until the fork: 100% of emission to miners (42 QZ Era-1 base).
 MINER_SHARE = 1.0        # pre-fork: miners take the full emission
 RELAYER_SHARE = 0.0      # 0.10 activates at the future mesh fork
 QUANTUM_SHARE = 0.0      # dropped entirely

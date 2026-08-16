@@ -83,14 +83,14 @@ class TestMerkleRoot:
 
 class TestBlockReward:
     def test_initial_reward(self):
-        assert get_block_reward(0) == INITIAL_REWARD  # 50 QZ
+        assert get_block_reward(0) == INITIAL_REWARD  # 42 QZ
         assert get_block_reward(1) == INITIAL_REWARD
 
     def test_first_halving(self):
-        assert get_block_reward(HALVING_INTERVAL) == INITIAL_REWARD // 2  # 25 QZ
+        assert get_block_reward(HALVING_INTERVAL) == INITIAL_REWARD // 2  # 21 QZ
 
     def test_second_halving(self):
-        assert get_block_reward(HALVING_INTERVAL * 2) == INITIAL_REWARD // 4  # 12.5 QZ
+        assert get_block_reward(HALVING_INTERVAL * 2) == INITIAL_REWARD // 4  # 10.5 QZ
 
     def test_zero_after_33_halvings(self):
         assert get_block_reward(HALVING_INTERVAL * 33) == 0
