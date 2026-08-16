@@ -598,11 +598,32 @@ private fun SendDialog(
                                 error = "Insufficient balance (need amount + fee)"
                             else -> {
                                 sending = true
-                                val (priv, _, from) = keys!!
                                 scope.launch {
-                                    SoftwareWallet.send(priv, from, toAddress, sats)
-                                        .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
-                                        .onFailure { e -> error = e.message; sending = false }
+                                    try {
+                                        val keysLocal = keys
+                                        if (keysLocal == null) {
+                                            error = "Wallet keys not loaded — re-import your seed"
+                                            sending = false
+                                            return@launch
+                                        }
+                                        val (priv, _, from) = keysLocal
+                                        if (priv.isEmpty()) {
+                                            error = "Private key is empty — re-import your seed"
+                                            sending = false
+                                            return@launch
+                                        }
+                                        SoftwareWallet.send(priv, from, toAddress, sats)
+                                            .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
+                                            .onFailure { e ->
+                                                error = e.message ?: e.toString()
+                                                sending = false
+                                                android.widget.Toast.makeText(context, "Send failed: ${e.message ?: e.toString()}", android.widget.Toast.LENGTH_LONG).show()
+                                            }
+                                    } catch (ce: Exception) {
+                                        error = ce.message ?: ce.toString()
+                                        sending = false
+                                        android.widget.Toast.makeText(context, "Send crashed: ${ce.message ?: ce.toString()}", android.widget.Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         }

@@ -25,8 +25,8 @@ object SoftwareWallet {
 
     private val json = "application/json; charset=utf-8".toMediaType()
     private val http: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
     data class NewWallet(
