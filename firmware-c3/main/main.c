@@ -772,10 +772,19 @@ static void mining_task(void *pvParameters) {
     g_scratchpad_size = scratchpad_size;
     ESP_LOGI(TAG, "Scratchpad allocated (%d KB)", scratchpad_size / 1024);
 
-    /* Initialize BLE GATT server for phone app (after scratchpad) */
-    quartz_ble_set_address(quartz_wallet_get_address());
-    quartz_ble_init();
-    ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+    /* BLE only while seed provisioning might still be needed.
+     * Once backup is confirmed, keep the shared C3 radio 100% WiFi:
+     * BLE+WiFi coex duty-cycling is what triggers router evictions
+     * (reason 34) and the 201/202/205 reconnect churn. */
+    bool ble_on = !quartz_wallet_is_backup_confirmed();
+    if (ble_on) {
+        quartz_ble_set_address(quartz_wallet_get_address());
+        quartz_ble_init();
+        ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+    } else {
+        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi");
+        quartz_wifi_set_full_power();
+    }
 
     /* If PIN is set, show PIN entry screen before mining starts */
     if (quartz_wallet_has_pin()) {
@@ -901,7 +910,9 @@ static void mining_task(void *pvParameters) {
 #endif
 
             /* Update BLE stats for phone app */
-            quartz_ble_update_stats(s_hash_count, hps, s_blocks_found, uptime);
+            if (ble_on) {
+                quartz_ble_update_stats(s_hash_count, hps, s_blocks_found, uptime);
+            }
 
             /* Poll for messages every 10 seconds */
             static uint32_t last_msg_check = 0;

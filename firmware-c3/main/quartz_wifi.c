@@ -329,6 +329,14 @@ static void start_sta_mode(const char *ssid, const char *pass) {
     g_wifi_state = QZ_WIFI_CONNECTING;
 }
 
+void quartz_wifi_set_full_power(void) {
+    /* PS_NONE keeps the radio always-on: no missed ACKs, no reason-34
+     * evictions, no 201/202/205 reconnect churn. Only safe once BLE
+     * provisioning is done (BLE off) — see v067 lesson. */
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    ESP_LOGI(TAG, "WiFi full power (PS_NONE) — radio dedicated to WiFi");
+}
+
 void quartz_wifi_init(void) {
     /* Initialize TCP/IP stack and event loop (must happen before any WiFi calls) */
     esp_netif_init();
