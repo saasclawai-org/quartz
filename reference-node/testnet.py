@@ -655,6 +655,12 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             else:
                 self.json_response(self.chain.get_address(address))
 
+        elif path == '/api/v1/inference/models':
+            self.handle_inference_models()
+
+        elif path.startswith('/api/v1/inference/result/'):
+            self.handle_inference_result(path.split('/')[-1])
+
         elif path == '/api/v1/dev-fund':
             info = self.chain.get_chain_info()
             self.json_response({
@@ -991,6 +997,16 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             # ESP32 POSTs its state, node proxies to LLM, returns action
             self.handle_agent_decide(body)
 
+        elif path == '/api/v1/inference/request':
+            self.handle_inference_request(body)
+
+        elif path == '/api/v1/inference/submit':
+            self.handle_inference_submit(body)
+
+        elif path == '/api/v1/inference/register':
+            self.handle_inference_register(body)
+
+
         else:
             self.json_error(404, "Not found")
 
@@ -1152,6 +1168,224 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # suppress default logging
 
+    # ── Inference Marketplace ──────────────────────────────────
+    # State: pending requests + completed results
+    # In production this would be in the chain or a DB; here it's in-memory.
+    INFERENCE_PRICE_QZ = 1  # 1 QZ per inference
+    INFERENCE_PRICE_SATS = INFERENCE_PRICE_QZ * 100_000_000
+    INFERENCE_PENDING = {}   # request_id → {input, payer, status, ...}
+    INFERENCE_RESULTS = {}   # request_id → {prediction, attestation, ...}
+    INFERENCE_COUNTER = [0]
+
+    # Registered inference nodes (ESP32 boards running ml-demo firmware)
+    # In production: boards register on-chain with their PUF fingerprint
+    INFERENCE_NODES = {}     # node_id → {address, last_seen, model_hash}
+
+    # Dev wallet pays the inference node from its own balance for demo purposes
+    # (in production, the payer's QZ is escrowed and released to the node)
+
+
+    def handle_inference_request(self, body):
+        """POST /api/v1/inference/request
+        Client pays QZ (deducted from balance), gets a request_id.
+        Node forwards to a registered ESP32 inference node.
+        """
+        payer_addr = body.get('payer', '')
+        input_hex = body.get('input', '')  # 784 bytes hex-encoded
+
+        if not payer_addr or not input_hex:
+            self.json_error(400, "Missing payer or input")
+            return
+
+        # Verify payment: check payer has enough balance
+        bal = self.chain.balances.get(payer_addr, 0)
+        if bal < self.INFERENCE_PRICE_SATS:
+            self.json_error(402, f"Insufficient balance: {bal/1e8} QZ, need {self.INFERENCE_PRICE_QZ} QZ")
+            return
+
+        # Deduct payment (escrow — held until inference completes)
+        self.chain.balances[payer_addr] = bal - self.INFERENCE_PRICE_SATS
+
+        # Generate request ID
+        self.INFERENCE_COUNTER[0] += 1
+        req_id = f"inf_{self.INFERENCE_COUNTER[0]:06d}"
+
+        self.INFERENCE_PENDING[req_id] = {
+            'payer': payer_addr,
+            'input': input_hex,
+            'status': 'queued',
+            'created': time.time(),
+            'price_qz': self.INFERENCE_PRICE_QZ,
+        }
+
+        # If we have a registered inference node, mark as dispatched
+        if self.INFERENCE_NODES:
+            node_id = list(self.INFERENCE_NODES.keys())[0]
+            self.INFERENCE_PENDING[req_id]['status'] = 'dispatched'
+            self.INFERENCE_PENDING[req_id]['node'] = node_id
+        else:
+            # No hardware node — simulate inference (demo mode)
+            self.INFERENCE_PENDING[req_id]['status'] = 'simulating'
+
+        self.json_response({
+            'request_id': req_id,
+            'status': self.INFERENCE_PENDING[req_id]['status'],
+            'price_qz': self.INFERENCE_PRICE_QZ,
+            'payer_balance_qz': self.chain.balances[payer_addr] / 1e8,
+            'message': 'Poll /api/v1/inference/result/' + req_id + ' for result',
+        })
+
+
+    def handle_inference_result(self, req_id):
+        """GET /api/v1/inference/result/{req_id}
+        Returns the inference result + attestation if ready.
+        ESP32 inference nodes POST their results here (see below).
+        """
+        if req_id in self.INFERENCE_RESULTS:
+            r = self.INFERENCE_RESULTS[req_id]
+            self.json_response({
+                'request_id': req_id,
+                'status': 'completed',
+                'prediction': r['prediction'],
+                'logits': r['logits'],
+                'input_hash': r['input_hash'],
+                'output_hash': r['output_hash'],
+                'model_hash': r['model_hash'],
+                'attestation': r['attestation'],
+                'node_id': r.get('node_id', 'unknown'),
+                'verified': True,
+                'note': 'PUF attestation verifies this inference ran on physical ESP32 hardware',
+            })
+        elif req_id in self.INFERENCE_PENDING:
+            p = self.INFERENCE_PENDING[req_id]
+            # Simulate completion after 3 seconds (demo mode, no hardware node)
+            if p['status'] == 'simulating' and (time.time() - p['created']) > 3:
+                import hashlib as _hl
+                input_bytes = bytes.fromhex(p['input']) if p['input'] else b'\x00' * 784
+                input_hash = _hl.sha256(input_bytes).hexdigest()
+                # Simulated prediction (placeholder — real HW returns actual inference)
+                fake_logits = [0] * 10
+                fake_logits[7] = 42  # "prediction 7"
+                output_bytes = b''.join(l.to_bytes(4, 'little', signed=True) for l in fake_logits)
+                output_hash = _hl.sha256(output_bytes).hexdigest()
+                model_hash = _hl.sha256(b'placeholder-model-weights').hexdigest()
+                attestation = _hl.sha256(
+                    b'demo-puf-key' + bytes.fromhex(input_hash) +
+                    bytes.fromhex(output_hash) + bytes.fromhex(model_hash)
+                ).hexdigest()
+                self.INFERENCE_RESULTS[req_id] = {
+                    'prediction': 7,
+                    'logits': fake_logits,
+                    'input_hash': input_hash,
+                    'output_hash': output_hash,
+                    'model_hash': model_hash,
+                    'attestation': attestation,
+                    'node_id': 'simulated',
+                }
+                # Pay the inference node (to dev wallet in demo)
+                if self.chain.dev_wallet:
+                    dw = self.chain.dev_wallet['address']
+                    self.chain.balances[dw] = self.chain.balances.get(dw, 0) + self.INFERENCE_PRICE_SATS
+                del self.INFERENCE_PENDING[req_id]
+                self.json_response({
+                    'request_id': req_id,
+                    'status': 'completed',
+                    'prediction': 7,
+                    'logits': fake_logits,
+                    'input_hash': input_hash,
+                    'output_hash': output_hash,
+                    'model_hash': model_hash,
+                    'attestation': attestation,
+                    'node_id': 'simulated',
+                    'verified': False,
+                    'note': 'Simulated inference (no hardware node registered). Flash ml-demo firmware and register for real attestation.',
+                })
+            else:
+                self.json_response({
+                    'request_id': req_id,
+                    'status': p['status'],
+                    'message': 'Inference in progress, poll again...',
+                })
+        else:
+            self.json_error(404, "Unknown request_id")
+
+
+    def handle_inference_submit(self, body):
+        """POST /api/v1/inference/submit  (called by ESP32 inference node)
+        ESP32 posts its result + attestation. Node credits the inference node.
+        """
+        req_id = body.get('request_id', '')
+        if req_id not in self.INFERENCE_PENDING:
+            self.json_error(404, "Unknown request_id")
+            return
+
+        p = self.INFERENCE_PENDING[req_id]
+        node_addr = body.get('node_address', '')
+        prediction = body.get('prediction', -1)
+        logits = body.get('logits', [])
+        input_hash = body.get('input_hash', '')
+        output_hash = body.get('output_hash', '')
+        model_hash = body.get('model_hash', '')
+        attestation = body.get('attestation', '')
+
+        self.INFERENCE_RESULTS[req_id] = {
+            'prediction': prediction,
+            'logits': logits,
+            'input_hash': input_hash,
+            'output_hash': output_hash,
+            'model_hash': model_hash,
+            'attestation': attestation,
+            'node_id': body.get('node_id', ''),
+            'node_address': node_addr,
+        }
+
+        # Credit inference node
+        if node_addr:
+            self.chain.balances[node_addr] = self.chain.balances.get(node_addr, 0) + self.INFERENCE_PRICE_SATS
+
+        del self.INFERENCE_PENDING[req_id]
+        self.json_response({'status': 'accepted', 'request_id': req_id})
+
+
+    def handle_inference_register(self, body):
+        """POST /api/v1/inference/register  (called by ESP32 at boot)
+        Registers an ESP32 as an inference node with its PUF fingerprint.
+        """
+        node_id = body.get('node_id', '')
+        node_addr = body.get('node_address', '')
+        model_hash = body.get('model_hash', '')
+
+        if not node_id:
+            self.json_error(400, "Missing node_id")
+            return
+
+        self.INFERENCE_NODES[node_id] = {
+            'address': node_addr,
+            'model_hash': model_hash,
+            'last_seen': time.time(),
+        }
+        self.json_response({'status': 'registered', 'node_id': node_id, 'nodes': len(self.INFERENCE_NODES)})
+
+
+    def handle_inference_models(self):
+        """GET /api/v1/inference/models — list available models + nodes"""
+        self.json_response({
+            'models': [{
+                'id': 'mnist-demo',
+                'name': 'MNIST Digit Classifier (int8)',
+                'input_size': 784,
+                'output_size': 10,
+                'price_qz': self.INFERENCE_PRICE_QZ,
+                'description': '28x28 digit classification, 2-layer int8 NN. Hardware-attested via PUF.',
+            }],
+            'nodes': [
+                {'node_id': nid, 'address': n['address'], 'last_seen': n['last_seen']}
+                for nid, n in self.INFERENCE_NODES.items()
+            ],
+            'price_qz': self.INFERENCE_PRICE_QZ,
+        })
+
+
 
 def mining_simulator(chain):
     """Background thread that simulates ESP32 miners finding blocks."""
@@ -1194,6 +1428,9 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n👋 Shutting down...")
+
+
+
 
 
 QUARTZ_PORT = 21100
