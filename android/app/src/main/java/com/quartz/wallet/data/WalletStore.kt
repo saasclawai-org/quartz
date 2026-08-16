@@ -91,12 +91,49 @@ class WalletStore(context: Context) {
         prefs.edit().clear().apply()
     }
 
+    // --- Wallet PIN (gate for sending in software mode) ---
+    // Stored as PBKDF2-HMAC-SHA256(pin, random salt, 60k iters) — the PIN
+    // itself is never persisted or recoverable. Wrong-PIN lockout is enforced
+    // in the UI layer (in-memory), not here.
+
+    fun hasPin(): Boolean = prefs.getString(KEY_PIN_HASH, null) != null
+
+    fun setPin(pin: String): Boolean {
+        if (pin.length !in 4..8 || !pin.all { it.isDigit() }) return false
+        val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        val hash = pbkdf2(pin, salt)
+        return prefs.edit()
+            .putString(KEY_PIN_SALT, salt.toHex())
+            .putString(KEY_PIN_HASH, hash.toHex())
+            .commit()
+    }
+
+    /** Constant-time PIN check. */
+    fun verifyPin(pin: String): Boolean {
+        val saltHex = prefs.getString(KEY_PIN_SALT, null) ?: return false
+        val hashHex = prefs.getString(KEY_PIN_HASH, null) ?: return false
+        val calc = pbkdf2(pin, hexToBytes(saltHex))
+        val stored = hexToBytes(hashHex)
+        return java.security.MessageDigest.isEqual(calc, stored)
+    }
+
+    private fun pbkdf2(pin: String, salt: ByteArray): ByteArray =
+        javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            .generateSecret(javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 60_000, 256))
+            .encoded
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+    private fun hexToBytes(hex: String): ByteArray =
+        hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
     companion object {
         private const val KEY_MODE = "wallet_mode"
         private const val KEY_SEED = "seed_phrase"
         private const val KEY_PRIVKEY = "private_key"
         private const val KEY_PUBKEY = "public_key"
         private const val KEY_ADDRESS = "address"
+        private const val KEY_PIN_SALT = "pin_salt"
+        private const val KEY_PIN_HASH = "pin_hash"
     }
 }
 

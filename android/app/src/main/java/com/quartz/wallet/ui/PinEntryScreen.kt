@@ -253,6 +253,160 @@ fun PinEntryScreen(
     }
 }
 
+// ══════════════════════════════════════════════════════════════
+// Wallet PIN dialog — gates outgoing sends in software mode.
+// Distinct from the BLE device PIN above: this protects the keys
+// stored on the phone. Modes: VERIFY (PIN exists) or SET (first time).
+// ══════════════════════════════════════════════════════════════
+
+private const val MAX_FAILS_BEFORE_LOCK = 5
+private const val LOCK_SECONDS = 30
+
+@Composable
+fun WalletPinDialog(
+    mode: WalletPinMode,
+    onDone: (pin: String) -> Unit,   // verified OR newly set — caller may proceed
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.quartz.wallet.data.WalletStore(context) }
+
+    var pin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var stage by remember { mutableStateOf(if (mode == WalletPinMode.SET) 1 else 0) } // SET: 1=enter,2=confirm
+    var error by remember { mutableStateOf<String?>(null) }
+    var fails by remember { mutableStateOf(0) }
+    var lockUntil by remember { mutableStateOf(0L) }
+    var nowSec by remember { mutableStateOf(System.currentTimeMillis() / 1000) }
+
+    // Lockout ticker
+    LaunchedEffect(lockUntil) {
+        while (lockUntil > 0 && System.currentTimeMillis() / 1000 < lockUntil) {
+            nowSec = System.currentTimeMillis() / 1000
+            delay(1000)
+        }
+        nowSec = System.currentTimeMillis() / 1000
+    }
+    val locked = nowSec < lockUntil
+    val lockLeft = (lockUntil - nowSec).coerceAtLeast(0)
+
+    // Shake on error
+    var shakeTrigger by remember { mutableIntStateOf(0) }
+    val shakeAnim = remember(shakeTrigger) { Animatable(0f) }
+    LaunchedEffect(shakeTrigger) {
+        if (shakeTrigger > 0) {
+            shakeAnim.snapTo(0f)
+            shakeAnim.animateTo(0f, keyframes {
+                durationMillis = 400
+                for (i in 0..5) {
+                    val sign = if (i % 2 == 0) 1f else -1f
+                    sign * 10f * (1f - i / 6f) at (i * 70)
+                }
+            })
+        }
+    }
+
+    fun submit() {
+        when (mode) {
+            WalletPinMode.VERIFY -> {
+                if (store.verifyPin(pin)) {
+                    onDone(pin)
+                } else {
+                    fails++
+                    if (fails >= MAX_FAILS_BEFORE_LOCK) {
+                        lockUntil = System.currentTimeMillis() / 1000 + LOCK_SECONDS
+                        fails = 0
+                        error = "Too many wrong attempts — locked ${LOCK_SECONDS}s"
+                    } else {
+                        error = "Wrong PIN — ${MAX_FAILS_BEFORE_LOCK - fails} attempt${if (MAX_FAILS_BEFORE_LOCK - fails != 1) "s" else ""} before lock"
+                    }
+                    pin = ""
+                    shakeTrigger++
+                }
+            }
+            WalletPinMode.SET -> {
+                if (!Validation.isPinValid(pin)) {
+                    error = "PIN must be 4–8 digits"
+                    shakeTrigger++
+                    return
+                }
+                if (stage == 1) {
+                    confirmPin = pin
+                    pin = ""
+                    stage = 2
+                    error = null
+                } else {
+                    if (pin == confirmPin) {
+                        if (store.setPin(pin)) {
+                            onDone(pin)
+                        } else {
+                            error = "Failed to save PIN"
+                            shakeTrigger++
+                        }
+                    } else {
+                        error = "PINs don't match — try again"
+                        pin = ""; confirmPin = ""
+                        stage = 1
+                        shakeTrigger++
+                    }
+                }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (mode == WalletPinMode.SET) (if (stage == 1) "🔐 Set Wallet PIN" else "🔐 Confirm PIN") else "🔐 Enter Wallet PIN", color = QuartzText) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    if (mode == WalletPinMode.SET)
+                        (if (stage == 1) "Required before your first send. 4–8 digits." else "Re-enter the same PIN")
+                    else "PIN required to send funds",
+                    fontSize = 13.sp, color = QuartzMuted
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.graphicsLayer { translationX = shakeAnim.value },
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    val displayCount = maxOf(pin.length, MIN_PIN_LENGTH)
+                    for (i in 0 until displayCount) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(if (i < pin.length) QuartzAccent else QuartzBorder)
+                        )
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(it, color = QuartzOrange, fontSize = 13.sp, textAlign = TextAlign.Center)
+                }
+                if (locked) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("⏳ ${lockLeft}s", color = QuartzOrange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(16.dp))
+                NumberPad(
+                    enabled = !locked,
+                    onDigit = { if (pin.length < MAX_PIN_LENGTH) { pin += it; error = null } },
+                    onDelete = { if (pin.isNotEmpty()) { pin = pin.dropLast(1); error = null } },
+                    onSubmit = { if (!locked) submit() },
+                    canSubmit = pin.length >= MIN_PIN_LENGTH && !locked
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+enum class WalletPinMode { VERIFY, SET }
+
 @Composable
 private fun NumberPad(
     enabled: Boolean,

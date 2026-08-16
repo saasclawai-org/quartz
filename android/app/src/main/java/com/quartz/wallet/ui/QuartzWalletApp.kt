@@ -544,6 +544,43 @@ private fun SendDialog(
     val keys = remember(address) { SoftwareWallet.load(context) }
     val watchOnly = keys == null
 
+    // ── PIN gate: sends require wallet PIN (set on first send) ──
+    val pinStore = remember { WalletStore(context) }
+    var pinGate by remember { mutableStateOf<WalletPinMode?>(null) }
+
+    val doSend: () -> Unit = {
+        sending = true
+        scope.launch {
+            try {
+                val keysLocal = keys
+                if (keysLocal == null) {
+                    error = "Wallet keys not loaded — re-import your seed"
+                    sending = false
+                    return@launch
+                }
+                val (priv, _, from) = keysLocal
+                if (priv.isEmpty()) {
+                    error = "Private key is empty — re-import your seed"
+                    sending = false
+                    return@launch
+                }
+                val amt = amount.toDoubleOrNull()
+                val sats = amt?.let { (it * 1e8).toLong() } ?: 0
+                SoftwareWallet.send(priv, from, toAddress, sats)
+                    .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
+                    .onFailure { e ->
+                        error = e.message ?: e.toString()
+                        sending = false
+                        android.widget.Toast.makeText(context, "Send failed: ${e.message ?: e.toString()}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+            } catch (ce: Exception) {
+                error = ce.message ?: ce.toString()
+                sending = false
+                android.widget.Toast.makeText(context, "Send crashed: ${ce.message ?: ce.toString()}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = { if (!sending) onDismiss() },
         title = { Text("📤 Send QZ") },
@@ -597,34 +634,10 @@ private fun SendDialog(
                             sats + SoftwareWallet.FEE_SATS > balanceSats ->
                                 error = "Insufficient balance (need amount + fee)"
                             else -> {
-                                sending = true
-                                scope.launch {
-                                    try {
-                                        val keysLocal = keys
-                                        if (keysLocal == null) {
-                                            error = "Wallet keys not loaded — re-import your seed"
-                                            sending = false
-                                            return@launch
-                                        }
-                                        val (priv, _, from) = keysLocal
-                                        if (priv.isEmpty()) {
-                                            error = "Private key is empty — re-import your seed"
-                                            sending = false
-                                            return@launch
-                                        }
-                                        SoftwareWallet.send(priv, from, toAddress, sats)
-                                            .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
-                                            .onFailure { e ->
-                                                error = e.message ?: e.toString()
-                                                sending = false
-                                                android.widget.Toast.makeText(context, "Send failed: ${e.message ?: e.toString()}", android.widget.Toast.LENGTH_LONG).show()
-                                            }
-                                    } catch (ce: Exception) {
-                                        error = ce.message ?: ce.toString()
-                                        sending = false
-                                        android.widget.Toast.makeText(context, "Send crashed: ${ce.message ?: ce.toString()}", android.widget.Toast.LENGTH_LONG).show()
-                                    }
-                                }
+                                // PIN gate before any send: verify existing PIN
+                                // or set one on first use, then dispatch
+                                pinGate = if (pinStore.hasPin()) WalletPinMode.VERIFY
+                                          else WalletPinMode.SET
                             }
                         }
                     },
@@ -637,6 +650,15 @@ private fun SendDialog(
             TextButton(onClick = { if (!sending) onDismiss() }) { Text("Cancel") }
         }
     )
+
+    // PIN gate dialog — rendered on top of the send dialog
+    pinGate?.let { mode ->
+        WalletPinDialog(
+            mode = mode,
+            onDone = { pinGate = null; doSend() },
+            onDismiss = { pinGate = null }
+        )
+    }
 }
 
 private fun formatQz(sats: Long): String {
