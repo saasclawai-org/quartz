@@ -468,7 +468,7 @@ static void mining_task(void *pvParameters) {
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "  Quartz (QZ) — ESP32 Cryptocurrency Miner");
     ESP_LOGI(TAG, "  Version: %d", QUARTZ_VERSION);
-    ESP_LOGI(TAG, "  Target: ESP32-S3 (generic)");
+    ESP_LOGI(TAG, "  Target: ESP32-C3 (generic)");
     ESP_LOGI(TAG, "  Node: %s:%d", QUARTZ_NODE_HOST, QUARTZ_NODE_PORT);
     ESP_LOGI(TAG, "========================================");
 
@@ -611,6 +611,7 @@ static void mining_task(void *pvParameters) {
             quartz_ble_set_seed_phrase((const char (*)[12])words);
 
             ESP_LOGI(TAG, "Waiting for confirmation...");
+            ESP_LOGI(TAG, "  - HOLD BOOT BUTTON 3s (no PC needed)");
             ESP_LOGI(TAG, "  - Quartz app (BLE): pair device, then confirm in app");
             ESP_LOGI(TAG, "  - Serial: type 'confirm' + Enter");
 
@@ -618,6 +619,16 @@ static void mining_task(void *pvParameters) {
             char serial_buf[32] = {0};
             int serial_pos = 0;
             bool serial_confirmed = false;
+
+            /* BOOT button (GPIO9, active-low) — hold 3s to confirm.
+             * For setups where the host serial tx path is unavailable. */
+            gpio_config_t boot_btn = {
+                .pin_bit_mask = 1ULL << 9,
+                .mode = GPIO_MODE_INPUT,
+                .pull_up_en = GPIO_PULLUP_ENABLE,
+            };
+            gpio_config(&boot_btn);
+            int boot_hold_ms = 0;
 
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
@@ -678,6 +689,21 @@ static void mining_task(void *pvParameters) {
                         serial_buf[serial_pos++] = ch;
                     }
                 }
+
+                /* BOOT button hold-to-confirm */
+                if (gpio_get_level(9) == 0) {
+                    boot_hold_ms += 50;
+                    if (boot_hold_ms == 1000) {
+                        ESP_LOGI(TAG, "BOOT held 1s... keep holding to confirm (3s)");
+                    }
+                    if (boot_hold_ms >= 3000) {
+                        serial_confirmed = true;
+                        ESP_LOGI(TAG, "✅ Seed confirmed via BOOT button");
+                    }
+                } else {
+                    boot_hold_ms = 0;
+                }
+
                 vTaskDelay(pdMS_TO_TICKS(50));
             }
 
