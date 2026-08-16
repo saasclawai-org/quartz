@@ -245,7 +245,7 @@ static void init_nvs(void) {
 /* ============================================================
  * Serial Console — always-on command interface
  * Runs as its own task; mining keeps running.
- * Commands: help | address | seed | recover <12 words> | pin <d> | setpin <d> | pinstatus
+ * Commands: help | address | seed | recover <12 words> | pin <d> | setpin <d> | pinstatus | wifi
  * ============================================================ */
 static void console_task(void *pvParameters) {
     static char line[256];
@@ -657,8 +657,20 @@ static void mining_task(void *pvParameters) {
                             ESP_LOGI(TAG, "Recovery mode — parsing seed phrase...");
                             /* TODO: parse 12 words, derive address, query node */
                             ESP_LOGI(TAG, "Recovery not yet fully implemented — use app");
+                        } else if (strcasecmp(serial_buf, "wifi") == 0) {
+                            /* Wipe WiFi credentials and reboot into provisioning portal */
+                            nvs_handle_t h;
+                            if (nvs_open("qz_wifi", NVS_READWRITE, &h) == ESP_OK) {
+                                nvs_erase_key(h, "ssid");
+                                nvs_erase_key(h, "pass");
+                                nvs_commit(h);
+                                nvs_close(h);
+                            }
+                            ESP_LOGI(TAG, "WiFi cleared — rebooting into portal (Quartz-XXXX AP)");
+                            vTaskDelay(pdMS_TO_TICKS(500));
+                            esp_restart();
                         } else if (strcasecmp(serial_buf, "help") == 0) {
-                            ESP_LOGI(TAG, "Commands: confirm | pin <digits> | setpin <digits> | pinstatus | recover <12 words> | help");
+                            ESP_LOGI(TAG, "Commands: confirm | pin <digits> | setpin <digits> | pinstatus | recover <12 words> | wifi | help");
                         }
                         serial_pos = 0;
                         serial_buf[0] = '\0';
