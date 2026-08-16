@@ -321,10 +321,10 @@ static void start_sta_mode(const char *ssid, const char *pass) {
     esp_wifi_set_config(WIFI_IF_STA, &sta_config);
     esp_wifi_start();
 
-    /* Default modem-sleep power save causes connect→kick loops on many
-     * APs (TP-Link Smart Connect notably). Keep the radio fully awake —
- * USB-powered miner, power draw is irrelevant. */
-    esp_wifi_set_ps(WIFI_PS_NONE);
+    /* Full PS_NONE fights BLE for the radio on C3 (beacon-timeout loops
+     * when BLE provisioning is advertising). MIN_MODEM is the coex-safe
+     * setting that still keeps the AP happy. */
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
     g_wifi_state = QZ_WIFI_CONNECTING;
 }
