@@ -61,7 +61,7 @@ Simplified Bitcoin-like blocks, sized for ESP32 constraints:
 | Transactions | Variable | See tx structure |
 
 **Block size limit:** 4KB (ESP32-friendly)
-**Target block time:** 120 seconds (2 minutes)
+**Target block time:** 30 seconds
 **Difficulty retarget:** Every 144 blocks (~48 hours)
 
 ### Transaction Structure
@@ -86,13 +86,23 @@ UTXO-based, Bitcoin-compatible:
 
 ### Networking
 
-Quartz uses a three-layer radio stack — each layer serves a different purpose:
+Quartz uses a four-layer radio stack — each layer serves a different purpose:
 
 1. **WiFi (primary)** — TCP connections to known peers for full block sync, node API, and broadcasting large data. ESP32 acts as both client and server. Requires local network or internet.
 
-2. **BLE (phone pairing)** — Phone wallet connects to ESP32 for balance checking, transaction construction, and signing delegation. Range: ~10m. Encrypted + bonded.
+2. **BLE (phone pairing)** — Phone wallet connects to ESP32 for balance checking, transaction construction, and signing delegation. Range: ~10m. Encrypted + bonded. Disabled after seed confirmation on headless miners (v070+) to eliminate radio contention with WiFi.
 
-3. **LoRa (mesh gossip)** — Long-range (2-15km) device-to-device mesh for block header propagation and transaction relay. Works without internet, WiFi, or cellular. Ideal for rural areas, developing nations, and infrastructure resilience.
+3. **ESP-NOW (LAN cluster)** — Connectionless peer-to-peer protocol for same-room/same-building board-to-board communication. ~200m range, ~1 Mbps PHY, zero extra hardware (uses the existing WiFi radio). Carries block headers, transaction relay, and cluster mining coordination. Throughput ceiling ~15 TPS (consensus-capped at 10 tx/block ÷ 30s block time). No router, no network config — boards discover each other by broadcast.
+
+4. **LoRa (WAN backbone)** — Long-range (2-15km) device-to-device mesh for block header propagation and transaction relay across long distances. Works without internet, WiFi, or cellular. Ideal for rural areas, developing nations, and infrastructure resilience. Requires LoRa-capable boards (LilyGO T3, Heltec V3).
+
+#### Network Layer Privacy
+
+Quartz's PUF identity is durable (one-chip-one-vote is the Sybil resistance), so anonymity must live entirely in the network layer:
+
+- **Radio layers (ESP-NOW, LoRa)** — no IP exists at all. The strongest privacy Quartz can achieve: traffic cannot be correlated to an internet address because none is used.
+- **Tor hidden service** — the reference node is reachable via a Tor v3 onion address. Miners/clients with Tor can reach the API without revealing their IP. ESP32 cannot run Tor itself, but a Raspberry Pi bridge node can torify ESP32 traffic through a SOCKS proxy. Coexists with the clearnet (Cloudflare) endpoint — both serve the same backend.
+- **Raspberry Pi standby node** — a full read-only node (~80 MB RAM, pure Python stdlib, no dependencies) that runs on any Raspberry Pi. Serves the chain snapshot via `/api/v1/snapshot`. Eliminates the single-point-of-failure of a single reference node. The Pi is also the natural mesh gateway: USB-attach an ESP32 or add a LoRa HAT and it bridges radio traffic to the chain.
 
 #### LoRa Mesh Protocol
 
@@ -157,7 +167,7 @@ ESP32 nodes operate in one of three modes:
 | Mesh Relayer Pool | 10% — design preserved, **deferred to a future hard fork** |
 | Quantum Security Pool | **0% — dropped** (see Emission Decision) |
 | Halving Period | 500,000 blocks (~19 months at 2min blocks) |
-| Block Time | 120 seconds |
+| Block Time | 30 seconds |
 | Difficulty Retarget | 144 blocks (~48 hours) |
 | PUF Required | **Block 1. No exceptions.** |
 | Smallest Unit | 0.00000001 QZ (1 quartz-sat) |
@@ -458,7 +468,7 @@ Quartz replaces this model with **mesh-native mining pools** — decentralized, 
 
 **Discovery:** ESP32 miners broadcast LoRa beacons every 60 seconds. Nearby miners hear beacons and discover local cluster members. No internet needed.
 
-**Coordinator Election:** Every 16 blocks (~32 minutes), cluster members deterministically elect a coordinator using a verifiable hash election: the candidate with the lowest `SHA-256(pubkey || epoch_number)` wins. All members compute the same result independently — no voting, no communication needed for the election itself.
+**Coordinator Election:** Every 16 blocks (~8 minutes), cluster members deterministically elect a coordinator using a verifiable hash election: the candidate with the lowest `SHA-256(pubkey || epoch_number)` wins. All members compute the same result independently — no voting, no communication needed for the election itself.
 
 **Work Distribution:** The coordinator assigns nonce ranges to pool members to reduce duplicate work: "Miner A searches 0–1M, Miner B searches 1M–2M." This is advisory — miners can search any range.
 
