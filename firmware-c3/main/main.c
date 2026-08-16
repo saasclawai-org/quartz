@@ -822,6 +822,18 @@ static void mining_task(void *pvParameters) {
     bool have_work = false;
     uint32_t last_work_fetch = 0;
 
+    /* v071: offline block stash — found block awaiting submission.
+     * Kept in RAM, retried every 5s once online, dropped if the chain
+     * advances past its height (orphaned). No more thrown-away blocks. */
+    static struct {
+        bool     valid;
+        char     job_id[32];
+        uint64_t nonce;
+        uint8_t  header[80];
+        uint32_t height;
+        uint32_t last_try;
+    } pend = {0};
+
     while (s_mining) {
         /* Fetch new work every 30 seconds or on first iteration */
         uint32_t now = esp_timer_get_time() / 1000000;
@@ -838,6 +850,24 @@ static void mining_task(void *pvParameters) {
                 /* Fallback to local mining if node unreachable */
                 if (!have_work) {
                     ESP_LOGW(TAG, "Node unreachable, mining locally");
+                }
+            }
+        }
+
+        /* v071: retry stashed block once the link is back */
+        if (pend.valid) {
+            if (have_work && tmpl.height > pend.height) {
+                ESP_LOGW(TAG, "Stashed block #%u orphaned (chain at %u) - dropped",
+                         pend.height, tmpl.height);
+                pend.valid = false;
+            } else if (quartz_wifi_is_connected() && (now - pend.last_try) >= 5) {
+                pend.last_try = now;
+                int rc = quartz_mining_submit(pend.job_id, pend.nonce, pend.header);
+                if (rc == 0) {
+                    ESP_LOGI(TAG, "Stashed block #%u ACCEPTED after retry (+42 QZ)", pend.height);
+                    pend.valid = false;
+                } else {
+                    ESP_LOGW(TAG, "Stash retry failed (%d), trying again in 5s", rc);
                 }
             }
         }
@@ -873,14 +903,29 @@ static void mining_task(void *pvParameters) {
                     ESP_LOGI(TAG, "PUF attestation: %02x%02x%02x%02x...",
                              puf_resp[0], puf_resp[1], puf_resp[2], puf_resp[3]);
 
-                    /* Submit to node */
+                    /* Submit to node (v071: stash for retry if offline or submit fails) */
                     if (quartz_wifi_is_connected()) {
                         int rc = quartz_mining_submit(tmpl.job_id, nonce, header);
                         if (rc == 0) {
                             ESP_LOGI(TAG, "Block submitted and accepted!");
                         } else {
-                            ESP_LOGW(TAG, "Block submit failed (%d)", rc);
+                            ESP_LOGW(TAG, "Submit failed (%d) - stashing block #%u", rc, tmpl.height);
+                            pend.valid = true;
+                            strlcpy(pend.job_id, tmpl.job_id, sizeof(pend.job_id));
+                            pend.nonce = nonce;
+                            memcpy(pend.header, header, 80);
+                            pend.height = tmpl.height;
+                            pend.last_try = now;
                         }
+                    } else {
+                        ESP_LOGW(TAG, "OFFLINE - stashing block #%u (+42 QZ) until link returns",
+                                 tmpl.height);
+                        pend.valid = true;
+                        strlcpy(pend.job_id, tmpl.job_id, sizeof(pend.job_id));
+                        pend.nonce = nonce;
+                        memcpy(pend.header, header, 80);
+                        pend.height = tmpl.height;
+                        pend.last_try = now;
                     }
 
                     /* Fetch new work immediately */
