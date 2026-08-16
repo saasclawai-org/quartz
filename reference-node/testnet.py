@@ -327,21 +327,50 @@ class QuartzChain:
         return blocks
 
     def get_address(self, address: str):
-        """Get address info for explorer."""
-        # Find transactions for this address
+        """Get address info with real transaction history (signed deltas).
+
+        Outputs pay to script = ASCII address bytes; inputs carry the spender's
+        Ed25519 pubkey (address derived via SHA-256[:20]). Net delta per tx:
+          outputs_to_me − inputs_spent_by_me  (positive = received)
+        """
+        from quartz.crypto import public_key_to_address as _pk2a
+        addr_b = address.encode()
+
+        # txid → tx map for resolving spent input amounts (UTXO lookups)
+        tx_by_txid = {}
+        for block in self.blocks:
+            for tx in block.transactions:
+                tx_by_txid[tx.txid] = (block, tx)
+
         txs = []
         for i, block in enumerate(self.blocks):
+            ts = block.header.timestamp
             for j, tx in enumerate(block.transactions):
-                for amount, script in tx.outputs:
-                    script_addr = script.hex()[:34]
-                    if script_addr == address or address in script.hex():
-                        txs.append({
-                            "block": i,
-                            "txid": tx.txid.hex(),
-                            "type": "coinbase" if j == 0 else "transfer",
-                            "amount_sats": amount,
-                            "amount_qz": amount / 1e8,
-                        })
+                out_amt = sum(amt for amt, script in tx.outputs if script == addr_b)
+                in_amt = 0
+                if j > 0:  # coinbase has no real inputs
+                    for ph, idx, sig, pub in tx.inputs:
+                        if pub and len(pub) == 32:
+                            try:
+                                if _pk2a(pub) == address:
+                                    prev = tx_by_txid.get(ph)
+                                    if prev and idx < len(prev[1].outputs):
+                                        in_amt += prev[1].outputs[idx][0]
+                            except Exception:
+                                pass
+                if out_amt == 0 and in_amt == 0:
+                    continue
+                net = out_amt - in_amt
+                txs.append({
+                    "block": i,
+                    "txid": tx.txid.hex(),
+                    "type": "coinbase" if j == 0 else "transfer",
+                    "direction": "in" if net >= 0 else "out",
+                    "amount_sats": net,  # signed: negative = sent (incl. fee)
+                    "amount_qz": net / 1e8,
+                    "timestamp": ts,
+                    "time": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(ts)),
+                })
         return {
             "address": address,
             "balance_sats": self.balances.get(address, 0),
@@ -415,8 +444,12 @@ class QuartzChain:
                 for tx in self.mempool
             ],
         }
-        with open(CHAIN_FILE, 'w') as f:
+        tmp = CHAIN_FILE + '.tmp'
+        with open(tmp, 'w') as f:
             json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, CHAIN_FILE)  # atomic: readers never see a partial file
 
     def load(self):
         """Load chain from disk."""
@@ -639,6 +672,10 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
 
                 matching_txs = []
                 for tx in addr_info.get('transactions', []):
+                    # Payments received only: outgoing entries carry negative
+                    # signed deltas and are excluded (min_amount >= 0 check + direction)
+                    if tx.get('direction', 'in') == 'out':
+                        continue
                     if tx['amount_sats'] >= min_amount:
                         matching_txs.append({
                             'txid': tx['txid'],
