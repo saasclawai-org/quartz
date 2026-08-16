@@ -32,6 +32,13 @@ from quartz.blockchain import (
 from quartz.crystal_hash import crystal_hash_verify, check_difficulty
 from quartz.crypto import create_new_wallet, public_key_to_address, sign_message
 
+# Consensus engine
+from quartz.consensus import (
+    ConsensusEngine, UTXOSet, UTXO, Mempool,
+    validate_transaction, validate_block, apply_block,
+    MAX_BLOCK_TXS, MAX_BLOCK_SIZE,
+)
+
 # Override difficulty for fast testnet blocks (real network uses 20)
 import quartz.blockchain as _bc
 _bc.DIFFICULTY_BITS = 12
@@ -65,6 +72,7 @@ class QuartzChain:
         self.balances = {}  # address -> balance (in sats)
         self.dev_wallet = None
         self.current_difficulty = TESTNET_DIFFICULTY
+        self.miner_last_mined = {}  # miner_id -> last block timestamp (activity tracking)
 
         os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -82,6 +90,31 @@ class QuartzChain:
             self.load()
         else:
             self.mine_genesis()
+
+        # Initialize consensus engine (builds UTXO set from chain)
+        self.consensus = ConsensusEngine(
+            blocks=self.blocks,
+            balances=self.balances,
+            current_difficulty=self.current_difficulty,
+            block_time=TESTNET_BLOCK_TIME,
+            retarget_period=RETARGET_PERIOD,
+        )
+        # Synthetic UTXOs (faucet / legacy-balance mints) are not in any
+        # block, so the engine's replay doesn't include them — re-add.
+        self.synthetic_utxos = getattr(self, 'synthetic_utxos', [])
+        for u in self.synthetic_utxos:
+            self.consensus.utxo_set.add(UTXO(
+                txid=bytes.fromhex(u['txid']),
+                index=u['index'],
+                amount=u['amount'],
+                script_pubkey=bytes.fromhex(u['script']),
+                created_height=u.get('created_height', 0),
+            ))
+        if self.synthetic_utxos:
+            print(f"🪙 Restored {len(self.synthetic_utxos)} synthetic UTXOs (faucet)")
+        # Sync legacy mempool to consensus mempool
+        for tx in self.mempool:
+            self.consensus.mempool.add(tx, self.consensus.utxo_set)
 
     def mine_genesis(self):
         """Mine the genesis block."""
@@ -123,41 +156,44 @@ class QuartzChain:
         height = len(self.blocks)
         prev_block = self.blocks[-1]
 
-        # Check for difficulty retarget
-        if height > 0 and height % RETARGET_PERIOD == 0:
-            old_diff = self.current_difficulty
-            self.current_difficulty = _retarget_bits(
-                self.current_difficulty, self.blocks, TESTNET_BLOCK_TIME)
-            if self.current_difficulty != old_diff:
-                print(f"📐 Difficulty retarget at block {height}: "
-                      f"{old_diff} → {self.current_difficulty} bits")
-
         # Calculate reward
         miner_reward = get_miner_reward(height)
         dev_reward = get_dev_fund_reward(height)
 
-        # Early adopter bonus
+        # Early adopter tracking (2x reward bonus removed — it violated
+        # coinbase validation: coinbase output must not exceed subsidy+fees)
         if miner_id not in self.known_miners:
             self.known_miners.add(miner_id)
             self.first_mined[miner_id] = time.time()
-            miner_reward *= 2  # 2x bonus
-            print(f"🎉 New miner joined! {miner_name or miner_id.hex()} (early adopter 2x bonus)")
+            print(f"🎉 New miner joined! {miner_name or miner_id.hex()}")
+        self.miner_last_mined[miner_id] = time.time()
 
-        # Build block
+        # Build block (miner_id stored in block body — not part of the
+        # 80-byte hashed header, so attribution doesn't affect PoW)
         header = BlockHeader(
             version=1,
             prev_block_hash=prev_block.header.hash,
             timestamp=int(time.time()),
-            difficulty_target=self.current_difficulty,
+            difficulty_target=self.consensus.get_expected_difficulty(height),
+            miner_id=miner_id[:6],
         )
 
-        # Coinbase transaction
-        coinbase = Transaction.coinbase(miner_id, miner_reward + dev_reward, height)
-        block = Block(header=header, transactions=[coinbase] + self.mempool[:10])
+        # Select mempool txs through consensus engine
+        selected_txs = self.consensus.mempool.select_for_block(self.consensus.utxo_set)
+
+        # Calculate total fees from selected txs
+        total_fees = 0
+        for tx in selected_txs:
+            _, fee, _, _, _ = validate_transaction(tx, self.consensus.utxo_set, height=height)
+            total_fees += fee
+
+        # Coinbase transaction (reward + fees)
+        coinbase = Transaction.coinbase(miner_id, miner_reward + dev_reward + total_fees, height)
+        block = Block(header=header, transactions=[coinbase] + selected_txs)
         block.build_header()
 
         # Mine (simulated — real ESP32 would do CrystalHash)
-        target = 1 << (256 - self.current_difficulty)
+        target = 1 << (256 - self.consensus.current_difficulty)
         attempts = 0
         while True:
             header_hash = block.header.hash
@@ -172,24 +208,40 @@ class QuartzChain:
                 block.header.nonce = 0
                 attempts = 0
 
-        # Update balances — credit the REAL wallet address when the miner
-        # provided one (hardware submit sends it). Synthetic sha256 address
-        # is only a fallback for the simulated fleet.
-        # (Fix: rewards were landing at sha256(addr[:6]) — unspendable.)
+        # Accept block through consensus engine (validates + updates UTXO set)
+        is_valid, reason = self.consensus.accept_block(block)
+        if not is_valid:
+            print(f"❌ Block REJECTED by consensus: {reason}")
+            return block  # return the block anyway for API compat
+
+        # Update legacy balance dict (consensus engine handles UTXO set)
         credit_addr = miner_addr or hashlib.sha256(miner_id).hexdigest()[:34]
         self.balances[credit_addr] = self.balances.get(credit_addr, 0) + miner_reward
         if dev_reward > 0 and self.dev_wallet:
             dev_addr = self.dev_wallet['address']
             self.balances[dev_addr] = self.balances.get(dev_addr, 0) + dev_reward
 
-        self.blocks.append(block)
-        self.mempool.clear()
+        # Sync difficulty from consensus engine
+        self.current_difficulty = self.consensus.current_difficulty
+
+        # Update legacy mempool (remove confirmed txs)
+        confirmed_txids = {tx.txid for tx in block.transactions}
+        self.mempool = [tx for tx in self.mempool if tx.txid not in confirmed_txids]
+
+        # Drop synthetic (faucet) UTXOs that were spent in this block
+        if getattr(self, 'synthetic_utxos', None):
+            live = self.consensus.utxo_set
+            self.synthetic_utxos = [
+                u for u in self.synthetic_utxos
+                if live.has(bytes.fromhex(u['txid']), u['index'])
+            ]
 
         print(f"⛏️  Block #{height} mined by {miner_name or miner_id.hex()}")
         print(f"   Hash: {block.header.hash.hex()[:16]}...")
         print(f"   Nonce: {block.header.nonce} (attempts: {attempts})")
-        print(f"   Reward: {miner_reward / 1e8:.1f} QZ → miner, {dev_reward / 1e8:.1f} QZ → dev fund")
+        print(f"   Reward: {miner_reward / 1e8:.1f} QZ → miner, {dev_reward / 1e8:.1f} QZ → dev fund, {total_fees / 1e8:.4f} QZ fees")
         print(f"   Total supply: {sum(self.balances.values()) / 1e8:.1f} QZ")
+        print(f"   Mempool: {self.consensus.mempool.size()} txs, UTXOs: {len(self.consensus.utxo_set)}")
 
         self.save()
         return block
@@ -206,14 +258,21 @@ class QuartzChain:
             "total_supply_qz": total_supply / 1e8,
             "max_supply": 42_000_000,
             "circulating_pct": round(total_supply / (42_000_000 * 1e8) * 100, 4),
-            "miner_count": len(self.known_miners),
-            "mempool_size": len(self.mempool),
+            "miner_count": self._active_miner_count(),
+            "miners_total": len(self.known_miners),
+            "mempool_size": self.consensus.mempool.size() if hasattr(self, 'consensus') else len(self.mempool),
             "dev_fund_address": self.dev_wallet['address'] if self.dev_wallet else None,
             "dev_fund_balance": self.balances.get(self.dev_wallet['address'], 0) if self.dev_wallet else 0,
             "dev_fund_balance_qz": self.balances.get(self.dev_wallet['address'], 0) / 1e8 if self.dev_wallet else 0,
             "total_hashrate": sum(m.get('hashrate', 0) for m in self._active_miners().values()),
             "hardware_miners": len(self._active_miners()),
         }
+
+    def _active_miner_count(self, max_age_s=600) -> int:
+        """Miners (simulated or real) that mined a block in the last 10 min."""
+        now = time.time()
+        return sum(1 for t in self.miner_last_mined.values()
+                   if now - t <= max_age_s)
 
     def _active_miners(self, max_age_s=600):
         """Return miner_stats pruned to only recently-seen miners."""
@@ -250,6 +309,10 @@ class QuartzChain:
                         {"amount_sats": amt, "amount_qz": amt / 1e8}
                         for amt, _ in tx.outputs
                     ],
+                    "inputs": [
+                        {"prev_hash": ph.hex(), "idx": idx}
+                        for ph, idx, _, _ in tx.inputs
+                    ] if i > 0 else [],
                 }
                 for i, tx in enumerate(block.transactions)
             ],
@@ -302,12 +365,55 @@ class QuartzChain:
                         "miner_id": b.header.miner_id.hex(),
                     },
                     "tx_count": len(b.transactions),
+                    "txs": [
+                        {
+                            "version": tx.version,
+                            "inputs": [
+                                {
+                                    "prev_hash": ph.hex(),
+                                    "idx": idx,
+                                    "sig": sig.hex(),
+                                    "pubkey": pub.hex(),
+                                }
+                                for ph, idx, sig, pub in tx.inputs
+                            ],
+                            "outputs": [
+                                {"amount": amt, "script": script.hex()}
+                                for amt, script in tx.outputs
+                            ],
+                            "locktime": tx.locktime,
+                            "data": tx.data.hex(),
+                        }
+                        for tx in b.transactions
+                    ],
                 }
                 for b in self.blocks
             ],
             "balances": self.balances,
             "known_miners": [m.hex() for m in self.known_miners],
             "current_difficulty": self.current_difficulty,
+            "synthetic_utxos": getattr(self, 'synthetic_utxos', []),
+            "mempool": [
+                {
+                    "version": tx.version,
+                    "inputs": [
+                        {
+                            "prev_hash": ph.hex(),
+                            "idx": idx,
+                            "sig": sig.hex(),
+                            "pubkey": pub.hex(),
+                        }
+                        for ph, idx, sig, pub in tx.inputs
+                    ],
+                    "outputs": [
+                        {"amount": amt, "script": script.hex()}
+                        for amt, script in tx.outputs
+                    ],
+                    "locktime": tx.locktime,
+                    "data": tx.data.hex(),
+                }
+                for tx in self.mempool
+            ],
         }
         with open(CHAIN_FILE, 'w') as f:
             json.dump(data, f, indent=2)
@@ -327,12 +433,61 @@ class QuartzChain:
                 nonce=bd['header']['nonce'],
                 miner_id=bytes.fromhex(bd['header']['miner_id']),
             )
-            self.blocks.append(Block(header=header))
+            # Reconstruct transactions if they were persisted
+            transactions = []
+            for td in bd.get('txs', []):
+                inputs = [
+                    (
+                        bytes.fromhex(ti['prev_hash']),
+                        ti['idx'],
+                        bytes.fromhex(ti['sig']),
+                        bytes.fromhex(ti['pubkey']),
+                    )
+                    for ti in td.get('inputs', [])
+                ]
+                outputs = [
+                    (to['amount'], bytes.fromhex(to['script']))
+                    for to in td.get('outputs', [])
+                ]
+                transactions.append(Transaction(
+                    version=td.get('version', 1),
+                    inputs=inputs,
+                    outputs=outputs,
+                    locktime=td.get('locktime', 0),
+                    data=bytes.fromhex(td.get('data', '')),
+                ))
+            self.blocks.append(Block(header=header, transactions=transactions))
 
         self.balances = data.get('balances', {})
         self.known_miners = set(bytes.fromhex(m) for m in data.get('known_miners', []))
         self.current_difficulty = data.get('current_difficulty', TESTNET_DIFFICULTY)
-        print(f"📦 Loaded {len(self.blocks)} blocks from disk (difficulty: {self.current_difficulty})")
+        self.synthetic_utxos = data.get('synthetic_utxos', [])
+
+        # Restore mempool
+        self.mempool = []
+        for td in data.get('mempool', []):
+            inputs = [
+                (
+                    bytes.fromhex(ti['prev_hash']),
+                    ti['idx'],
+                    bytes.fromhex(ti['sig']),
+                    bytes.fromhex(ti['pubkey']),
+                )
+                for ti in td.get('inputs', [])
+            ]
+            outputs = [
+                (to['amount'], bytes.fromhex(to['script']))
+                for to in td.get('outputs', [])
+            ]
+            self.mempool.append(Transaction(
+                version=td.get('version', 1),
+                inputs=inputs,
+                outputs=outputs,
+                locktime=td.get('locktime', 0),
+                data=bytes.fromhex(td.get('data', '')),
+            ))
+
+        print(f"📦 Loaded {len(self.blocks)} blocks from disk (difficulty: {self.current_difficulty}, mempool: {len(self.mempool)} txs)")
 
 
 # Genesis pre-allocation for faucet
@@ -353,6 +508,20 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
 
         elif path == '/api/v1/info':
             self.json_response(self.chain.get_chain_info())
+
+        elif path == '/api/v1/snapshot':
+            # Full chain file for standby nodes (always current — read from
+            # the live chain's persistence path, no copy/cron needed)
+            try:
+                with open(CHAIN_FILE, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError:
+                self.json_error(500, "Snapshot unavailable")
 
         elif path == '/api/v1/blocks/recent':
             self.json_response(self.chain.get_recent_blocks(20))
@@ -643,11 +812,35 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             if not address:
                 self.json_error(400, "Missing address")
                 return
-            # Credit the address directly in the chain state
+            # Credit the address in the chain state + UTXO set
             # This is testnet-only — no real signing needed
             if address not in self.chain.balances:
                 self.chain.balances[address] = 0
             self.chain.balances[address] += 100 * 10**8  # 100 test QZ
+            # Mint a spendable UTXO keyed to the full address bytes
+            # (synthetic — not in a block; persisted separately)
+            faucet_tx = Transaction(
+                version=1,
+                inputs=[(b'\x00' * 32, 1, b'\x00' * 64, b'\x00' * 32)],
+                outputs=[(100 * 10**8, address.encode())],
+                data=b'faucet',
+            )
+            self.chain.consensus.utxo_set.add(UTXO(
+                txid=faucet_tx.txid,
+                index=0,
+                amount=100 * 10**8,
+                script_pubkey=address.encode(),
+                created_height=len(self.chain.blocks) - 1,
+            ))
+            if not hasattr(self.chain, 'synthetic_utxos'):
+                self.chain.synthetic_utxos = []
+            self.chain.synthetic_utxos.append({
+                'txid': faucet_tx.txid.hex(),
+                'index': 0,
+                'amount': 100 * 10**8,
+                'script': address.encode().hex(),
+                'created_height': len(self.chain.blocks) - 1,
+            })
             # Save state
             self.chain.save()
             self.json_response({"status": "ok", "amount": "100 QZ", "address": address})
@@ -702,19 +895,77 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 self.json_error(400, f"Signature verification failed: {e}")
                 return
 
-            # Move balance immediately (testnet simplified TX)
-            self.chain.balances[from_addr] = sender_balance - amount_sats
-            if to_addr not in self.chain.balances:
-                self.chain.balances[to_addr] = 0
-            self.chain.balances[to_addr] += amount_sats
+            # Build a real UTXO-spending transaction.
+            # The signature above authorizes the spend; the inputs reference
+            # UTXOs locked to this address, and outputs pay the recipient
+            # (plus change back to the sender).
+            utxo_set = self.chain.consensus.utxo_set
+            sender_utxos = sorted(
+                utxo_set.get_utxos_for(from_addr.encode()),
+                key=lambda u: u.amount,
+            )
 
-            # Create transaction record
+            # Testnet convenience: legacy balances (pre-consensus) have no
+            # UTXOs behind them. Auto-mint one so old balances stay spendable.
+            available = sum(u.amount for u in sender_utxos)
+            if available < amount_sats and sender_balance >= amount_sats:
+                mint_amt = sender_balance - available
+                mint_tx = Transaction(
+                    version=1,
+                    inputs=[(b'\x00' * 32, 2, b'\x00' * 64, b'\x00' * 32)],
+                    outputs=[(mint_amt, from_addr.encode())],
+                    data=b'legacy-balance-mint',
+                )
+                utxo_set.add(UTXO(
+                    txid=mint_tx.txid, index=0, amount=mint_amt,
+                    script_pubkey=from_addr.encode(),
+                    created_height=len(self.chain.blocks) - 1,
+                ))
+                if not hasattr(self.chain, 'synthetic_utxos'):
+                    self.chain.synthetic_utxos = []
+                self.chain.synthetic_utxos.append({
+                    'txid': mint_tx.txid.hex(), 'index': 0,
+                    'amount': mint_amt, 'script': from_addr.encode().hex(),
+                    'created_height': len(self.chain.blocks) - 1,
+                })
+                sender_utxos = sorted(
+                    utxo_set.get_utxos_for(from_addr.encode()),
+                    key=lambda u: u.amount,
+                )
+                available = sum(u.amount for u in sender_utxos)
+                print(f"🪙 Minted legacy-balance UTXO for {from_addr[:12]}…: {mint_amt / 1e8} QZ")
+
+            if available < amount_sats:
+                self.json_error(400, f"Insufficient UTXOs: {available / 1e8} QZ < {amount_qz} QZ")
+                return
+
+            # Select UTXOs (smallest first) until the amount is covered
+            selected, covered = [], 0
+            for u in sender_utxos:
+                selected.append(u)
+                covered += u.amount
+                if covered >= amount_sats:
+                    break
+
+            change = covered - amount_sats - 1000  # fee: 1000 sats (> min relay for ~222-byte tx)
+            outputs = [(amount_sats, to_addr.encode())]
+            if change > 0:
+                outputs.append((change, from_addr.encode()))
+
             tx = Transaction(
                 version=1,
-                inputs=[],
-                outputs=[(amount_sats, to_addr.encode()[:32])],
-                data=sig + pub_key,
+                inputs=[(u.txid, u.index, sig, pub_key) for u in selected],
+                outputs=outputs,
             )
+
+            # Submit to the consensus mempool — mined in the next block
+            ok, mempool_reason = self.chain.consensus.mempool.add(tx, utxo_set)
+            if not ok:
+                self.json_error(400, f"Transaction rejected: {mempool_reason}")
+                return
+
+            # Also track in legacy mempool for restart persistence
+            self.chain.mempool.append(tx)
 
             # Save state
             self.chain.save()
@@ -924,10 +1175,14 @@ def main():
     chain = QuartzChain()
     QuartzAPIHandler.chain = chain
 
-    # Start mining simulator in background
-    miner_thread = threading.Thread(target=mining_simulator, args=(chain,), daemon=True)
-    miner_thread.start()
-    print(f"\n🚀 Mining simulator started ({len(DEMO_MINERS)} virtual ESP32s)")
+    # Start mining simulator in background (unless disabled — two
+    # simulators mining separate snapshots = instant chain fork)
+    if os.environ.get('QUARTZ_NO_MINER') == '1':
+        print("\n🛑 Mining simulator DISABLED (QUARTZ_NO_MINER=1) — standby/read-only node")
+    else:
+        miner_thread = threading.Thread(target=mining_simulator, args=(chain,), daemon=True)
+        miner_thread.start()
+        print(f"\n🚀 Mining simulator started ({len(DEMO_MINERS)} virtual ESP32s)")
     print(f"📡 API: http://localhost:{QUARTZ_PORT}")
     print(f"🔗 Chain height: {len(chain.blocks)}")
     print(f"💰 Total supply: {sum(chain.balances.values()) / 1e8:.1f} QZ")
