@@ -14,3 +14,5 @@ firmware/secure_boot_signing_key.pem
 firmware/secure_boot_signing_key.pem.signed
 firmware-espnow-test/build-*/
 firmware-espnow-test/sdkconfig.*/
+firmware-ml-demo/build-*/
+firmware-ml-demo/sdkconfig
