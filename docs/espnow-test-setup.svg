@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" width="960" height="660" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa3b2"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="960" height="660" fill="#0f1117"/>
+
+  <!-- title -->
+  <text x="40" y="46" fill="#e8eaf0" font-size="22" font-weight="700">🔮 Quartz ESP-NOW Radio Bench — Setup</text>
+  <text x="40" y="68" fill="#9aa3b2" font-size="13">Two boards · same firmware · zero interaction · live throughput / loss / RSSI / TPS math</text>
+
+  <!-- connectors first (behind nodes) -->
+  <path d="M 400 150 L 190 208" fill="none" stroke="#9aa3b2" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+  <path d="M 560 150 L 770 208" fill="none" stroke="#9aa3b2" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+  <line x1="330" y1="275" x2="630" y2="275" stroke="#a78bfa" stroke-width="2" stroke-dasharray="8 5" marker-end="url(#arr)" marker-start="url(#arr)"/>
+  <line x1="330" y1="300" x2="630" y2="300" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="3 5" marker-end="url(#arr)"/>
+
+  <!-- stage 1: flash group -->
+  <rect x="40" y="84" width="880" height="76" rx="10" fill="none" stroke="#2a2f3a" stroke-dasharray="7 5"/>
+  <text x="56" y="106" fill="#9aa3b2" font-size="11" font-weight="700" letter-spacing="1">1 · FLASH — SAME V100 IMAGE ON BOTH BOARDS</text>
+  <rect x="380" y="96" width="200" height="52" rx="8" fill="#161a22" stroke="#2a2f3a"/>
+  <text x="480" y="118" fill="#e8eaf0" font-size="13" font-weight="600" text-anchor="middle">Windows PC · esptool</text>
+  <text x="480" y="136" fill="#9aa3b2" font-size="11" text-anchor="middle">espnow-test-esp32.bin @ 0x10000</text>
+
+  <!-- board A -->
+  <rect x="60" y="210" width="250" height="130" rx="10" fill="#161a22" stroke="#a78bfa" stroke-width="1.5"/>
+  <line x1="185" y1="210" x2="185" y2="192" stroke="#a78bfa" stroke-width="2"/>
+  <circle cx="185" cy="189" r="3" fill="#a78bfa"/>
+  <text x="185" y="236" fill="#e8eaf0" font-size="15" font-weight="700" text-anchor="middle">BOARD A — tethered</text>
+  <text x="185" y="256" fill="#9aa3b2" font-size="12" text-anchor="middle">USB → PC · miniterm open</text>
+  <rect x="95" y="268" width="180" height="22" rx="11" fill="#22304a" stroke="#4f6ef7"/>
+  <text x="185" y="283" fill="#a5c8ff" font-size="11" font-weight="600" text-anchor="middle">PONG · listener + stats</text>
+  <text x="185" y="310" fill="#9aa3b2" font-size="11" text-anchor="middle">prints per-second report</text>
+  <text x="185" y="326" fill="#9aa3b2" font-size="11" text-anchor="middle">ACKs every packet</text>
+
+  <!-- board B -->
+  <rect x="650" y="210" width="250" height="130" rx="10" fill="#161a22" stroke="#fbbf24" stroke-width="1.5"/>
+  <line x1="775" y1="210" x2="775" y2="192" stroke="#fbbf24" stroke-width="2"/>
+  <circle cx="775" cy="189" r="3" fill="#fbbf24"/>
+  <text x="775" y="236" fill="#e8eaf0" font-size="15" font-weight="700" text-anchor="middle">BOARD B — mobile</text>
+  <text x="775" y="256" fill="#9aa3b2" font-size="12" text-anchor="middle">USB power bank · no PC needed</text>
+  <rect x="685" y="268" width="180" height="22" rx="11" fill="#3a2f16" stroke="#fbbf24"/>
+  <text x="775" y="283" fill="#ffe0a3" font-size="11" font-weight="600" text-anchor="middle">PING · streams packets</text>
+  <text x="775" y="310" fill="#9aa3b2" font-size="11" text-anchor="middle">250-byte frames, max rate</text>
+  <text x="775" y="326" fill="#9aa3b2" font-size="11" text-anchor="middle">sequence numbers track loss</text>
+
+  <!-- radio arcs -->
+  <g stroke="#a78bfa" stroke-width="2" fill="none" opacity="0.85">
+    <path d="M 315 245 Q 335 275 315 305"/>
+    <path d="M 315 225 Q 355 275 315 325"/>
+    <path d="M 645 245 Q 625 275 645 305"/>
+    <path d="M 645 225 Q 605 275 645 325"/>
+  </g>
+  <text x="480" y="262" fill="#e8eaf0" font-size="13" font-weight="600" text-anchor="middle">ESP-NOW · channel 1 · ~1 Mbps PHY</text>
+  <text x="480" y="320" fill="#a78bfa" font-size="12" text-anchor="middle">no router · no WiFi network · direct radio</text>
+
+  <!-- role note -->
+  <text x="480" y="365" fill="#9aa3b2" font-size="12" text-anchor="middle">auto-role: lower MAC → PING (streams) · higher MAC → PONG (listens) — both negotiate at boot, no input</text>
+
+  <!-- serial console -->
+  <rect x="40" y="382" width="430" height="142" rx="10" fill="#161a22" stroke="#2a2f3a"/>
+  <text x="56" y="404" fill="#4ade80" font-size="11" font-weight="700" letter-spacing="1">SERIAL · MINTERM ON BOARD A</text>
+  <g font-family="'Cascadia Code', Consolas, monospace" font-size="12" fill="#7dd3fc">
+    <text x="56" y="428">peer 50:91:e3:48:56:0f → role: PONG</text>
+    <text x="56" y="450">RX 470 pkt/s | 115 KB/s | loss 0.3%</text>
+    <text x="56" y="472">RSSI -52 / -49 / -45 dBm (min/avg/max)</text>
+    <text x="56" y="494" fill="#4ade80">⚡ 100KB block ≈ 0.9 s → TPS ≈ 15 (cap)</text>
+  </g>
+
+  <!-- range test -->
+  <rect x="510" y="382" width="410" height="142" rx="10" fill="#161a22" stroke="#2a2f3a"/>
+  <text x="526" y="404" fill="#fbbf24" font-size="11" font-weight="700" letter-spacing="1">2 · RANGE TEST — WALK IT</text>
+  <g fill="#c8cdd8" font-size="12">
+    <text x="526" y="428">power Board B from a power bank</text>
+    <text x="526" y="450">walk away from Board A, phone in pocket</text>
+    <text x="526" y="472" fill="#9aa3b2">watch: RSSI falls · loss rises</text>
+    <text x="526" y="494" fill="#9aa3b2">"LINK SILENT" = edge of range → real mesh radius</text>
+  </g>
+
+  <!-- bottom takeaway -->
+  <rect x="40" y="556" width="880" height="64" rx="10" fill="#1a1530" stroke="#a78bfa"/>
+  <text x="480" y="582" fill="#e8eaf0" font-size="14" font-weight="700" text-anchor="middle">MEASURE → KB/s · loss % · RSSI dBm ⇒ 100KB block shipping time ⇒ TPS ceiling</text>
+  <text x="480" y="604" fill="#9aa3b2" font-size="12" text-anchor="middle">that number is the radio budget for the future ESP-NOW cluster mesh (LAN) alongside LoRa backbone (WAN)</text>
+
+  <text x="480" y="646" fill="#5b6472" font-size="10" text-anchor="middle">quartz preview testnet · firmware v100 · aug 2026</text>
+</svg>
