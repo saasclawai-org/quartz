@@ -631,6 +631,7 @@ static void mining_task(void *pvParameters) {
             quartz_ble_set_seed_phrase((const char (*)[12])words);
 
             ESP_LOGI(TAG, "Waiting for confirmation...");
+            ESP_LOGI(TAG, "  - HOLD BOOT/PRG BUTTON 3s (no PC needed)");
             ESP_LOGI(TAG, "  - Quartz app (BLE): pair device, then confirm in app");
             ESP_LOGI(TAG, "  - Serial: type 'confirm' + Enter");
 
@@ -638,6 +639,17 @@ static void mining_task(void *pvParameters) {
             char serial_buf[32] = {0};
             int serial_pos = 0;
             bool serial_confirmed = false;
+
+            /* BOOT/PRG button (GPIO0, active-low) — hold 3s to confirm.
+             * GPIO0 = PRG button on LilyGO T3; harmless on M5Stack (speaker SD).
+             * Same rationale as v069-c3: host serial tx is often wedged. */
+            gpio_config_t boot_btn = {
+                .pin_bit_mask = 1ULL << 0,
+                .mode = GPIO_MODE_INPUT,
+                .pull_up_en = GPIO_PULLUP_ENABLE,
+            };
+            gpio_config(&boot_btn);
+            int boot_hold_ms = 0;
 
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
@@ -680,8 +692,20 @@ static void mining_task(void *pvParameters) {
                             ESP_LOGI(TAG, "Recovery mode — parsing seed phrase...");
                             /* TODO: parse 12 words, derive address, query node */
                             ESP_LOGI(TAG, "Recovery not yet fully implemented — use app");
+                        } else if (strcasecmp(serial_buf, "wifi") == 0) {
+                            /* Wipe WiFi credentials and reboot into provisioning portal */
+                            nvs_handle_t h;
+                            if (nvs_open("qz_wifi", NVS_READWRITE, &h) == ESP_OK) {
+                                nvs_erase_key(h, "ssid");
+                                nvs_erase_key(h, "pass");
+                                nvs_commit(h);
+                                nvs_close(h);
+                            }
+                            ESP_LOGI(TAG, "WiFi cleared — rebooting into portal (Quartz-XXXX AP)");
+                            vTaskDelay(pdMS_TO_TICKS(500));
+                            esp_restart();
                         } else if (strcasecmp(serial_buf, "help") == 0) {
-                            ESP_LOGI(TAG, "Commands: confirm | pin <digits> | setpin <digits> | pinstatus | recover <12 words> | help");
+                            ESP_LOGI(TAG, "Commands: confirm | pin <digits> | setpin <digits> | pinstatus | recover <12 words> | wifi | help");
                         }
                         serial_pos = 0;
                         serial_buf[0] = '\0';
@@ -697,6 +721,21 @@ static void mining_task(void *pvParameters) {
                         serial_buf[serial_pos++] = ch;
                     }
                 }
+
+                /* BOOT/PRG button hold-to-confirm */
+                if (gpio_get_level(0) == 0) {
+                    boot_hold_ms += 50;
+                    if (boot_hold_ms == 1000) {
+                        ESP_LOGI(TAG, "BOOT held 1s... keep holding to confirm (3s)");
+                    }
+                    if (boot_hold_ms >= 3000) {
+                        serial_confirmed = true;
+                        ESP_LOGI(TAG, "✅ Seed confirmed via BOOT button");
+                    }
+                } else {
+                    boot_hold_ms = 0;
+                }
+
                 vTaskDelay(pdMS_TO_TICKS(50));
             }
 
@@ -765,10 +804,18 @@ static void mining_task(void *pvParameters) {
     g_scratchpad_size = scratchpad_size;
     ESP_LOGI(TAG, "Scratchpad allocated (%d KB)", scratchpad_size / 1024);
 
-    /* Initialize BLE GATT server for phone app (after scratchpad) */
-    quartz_ble_set_address(quartz_wallet_get_address());
-    quartz_ble_init();
-    ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+    /* BLE only while seed provisioning might still be needed (v070).
+     * Once backup is confirmed, dedicate the radio to WiFi and kill
+     * modem-sleep coex churn (router evictions). */
+    bool ble_on = !quartz_wallet_is_backup_confirmed();
+    if (ble_on) {
+        quartz_ble_set_address(quartz_wallet_get_address());
+        quartz_ble_init();
+        ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+    } else {
+        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi");
+        quartz_wifi_set_full_power();
+    }
 
     /* If PIN is set, show PIN entry screen before mining starts */
     if (quartz_wallet_has_pin()) {
