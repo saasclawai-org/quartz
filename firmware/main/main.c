@@ -31,6 +31,7 @@
 #include "esp_timer.h"
 #include "esp_random.h"
 #include "esp_mac.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -238,7 +239,7 @@ static void poll_buttons(void) {
 /* === Persistent serial commands (available while mining) ===
  * Post-setup the old first-boot command loop never ran — 'setpin' was
  * unreachable on an existing wallet. This fixes that. */
-static char s_cmd_buf[64];
+static char s_cmd_buf[256];
 static int  s_cmd_pos = 0;
 static bool s_serial_unlocked = false;
 
@@ -293,8 +294,148 @@ static void quartz_serial_command(const char *cmd)
         } else {
             ESP_LOGE(TAG, "No wallet on device");
         }
+    } else if (strcasecmp(cmd, "address") == 0) {
+        const char *addr = quartz_wallet_get_address();
+        if (addr && addr[0]) {
+            ESP_LOGI(TAG, "Address: %s", addr);
+        } else {
+            ESP_LOGE(TAG, "No wallet on device");
+        }
+    } else if (strncasecmp(cmd, "recover ", 8) == 0) {
+        /* recover word1 word2 ... word12 — adopt a phone/other wallet */
+        if (quartz_wallet_has_pin() && !s_serial_unlocked) {
+            ESP_LOGE(TAG, "Locked — unlock first: 'pin <digits>'");
+            return;
+        }
+        char words[12][12];
+        int wi = 0;
+        const char *tok = cmd + 8;
+        bool ok = true;
+        while (wi < 12) {
+            while (*tok == ' ') tok++;
+            if (*tok == '\0') { ok = false; break; }
+            const char *end = strchr(tok, ' ');
+            size_t len = end ? (size_t)(end - tok) : strlen(tok);
+            if (len == 0 || len > 11) { ok = false; break; }
+            memcpy(words[wi], tok, len);
+            words[wi][len] = '\0';
+            for (char *p = words[wi]; *p; p++) *p = tolower((unsigned char)*p);
+            wi++;
+            tok = end ? end + 1 : tok + len;
+        }
+        if (ok && *tok == ' ') { while (*tok == ' ') tok++; }
+        if (!ok || wi != 12 || *tok != '\0') {
+            ESP_LOGE(TAG, "Usage: recover <12 words>  (exactly 12 words)");
+            return;
+        }
+        bool tn = quartz_wallet_is_testnet();
+        quartz_wallet_err_t rerr = quartz_wallet_restore(words, tn);
+        if (rerr == QZ_WALLET_OK) {
+            ESP_LOGI(TAG, "✅ Wallet restored — address: %s", quartz_wallet_get_address());
+            ESP_LOGI(TAG, "Rebooting in 2s ...");
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            esp_restart();
+        } else if (rerr == QZ_WALLET_ERR_INVALID) {
+            ESP_LOGE(TAG, "❌ Invalid seed phrase (unknown word or bad checksum)");
+        } else {
+            ESP_LOGE(TAG, "❌ Restore failed (code %d)", rerr);
+        }
+    } else if (strncasecmp(cmd, "send ", 5) == 0) {
+        /* send <address> <amount_qz> — signs on-device, broadcasts via node */
+        if (quartz_wallet_has_pin() && !s_serial_unlocked) {
+            ESP_LOGE(TAG, "Locked — unlock first: 'pin <digits>'");
+            return;
+        }
+        const char *p = cmd + 5;
+        while (*p == ' ') p++;
+        const char *sp = strchr(p, ' ');
+        if (!sp) { ESP_LOGE(TAG, "Usage: send <address> <amount_qz>  (e.g. send QkAbc... 1.5)"); return; }
+        char to[40];
+        size_t alen = (size_t)(sp - p);
+        if (alen == 0 || alen >= sizeof(to)) { ESP_LOGE(TAG, "Bad address"); return; }
+        memcpy(to, p, alen);
+        to[alen] = '\0';
+        const char *amt = sp + 1;
+        while (*amt == ' ') amt++;
+
+        long long sats = 0;
+        int frac = 0;
+        bool dot = false, ok = true;
+        for (const char *q = amt; *q && *q != ' '; q++) {
+            if (*q == '.') {
+                if (dot) { ok = false; break; }
+                dot = true;
+                continue;
+            }
+            if (*q < '0' || *q > '9') { ok = false; break; }
+            if (dot) {
+                if (frac >= 8) { ok = false; break; }
+                frac++;
+            }
+            sats = sats * 10 + (*q - '0');
+        }
+        for (int i = frac; i < 8; i++) sats *= 10;
+        if (!ok || sats <= 0) { ESP_LOGE(TAG, "Bad amount (max 8 decimals)"); return; }
+
+        const char *from = quartz_wallet_get_address();
+        const uint8_t *pub = quartz_wallet_get_pubkey();
+        if (!from || !pub) { ESP_LOGE(TAG, "No wallet on device"); return; }
+
+        char sats_str[24], msg[128], msg_hex[241], sig_hex[129], pub_hex[65], amount_qz[32];
+        snprintf(sats_str, sizeof(sats_str), "%lld", sats);
+        snprintf(msg, sizeof(msg), "%s%s%s", from, to, sats_str);
+
+        uint8_t sig[64];
+        if (quartz_wallet_sign((const uint8_t *)msg, strlen(msg), sig) != QZ_WALLET_OK) {
+            ESP_LOGE(TAG, "Signing failed");
+            return;
+        }
+        static const char hx[] = "0123456789abcdef";
+        for (int i = 0; i < 64; i++) {
+            sig_hex[i * 2] = hx[sig[i] >> 4];
+            sig_hex[i * 2 + 1] = hx[sig[i] & 0xF];
+        }
+        sig_hex[128] = '\0';
+        for (int i = 0; i < 32; i++) {
+            pub_hex[i * 2] = hx[pub[i] >> 4];
+            pub_hex[i * 2 + 1] = hx[pub[i] & 0xF];
+        }
+        pub_hex[64] = '\0';
+        for (size_t i = 0; i < strlen(msg); i++) {
+            msg_hex[i * 2] = hx[(uint8_t)msg[i] >> 4];
+            msg_hex[i * 2 + 1] = hx[(uint8_t)msg[i] & 0xF];
+        }
+        msg_hex[strlen(msg) * 2] = '\0';
+
+        long long whole = sats / 100000000LL, rem = sats % 100000000LL;
+        snprintf(amount_qz, sizeof(amount_qz), "%lld.%08lld", whole, rem);
+        for (char *e = amount_qz + strlen(amount_qz) - 1; *e == '0'; e--) *e = '\0';
+        if (amount_qz[strlen(amount_qz) - 1] == '.') amount_qz[strlen(amount_qz) - 1] = '\0';
+
+        char body[768], response[1024];
+        snprintf(body, sizeof(body),
+                 "{\"from\":\"%s\",\"to\":\"%s\",\"amount\":%s,"
+                 "\"signature\":\"%s\",\"public_key\":\"%s\",\"message\":\"%s\"}",
+                 from, to, amount_qz, sig_hex, pub_hex, msg_hex);
+
+        ESP_LOGI(TAG, "Sending %s QZ to %s ...", amount_qz, to);
+        int rc = quartz_http_request("POST", "/api/v1/send", body, response, sizeof(response));
+        if (rc < 0) {
+            ESP_LOGE(TAG, "Node unreachable (rc=%d) — WiFi connected?", rc);
+        } else {
+            ESP_LOGI(TAG, "Node: %s", response);
+            if (strstr(response, "\"txid\"")) {
+                ESP_LOGI(TAG, "✅ Sent — pending in mempool, mined within ~30s");
+            }
+        }
     } else if (strcasecmp(cmd, "help") == 0) {
-        ESP_LOGI(TAG, "Commands: setpin <digits> | pin <digits> | pinstatus | seed | help");
+        ESP_LOGI(TAG, "Commands:");
+        ESP_LOGI(TAG, "  address              show wallet address");
+        ESP_LOGI(TAG, "  seed                 show backup phrase");
+        ESP_LOGI(TAG, "  recover <12 words>   import wallet from seed phrase, reboot");
+        ESP_LOGI(TAG, "  send <addr> <amount> sign + broadcast tx (e.g. send Qk... 1.5)");
+        ESP_LOGI(TAG, "  setpin/pin <digits>  set or unlock PIN");
+        ESP_LOGI(TAG, "  pinstatus            PIN state");
     }
 }
 

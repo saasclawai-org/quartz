@@ -194,3 +194,38 @@ void quartz_bip39_derive_key(const char words[12][12],
     memset(key, 0, sizeof(key));
     memset(chain, 0, sizeof(chain));
 }
+
+/* ============================================================
+ * Validate a 12-word mnemonic (wordlist membership + checksum)
+ * ============================================================ */
+bool quartz_bip39_validate_words(const char words[12][12]) {
+    uint8_t bits[132];
+    int n = 0;
+
+    for (int w = 0; w < 12; w++) {
+        int idx = -1;
+        for (int i = 0; i < 2048; i++) {
+            if (strcmp(bip39_wordlist[i], words[w]) == 0) { idx = i; break; }
+        }
+        if (idx < 0) return false;  /* word not in list */
+        for (int bit = 10; bit >= 0; bit--) bits[n++] = (idx >> bit) & 1;
+    }
+
+    uint8_t entropy[16];
+    for (int i = 0; i < 16; i++) {
+        uint8_t v = 0;
+        for (int k = 0; k < 8; k++) v = (v << 1) | bits[i * 8 + k];
+        entropy[i] = v;
+    }
+
+    uint8_t hash[32];
+#ifdef ESP_PLATFORM
+    mbedtls_sha256(entropy, 16, hash, 0);
+#else
+    memset(hash, 0, 32);
+#endif
+
+    uint8_t cs = 0;
+    for (int k = 0; k < 4; k++) cs = (cs << 1) | bits[128 + k];
+    return cs == (hash[0] >> 4);
+}

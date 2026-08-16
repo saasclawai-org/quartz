@@ -41,7 +41,8 @@ static const char *TAG = "QUARTZ_WALLET";
 static uint8_t s_private_key[ED25519_PRIVATE_KEY_SIZE];
 static uint8_t s_public_key[ED25519_PUBLIC_KEY_SIZE];
 static char s_address[36];  // Base58 address string
-static char s_mnemonic_words[12][12];  // BIP39 mnemonic (persisted to NVS)
+static char s_mnemonic_words[12][12];
+static bool s_is_testnet = true;        // network of the loaded/generated wallet  // BIP39 mnemonic (persisted to NVS)
 static bool s_wallet_initialized = false;
 
 // ============================================================
@@ -186,6 +187,7 @@ quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
 
     // 4. Derive Quartz address from public key
     derive_address(s_public_key, testnet, s_address, sizeof(s_address));
+    s_is_testnet = testnet;
 
     // 5. Persist to NVS
     nvs_handle_t handle;
@@ -212,6 +214,47 @@ quartz_wallet_err_t quartz_wallet_generate(bool testnet) {
     ESP_LOGI(TAG, "Seed phrase is standard BIP39 — importable in any wallet");
 
     return QZ_WALLET_OK;
+}
+
+// ============================================================
+// Restore — Import Wallet from Seed Phrase (canonical BIP-39)
+// Same words = same key on phone / node / any device.
+// PIN (if set) is preserved across restore.
+// ============================================================
+
+quartz_wallet_err_t quartz_wallet_restore(const char words[12][12], bool testnet) {
+    if (!quartz_bip39_validate_words(words)) {
+        ESP_LOGE(TAG, "Restore: invalid words (not in list or bad checksum)");
+        return QZ_WALLET_ERR_INVALID;
+    }
+
+    quartz_bip39_derive_key(words, s_private_key, s_public_key);
+    derive_address(s_public_key, testnet, s_address, sizeof(s_address));
+    for (int i = 0; i < 12; i++) {
+        strncpy(s_mnemonic_words[i], words[i], 11);
+        s_mnemonic_words[i][11] = '\0';
+    }
+    s_is_testnet = testnet;
+    s_wallet_initialized = true;
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) return QZ_WALLET_ERR_STORAGE;
+
+    nvs_set_blob(handle, NVS_KEY_PRIV, s_private_key, ED25519_PRIVATE_KEY_SIZE);
+    nvs_set_blob(handle, NVS_KEY_PUB, s_public_key, ED25519_PUBLIC_KEY_SIZE);
+    nvs_set_blob(handle, NVS_KEY_MNEMONIC, s_mnemonic_words, sizeof(s_mnemonic_words));
+    uint8_t flags = FLAG_MINING_ENABLED | (testnet ? FLAG_TESTNET : 0);
+    nvs_set_u8(handle, NVS_KEY_FLAGS, flags);
+    nvs_commit(handle);
+    nvs_close(handle);
+
+    ESP_LOGI(TAG, "Wallet restored from seed phrase: %s", s_address);
+    return QZ_WALLET_OK;
+}
+
+bool quartz_wallet_is_testnet(void) {
+    return s_is_testnet;
 }
 
 // ============================================================
@@ -266,6 +309,7 @@ quartz_wallet_err_t quartz_wallet_load(void) {
 
     bool testnet = flags & FLAG_TESTNET;
     derive_address(s_public_key, testnet, s_address, sizeof(s_address));
+    s_is_testnet = testnet;
     s_wallet_initialized = true;
 
     ESP_LOGI(TAG, "Wallet loaded from NVS: %s", s_address);

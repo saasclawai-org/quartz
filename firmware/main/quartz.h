@@ -41,10 +41,10 @@ typedef int qz_err_t;
 #define QUARTZ_BLOCK_TIME_SEC   120
 #define QUARTZ_DIFFICULTY_BITS  20      /* starting difficulty */
 #define QUARTZ_RETARGET_PERIOD  144     /* blocks between retargets */
-#define QUARTZ_HALVING_INTERVAL 210000
-#define QUARTZ_INITIAL_REWARD   5000000000  /* 50 QZ in quartz-sats */
-#define QUARTZ_MINER_REWARD     4750000000  /* 47.5 QZ to miner (95%) */
-#define QUARTZ_DEV_FUND_REWARD  250000000   /* 2.5 QZ to dev fund (5%) */
+#define QUARTZ_HALVING_INTERVAL 500000   /* supply retune 2026-08-16 */
+#define QUARTZ_INITIAL_REWARD   4200000000  /* 42 QZ — supply retune 2026-08-16 */
+#define QUARTZ_MINER_REWARD     4200000000  /* 42 QZ to miner (100% pre-mesh-fork) */
+#define QUARTZ_DEV_FUND_REWARD  0           /* dev fund killed */
 #define QUARTZ_TOTAL_SUPPLY     4200000000000000  /* 42M QZ in quartz-sats */
 #define QUARTZ_DEV_FUND_TOTAL   210000000000000  /* 2.1M QZ dev fund (5%) */
 #define QUARTZ_EARLY_BONUS_MINERS 1000       /* first 1000 miners get 2x */

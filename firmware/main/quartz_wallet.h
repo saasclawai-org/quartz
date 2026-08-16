@@ -180,6 +180,16 @@ void quartz_bip39_derive_key(const char words[12][12],
                               uint8_t privkey[32],
                               uint8_t pubkey[32]);
 
+/** Validate 12-word mnemonic (wordlist + BIP-39 checksum). */
+bool quartz_bip39_validate_words(const char words[12][12]);
+
+/** Import a wallet from 12 words (canonical derivation). Checksum-validated.
+ *  Replaces any existing wallet. PIN (if set) is preserved. */
+quartz_wallet_err_t quartz_wallet_restore(const char words[12][12], bool testnet);
+
+/** True if current wallet is a testnet wallet. */
+bool quartz_wallet_is_testnet(void);
+
 /* Deprecated: old one-way privkey→mnemonic encoding. */
 /* Kept for reference but not used by new wallet generation. */
 void quartz_privkey_to_mnemonic(const uint8_t privkey[32],
