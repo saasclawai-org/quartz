@@ -983,8 +983,8 @@ static void mining_task(void *pvParameters) {
             static uint32_t s_last_log_uptime = 0;
             if (uptime - s_last_log_uptime >= 60) {
                 s_last_log_uptime = uptime;
-                ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, uptime %luh%lum",
-                         hps, s_hash_count, uptime / 3600, (uptime % 3600) / 60);
+                ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, uptime %luh%lum [%s]",
+                         hps, s_hash_count, uptime / 3600, (uptime % 3600) / 60, FW_VERSION_STRING);
             }
 
 #ifdef QUARTZ_HAS_DISPLAY

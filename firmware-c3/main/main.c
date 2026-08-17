@@ -940,8 +940,8 @@ static void mining_task(void *pvParameters) {
             uint32_t uptime = (esp_timer_get_time() / 1000000) - s_start_time;
             uint32_t hps = (uptime > 0) ? (s_hash_count / uptime) : 0;
             g_last_hps = hps;
-            ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, nonce %llu",
-                     hps, s_hash_count, nonce);
+            ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, nonce %llu [%s]",
+                     hps, s_hash_count, nonce, FW_VERSION_STRING);
 
 #ifdef QUARTZ_HAS_DISPLAY
             if (quartz_display_get_screen() == QZ_SCREEN_MINING) {
