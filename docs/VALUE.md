@@ -87,6 +87,24 @@ Status legend: **[LIVE]** running on the testnet today · **[BENCH]** built, awa
 
 ---
 
+## Lessons from Helium — the precedent we designed against
+
+Helium is the largest attempt yet at token-incentivized physical networks, and it ended in June 2026 with Nova Labs selling Helium Mobile to Noble Mobile. The arc: $450 LoRaWAN hotspots earning HNT for "building coverage" (HNT peaked ~$55 in 2021) → the token fell 95%+ when it turned out hotspot buyers were the only customers → Solana migration → sub-token consolidation (HIP-138) → sale. "Coverage stayed, demand was sold."
+
+What we take from it:
+
+| Helium | Quartz |
+|---|---|
+| Paid to build supply; demand never came | Utility loop runs **before** radio exists — QZ already buys attested compute over WiFi |
+| The network (LoRaWAN coverage) was the product | Radio is **transport**; the product is hardware-attested compute |
+| $450 entry per hotspot | $5 boards; Sybil resistance from PUF identity + bonded registration, not hardware cost |
+| Emissions-funded economy, indefinite | No mainnet until 20–50 real miners; relayer economics activate only at the mesh fork |
+| Proof-of-Coverage gamed by hotspot farms | PoW + per-chip unclonable identity — faking a miner means fabricating silicon |
+
+The one-sentence version: **Helium subsidized infrastructure hoping demand would show up; Quartz ships demand first and treats radio as plumbing.**
+
+---
+
 ## Sequencing
 
 ```
