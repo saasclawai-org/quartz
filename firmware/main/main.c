@@ -487,7 +487,8 @@ static void init_nvs(void) {
 static void mining_task(void *pvParameters) {
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "  Quartz (QZ) — ESP32 Cryptocurrency Miner");
-    ESP_LOGI(TAG, "  Version: %d", QUARTZ_VERSION);
+    ESP_LOGI(TAG, "  Firmware: %s", FW_VERSION_STRING);
+    ESP_LOGI(TAG, "  Protocol: %d", QUARTZ_VERSION);
     ESP_LOGI(TAG, "  Target: ESP32-S3 (generic)");
     ESP_LOGI(TAG, "  Node: %s:%d", QUARTZ_NODE_HOST, QUARTZ_NODE_PORT);
     ESP_LOGI(TAG, "========================================");
@@ -1060,7 +1061,7 @@ static void mining_task(void *pvParameters) {
 /* === Main Entry Point === */
 #ifdef ESP_PLATFORM
 void app_main(void) {
-    ESP_LOGI(TAG, "Quartz ESP32 Miner starting...");
+    ESP_LOGI(TAG, "Quartz ESP32 Miner %s starting...", FW_VERSION_STRING);
 
     /* Initialize NVS */
     init_nvs();
