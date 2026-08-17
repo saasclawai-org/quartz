@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quartz Architecture</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f8fafc; --fg: #172033; --muted: #5b6475; --line: #64748b;
+    --neutral: #e2e8f0; --input: #bfdbfe; --process: #c7d2fe; --storage: #99f6e4;
+    --external: #fde68a; --risk: #fecaca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a; --fg: #e5e7eb; --muted: #a3adbd; --line: #94a3b8;
+      --neutral: #334155; --input: #1d4ed8; --process: #4338ca; --storage: #0f766e;
+      --external: #92400e; --risk: #991b1b;
+    }
+  }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1240px; margin:32px auto; padding:0 20px; }
+  svg { width:100%; height:auto; display:block; }
+  .title { font-size:22px; font-weight:650; fill:var(--fg); }
+  .label { font-size:14px; font-weight:600; fill:var(--fg); }
+  .small { font-size:12px; fill:var(--muted); }
+  .tiny { font-size:11px; fill:var(--muted); }
+  .node { stroke:var(--line); stroke-width:1; }
+  .neutral { fill:var(--neutral); } .input { fill:var(--input); } .process { fill:var(--process); }
+  .storage { fill:var(--storage); } .external { fill:var(--external); } .risk { fill:var(--risk); }
+  .edge { stroke:var(--line); stroke-width:1.5; fill:none; }
+  .zone { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:6 5; opacity:0.8; }
+  .zonetitle { font-size:13px; font-weight:700; fill:var(--muted); letter-spacing:1px; }
+  .badge { font-size:10px; font-weight:700; letter-spacing:0.5px; }
+</style>
+</head>
+<main>
+<svg viewBox="0 0 1240 1560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Quartz full-stack architecture map">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="38" class="title">Quartz — Full-Stack Architecture</text>
+  <text x="20" y="60" class="small">Everything from WHITEPAPER · VALUE · L2 design in one view · status-tagged [LIVE] [BENCH] [ROADMAP]</text>
+
+  <!-- ═══ connectors (behind nodes) ═══ -->
+  <!-- clients -> utility -->
+  <path class="edge" d="M170,235 L170,300" marker-end="url(#arr)"/>
+  <!-- clients -> L1 (signed txs) -->
+  <path class="edge" d="M430,235 L430,680" marker-end="url(#arr)"/>
+  <text x="438" y="440" class="tiny">signed txs (Ed25519)</text>
+  <!-- utility -> L1 (escrow settle) -->
+  <path class="edge" d="M170,455 L170,680" marker-end="url(#arr)"/>
+  <text x="178" y="560" class="tiny">escrow settle</text>
+  <!-- L2 -> L1 (open/close only) -->
+  <path class="edge" d="M690,630 L690,680" marker-end="url(#arr)"/>
+  <text x="698" y="662" class="tiny">open / close only</text>
+  <!-- L1 -> transport (blocks/jobs) -->
+  <path class="edge" d="M430,835 L430,890" marker-end="url(#arr)"/>
+  <text x="438" y="870" class="tiny">blocks · jobs · gossip</text>
+  <!-- transport -> hardware -->
+  <path class="edge" d="M430,1045 L430,1100" marker-end="url(#arr)"/>
+  <text x="438" y="1080" class="tiny">submits · receipts</text>
+  <!-- PUF moat -> utility (attestation) -->
+  <path class="edge" d="M980,1100 L980,455" marker-end="url(#arr)" stroke-dasharray="4 4"/>
+  <text x="988" y="800" class="tiny" transform="rotate(90 988 800)">PUF-attested compute</text>
+
+  <!-- ═══ Band 1: Clients ═══ -->
+  <rect x="20" y="90" width="1200" height="145" rx="10" class="zone"/>
+  <text x="36" y="112" class="zonetitle">CLIENTS · WALLETS</text>
+  <rect x="60" y="125" width="220" height="90" rx="8" class="node input"/>
+  <text x="84" y="152" class="label">Android app</text>
+  <text x="84" y="170" class="small">PIN-gated sends · txid UI</text>
+  <text x="84" y="186" class="small">BIP39 + SLIP-0010</text>
+  <text x="230" y="152" class="badge" fill="#166534">LIVE</text>
+
+  <rect x="320" y="125" width="220" height="90" rx="8" class="node input"/>
+  <text x="344" y="152" class="label">PWA wallet</text>
+  <text x="344" y="170" class="small">AES-GCM 256 · PIN lock</text>
+  <text x="344" y="186" class="small">tx history (fixed)</text>
+  <text x="490" y="152" class="badge" fill="#166534">LIVE</text>
+
+  <rect x="580" y="125" width="220" height="90" rx="8" class="node input"/>
+  <text x="604" y="152" class="label">Firmware wallet</text>
+  <text x="604" y="170" class="small">keys in NVS · BLE pairing</text>
+  <text x="604" y="186" class="small">hardware mode (watch-only phone)</text>
+  <text x="750" y="152" class="badge" fill="#166534">LIVE</text>
+
+  <rect x="840" y="125" width="220" height="90" rx="8" class="node input"/>
+  <text x="864" y="152" class="label">Inference buyers</text>
+  <text x="864" y="170" class="small">pay QZ per attested result</text>
+  <text x="864" y="186" class="small">API / escrow endpoint</text>
+  <text x="1010" y="152" class="badge" fill="#166534">LIVE</text>
+
+  <!-- ═══ Band 2: Utility ═══ -->
+  <rect x="20" y="270" width="1200" height="185" rx="10" class="zone"/>
+  <text x="36" y="292" class="zonetitle">UTILITY LAYER — what QZ buys (demand first, radio later)</text>
+  <rect x="60" y="305" width="280" height="120" rx="8" class="node process"/>
+  <text x="84" y="332" class="label">Inference marketplace</text>
+  <text x="84" y="350" class="small">request → 1 QZ escrow → attest</text>
+  <text x="84" y="366" class="small">→ submit → provider paid</text>
+  <text x="84" y="386" class="small">loop exercised end-to-end</text>
+  <text x="300" y="332" class="badge" fill="#166534">LIVE</text>
+
+  <rect x="380" y="305" width="280" height="120" rx="8" class="node process"/>
+  <text x="404" y="332" class="label">PUF attestation receipts</text>
+  <text x="404" y="350" class="small">SHA256(puf ‖ input ‖ output ‖ model)</text>
+  <text x="404" y="366" class="small">unclonable silicon = the moat</text>
+  <text x="404" y="386" class="small">trustless verify: v2 research</text>
+  <text x="620" y="332" class="badge" fill="#166534">LIVE*</text>
+
+  <rect x="700" y="305" width="280" height="120" rx="8" class="node process"/>
+  <text x="724" y="332" class="label">Relay &amp; sensor payments</text>
+  <text x="724" y="350" class="small">per-byte relay share (10%)</text>
+  <text x="724" y="366" class="small">per-reading sensor feeds</text>
+  <text x="724" y="386" class="small">activates at mesh fork</text>
+  <text x="940" y="332" class="badge" fill="#92400e">ROADMAP</text>
+
+  <!-- ═══ Band 3: L2 ═══ -->
+  <rect x="20" y="490" width="1200" height="185" rx="10" class="zone" style="stroke-dasharray:3 4"/>
+  <text x="36" y="512" class="zonetitle">L2 — CHANNEL PAYMENTS (DESIGN · ships with mesh fork · docs/L2.md)</text>
+  <rect x="60" y="525" width="280" height="120" rx="8" class="node process"/>
+  <text x="84" y="552" class="label">eltoo channels</text>
+  <text x="84" y="570" class="small">210 B updates = 1 radio frame</text>
+  <text x="84" y="586" class="small">~20 upd/s per pair (proj.)</text>
+  <text x="84" y="606" class="small">no punish transcripts · NVS ckpt/64</text>
+
+  <rect x="380" y="525" width="280" height="120" rx="8" class="node process"/>
+  <text x="404" y="552" class="label">Hub (Pi / server)</text>
+  <text x="404" y="570" class="small">hub-and-spoke, no routing yet</text>
+  <text x="404" y="586" class="small">~5,000 upd/s aggregate (proj.)</text>
+  <text x="404" y="606" class="small">phones ~1,000/s per channel</text>
+
+  <rect x="700" y="525" width="280" height="120" rx="8" class="node process"/>
+  <text x="724" y="552" class="label">Watchtowers</text>
+  <text x="724" y="570" class="small">350 B guard blobs, keyless</text>
+  <text x="724" y="586" class="small">defend stale closes, can't rob</text>
+  <text x="724" y="606" class="small">720-block (6 h) window</text>
+
+  <!-- ═══ Band 4: L1 ═══ -->
+  <rect x="20" y="720" width="1200" height="145" rx="10" class="zone"/>
+  <text x="36" y="742" class="zonetitle">L1 — CONSENSUS</text>
+  <rect x="60" y="755" width="440" height="90" rx="8" class="node storage"/>
+  <text x="84" y="782" class="label">Quartz chain (testnet)</text>
+  <text x="84" y="800" class="small">30 s blocks · 10 tx/block · 0.33 TPS shared · PoW</text>
+  <text x="84" y="816" class="small">42 QZ/block · halving 500K · UTXO · Ed25519 single-sig</text>
+
+  <rect x="540" y="755" width="440" height="90" rx="8" class="node storage"/>
+  <text x="564" y="782" class="label">Forward-compat (do now)</text>
+  <text x="564" y="800" class="small">tx type byte: 0x00 transfer (today)</text>
+  <text x="564" y="816" class="small">0x01 open · 0x02 update · 0x03 close (reserved)</text>
+
+  <!-- ═══ Band 5: Transport ═══ -->
+  <rect x="20" y="905" width="1200" height="145" rx="10" class="zone"/>
+  <text x="36" y="927" class="zonetitle">TRANSPORT — privacy lives here, not in identity</text>
+  <rect x="60" y="940" width="220" height="90" rx="8" class="node external"/>
+  <text x="84" y="967" class="label">WiFi</text>
+  <text x="84" y="985" class="small">today's path</text>
+  <text x="84" y="1001" class="small">jobs · submits · API</text>
+  <text x="230" y="967" class="badge" fill="#166534">LIVE</text>
+
+  <rect x="320" y="940" width="220" height="90" rx="8" class="node external"/>
+  <text x="344" y="967" class="label">ESP-NOW</text>
+  <text x="344" y="985" class="small">~15 TPS link ceiling (proj.)</text>
+  <text x="344" y="1001" class="small">no IP at all · 2-Heltec bench</text>
+  <text x="490" y="967" class="badge" fill="#92400e">BENCH</text>
+
+  <rect x="580" y="940" width="220" height="90" rx="8" class="node external"/>
+  <text x="604" y="967" class="label">LoRa SX1262</text>
+  <text x="604" y="985" class="small">915 MHz · km-range</text>
+  <text x="604" y="1001" class="small">hardware already in hand</text>
+  <text x="750" y="967" class="badge" fill="#92400e">ROADMAP</text>
+
+  <rect x="840" y="940" width="220" height="90" rx="8" class="node external"/>
+  <text x="864" y="967" class="label">Tor hidden service</text>
+  <text x="864" y="985" class="small">IP-layer privacy now</text>
+  <text x="864" y="1001" class="small">onion → node :21100</text>
+  <text x="1010" y="967" class="badge" fill="#166534">LIVE</text>
+
+  <!-- ═══ Band 6: Hardware ═══ -->
+  <rect x="20" y="1090" width="1200" height="185" rx="10" class="zone"/>
+  <text x="36" y="1112" class="zonetitle">HARDWARE — measured on desks, not promised on calendars</text>
+  <rect x="60" y="1125" width="220" height="120" rx="8" class="node neutral"/>
+  <text x="84" y="1152" class="label">ESP32-C3 miner</text>
+  <text x="84" y="1170" class="small">29 H/s real PoW</text>
+  <text x="84" y="1186" class="small">3,200+ QZ · 65+ blocks</text>
+  <text x="84" y="1206" class="small">v071 offline stash</text>
+  <text x="230" y="1152" class="badge" fill="#166534">LIVE</text>
+
+  <rect x="320" y="1125" width="220" height="120" rx="8" class="node neutral"/>
+  <text x="344" y="1152" class="label">Heltec V3 ×2</text>
+  <text x="344" y="1170" class="small">ESP32-S3 + SX1262</text>
+  <text x="344" y="1186" class="small">bench first → miners after</text>
+  <text x="344" y="1206" class="small">S3 out-hashes the C3</text>
+  <text x="490" y="1152" class="badge" fill="#92400e">BENCH</text>
+
+  <rect x="580" y="1125" width="220" height="120" rx="8" class="node neutral"/>
+  <text x="604" y="1152" class="label">Pi node (standby)</text>
+  <text x="604" y="1170" class="small">QUARTZ_NO_MINER=1 baked in</text>
+  <text x="604" y="1186" class="small">snapshot sync · 15-min install</text>
+  <text x="604" y="1206" class="small">future watchtower</text>
+  <text x="750" y="1152" class="badge" fill="#166534">LIVE*</text>
+
+  <rect x="840" y="1125" width="220" height="120" rx="8" class="node risk"/>
+  <text x="864" y="1152" class="label">PUF identity</text>
+  <text x="864" y="1170" class="small">unclonable per-chip key</text>
+  <text x="864" y="1186" class="small">cold-boot enrollment</text>
+  <text x="864" y="1206" class="small">THE moat — faking = silicon</text>
+
+  <!-- ═══ TPS ladder (right rail) ═══ -->
+  <text x="1064" y="726" class="zonetitle">TPS LADDER</text>
+  <rect x="1064" y="740" width="150" height="52" rx="6" class="node storage"/>
+  <text x="1080" y="760" class="small">L1 shared bus</text>
+  <text x="1080" y="778" class="label">0.33</text>
+  <path class="edge" d="M1139,792 L1139,812" marker-end="url(#arr)"/>
+  <rect x="1064" y="815" width="150" height="52" rx="6" class="node external"/>
+  <text x="1080" y="835" class="small">radio transport</text>
+  <text x="1080" y="853" class="label">~15</text>
+  <path class="edge" d="M1139,867 L1139,887" marker-end="url(#arr)"/>
+  <rect x="1064" y="890" width="150" height="52" rx="6" class="node process"/>
+  <text x="1080" y="910" class="small">per channel</text>
+  <text x="1080" y="928" class="label">~20</text>
+  <path class="edge" d="M1139,942 L1139,962" marker-end="url(#arr)"/>
+  <rect x="1064" y="965" width="150" height="52" rx="6" class="node process"/>
+  <text x="1080" y="985" class="small">hub aggregate</text>
+  <text x="1080" y="1003" class="label">~5,000</text>
+  <text x="1064" y="1035" class="tiny">all projected →</text>
+  <text x="1064" y="1050" class="tiny">v072 bench measures</text>
+
+  <!-- ═══ Sequencing footer ═══ -->
+  <text x="20" y="1310" class="zonetitle">SEQUENCING — hardware gates, not dates</text>
+  <rect x="20" y="1322" width="270" height="56" rx="8" class="node storage"/>
+  <text x="44" y="1345" class="label">testnet + simulator</text>
+  <text x="44" y="1363" class="small">now · one env-var from off</text>
+  <path class="edge" d="M290,1350 L310,1350" marker-end="url(#arr)"/>
+  <rect x="312" y="1322" width="270" height="56" rx="8" class="node neutral"/>
+  <text x="336" y="1345" class="label">20–50 real miners</text>
+  <text x="336" y="1363" class="small">C3 + Heltecs + Pi nodes</text>
+  <path class="edge" d="M582,1350 L602,1350" marker-end="url(#arr)"/>
+  <rect x="604" y="1322" width="270" height="56" rx="8" class="node external"/>
+  <text x="628" y="1345" class="label">mesh fork</text>
+  <text x="628" y="1363" class="small">radio transport · L2 · relayer 10%</text>
+  <path class="edge" d="M874,1350 L894,1350" marker-end="url(#arr)"/>
+  <rect x="896" y="1322" width="270" height="56" rx="8" class="node input"/>
+  <text x="920" y="1345" class="label">mainnet</text>
+  <text x="920" y="1363" class="small">genesis with tx types reserved</text>
+
+  <!-- legend -->
+  <text x="20" y="1420" class="small">■ blue = clients · purple = compute/channels · teal = chain/L1 · yellow = transport · grey = hardware · red = trust anchor</text>
+  <text x="20" y="1442" class="small">LIVE = running today · BENCH = built, awaiting hardware · ROADMAP = next phase · LIVE* = loop proven, hardware pending</text>
+  <text x="20" y="1464" class="small">Full detail: WHITEPAPER.md · VALUE.md · L2.md — quartz.preview.saasclaw.ai</text>
+</svg>
+</main>
+</html>
