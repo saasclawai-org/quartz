@@ -20,6 +20,7 @@ idf_component_register(
         "quartz_agent.c"
         "quartz_sx1276.c"
         "quartz_ble.c"
+        "quartz_mesh.c"
         "ed25519-lib/add_scalar.c"
         "ed25519-lib/fe.c"
         "ed25519-lib/ge.c"

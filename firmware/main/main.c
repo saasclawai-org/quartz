@@ -18,6 +18,7 @@
 #include "quartz_pay.h"
 #include "quartz_agent.h"
 #include "quartz_ble.h"
+#include "quartz_mesh.h"
 #include "quartz_qr.h"
 #include <string.h>
 #include <stdio.h>
@@ -885,11 +886,25 @@ static void mining_task(void *pvParameters) {
                 last_work_fetch = now;
                 ESP_LOGI(TAG, "📡 Got work: block %d, target %d",
                          tmpl.height, tmpl.target_bits);
+                /* Share work with mesh peers */
+                quartz_mesh_share_work(&tmpl);
             } else {
                 /* Fallback to local mining if node unreachable */
                 if (!have_work) {
                     ESP_LOGW(TAG, "Node unreachable, mining locally");
                 }
+            }
+        }
+
+        /* If no WiFi, try to get work from mesh peers */
+        if (!have_work && quartz_mesh_is_active()) {
+            if (quartz_mesh_get_work(&tmpl) == 0) {
+                memcpy(header, tmpl.header, 80);
+                nonce = 0;
+                have_work = true;
+                last_work_fetch = now;
+                ESP_LOGI(TAG, "📡 Got work via mesh: block %d, target %d",
+                         tmpl.height, tmpl.target_bits);
             }
         }
 
@@ -941,6 +956,9 @@ static void mining_task(void *pvParameters) {
                     quartz_puf_mining_response(header, nonce, puf_resp);
                     ESP_LOGI(TAG, "PUF attestation: %02x%02x%02x%02x...",
                              puf_resp[0], puf_resp[1], puf_resp[2], puf_resp[3]);
+
+                    /* Share block find with mesh peers */
+                    quartz_mesh_share_found(header, nonce);
 
                     /* Submit to node (v071: stash for retry if offline or submit fails) */
                     if (quartz_wifi_is_connected()) {
@@ -1013,6 +1031,24 @@ static void mining_task(void *pvParameters) {
 
             /* Update BLE stats for phone app */
             quartz_ble_update_stats(s_hash_count, hps, s_blocks_found, uptime);
+
+            /* Check for mesh-found blocks from peers — relay to node */
+            if (quartz_wifi_is_connected()) {
+                uint8_t m_header[80];
+                uint64_t m_nonce;
+                if (quartz_mesh_get_found(m_header, &m_nonce) == 0) {
+                    ESP_LOGI(TAG, "📡 Relaying mesh peer's block to node (nonce %llu)", m_nonce);
+                    int rc = quartz_mining_submit("mesh", m_nonce, m_header);
+                    if (rc == 0) {
+                        ESP_LOGI(TAG, "✅ Mesh block relayed successfully!");
+                    } else {
+                        ESP_LOGW(TAG, "Mesh block relay failed (%d)", rc);
+                    }
+                }
+            }
+
+            /* Mesh maintenance */
+            quartz_mesh_step(uptime);
 
             /* Poll for messages every 10 seconds */
             static uint32_t last_msg_check = 0;
@@ -1105,6 +1141,16 @@ void app_main(void) {
         quartz_display_connecting();
 #endif
         quartz_wifi_wait_connected(15000);
+    }
+
+    /* Initialize ESP-NOW mesh (after WiFi is up) */
+    if (quartz_wifi_is_connected()) {
+        quartz_mesh_init();
+        quartz_mesh_update_caps(QZ_CAP_HAS_WIFI | QZ_CAP_IS_MINING);
+    } else {
+        /* Still init mesh — we can receive work from peers without WiFi */
+        quartz_mesh_init();
+        quartz_mesh_update_caps(QZ_CAP_IS_MINING);
     }
 
     /* Start mining task on Core 1 (Core 0 handles WiFi/BLE/display) */
