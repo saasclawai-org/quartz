@@ -95,6 +95,93 @@ object SoftwareWallet {
         }
     }
 
+    // ------------------------------------------------------------------
+    // On-chain name registry (NAME:REGISTER messages)
+    // ------------------------------------------------------------------
+
+    /** address -> (label, timestamp). Latest registration per address wins. */
+    private suspend fun fetchRegistry(): Result<Map<String, Pair<String, Long>>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val req = Request.Builder().url("$NODE_URL/api/v1/messages").build()
+                val body = http.newCall(req).execute().use { resp ->
+                    check(resp.isSuccessful) { "node returned HTTP ${resp.code}" }
+                    JSONObject(resp.body!!.string())
+                }
+                val map = HashMap<String, Pair<String, Long>>()
+                val msgs = body.optJSONArray("messages") ?: return@runCatching map
+                for (i in 0 until msgs.length()) {
+                    val m = msgs.getJSONObject(i)
+                    val text = m.optString("data_text", "")
+                    val from = m.optString("from", "")
+                    if (!text.startsWith("NAME:REGISTER") || from.isEmpty()) continue
+                    var label = ""
+                    text.split('|').forEach { part ->
+                        val idx = part.indexOf(':')
+                        if (idx > 0 && part.take(idx) == "LABEL") label = part.substring(idx + 1)
+                    }
+                    if (label.isEmpty()) continue
+                    val ts = m.optLong("timestamp", 0L)
+                    val prev = map[from]
+                    if (prev == null || ts >= prev.second) map[from] = label to ts
+                }
+                map
+            }
+        }
+
+    /** Resolve an address to its on-chain name (null if unnamed). */
+    suspend fun fetchName(address: String): String? =
+        fetchRegistry().getOrNull()?.get(address)?.first
+
+    /**
+     * Reverse lookup: label → address (case-insensitive).
+     * Returns null when nothing matches; conflict=true when the label is
+     * claimed by more than one address (caller should surface the address).
+     */
+    suspend fun resolveAddressForLabel(label: String): Pair<String, Boolean>? {
+        val reg = fetchRegistry().getOrNull() ?: return null
+        val want = label.trim().lowercase()
+        var found: Map.Entry<String, Pair<String, Long>>? = null
+        var conflict = false
+        for (entry in reg.entries) {
+            if (entry.value.first.lowercase() != want) continue
+            val cur = found
+            if (cur != null && cur.key != entry.key) conflict = true
+            if (cur == null || entry.value.second >= cur.value.second) found = entry
+        }
+        return found?.let { it.key to conflict }
+    }
+
+    /**
+     * Register a name for an address on-chain (message to name:registry).
+     * On mainnet the node signature-verifies the sender, so only the
+     * address owner can set its name; testnet accepts unsigned sends.
+     */
+    suspend fun registerName(
+        fromAddress: String,
+        label: String,
+        kind: String = "wallet"
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(label.isNotBlank()) { "Enter a name" }
+            val text = "NAME:REGISTER|LABEL:${label.trim()}|KIND:$kind"
+            check(text.length <= 160) { "Name too long" }
+            val payload = JSONObject()
+                .put("from", fromAddress)
+                .put("to", "name:registry")
+                .put("text", text)
+            val req = Request.Builder().url("$NODE_URL/api/v1/messages/send")
+                .post(payload.toString().toRequestBody(json))
+                .build()
+            http.newCall(req).execute().use { resp ->
+                val bodyText = resp.body!!.string()
+                val body = JSONObject(bodyText)
+                check(resp.isSuccessful) { body.optString("error", "HTTP ${resp.code}") }
+                body.optString("status", "queued")
+            }
+        }
+    }
+
     /**
      * Send QZ. Signs the exact message the node reconstructs:
      *   "{from}{to}{amount_sats}" ASCII bytes, Ed25519.

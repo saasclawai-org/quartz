@@ -47,6 +47,7 @@ TESTNET_BLOCK_TIME = 30  # 30 second blocks for fast testing
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'testnet-data')
 CHAIN_FILE = os.path.join(DATA_DIR, 'chain.json')
+PENDING_MSGS_FILE = os.path.join(DATA_DIR, 'pending_msgs.json')
 
 # Dev fund wallet (persistent)
 DEV_WALLET_FILE = os.path.join(DATA_DIR, 'dev-wallet.json')
@@ -67,6 +68,7 @@ class QuartzChain:
     def __init__(self):
         self.blocks = []
         self.mempool = []
+        self._save_lock = threading.Lock()  # mining thread + HTTP threads race otherwise
         self.known_miners = set()
         self.first_mined = {}
         self.balances = {}  # address -> balance (in sats)
@@ -361,6 +363,27 @@ class QuartzChain:
                 if out_amt == 0 and in_amt == 0:
                     continue
                 net = out_amt - in_amt
+                # Counterparty for wallet UIs (resolved to on-chain names client-side)
+                counterparty = None
+                if j > 0:  # coinbase has no counterparty (mining reward)
+                    if net < 0:
+                        # We are the sender: first output not paying us
+                        for amt, script in tx.outputs:
+                            if script != addr_b:
+                                try:
+                                    counterparty = script.decode('utf-8')
+                                except UnicodeDecodeError:
+                                    counterparty = script.hex()
+                                break
+                    else:
+                        # We are the recipient: address of the first real spender
+                        for ph, idx, sig, pub in tx.inputs:
+                            if pub and len(pub) == 32:
+                                try:
+                                    counterparty = _pk2a(pub)
+                                except Exception:
+                                    pass
+                                break
                 txs.append({
                     "block": i,
                     "txid": tx.txid.hex(),
@@ -370,6 +393,7 @@ class QuartzChain:
                     "amount_qz": net / 1e8,
                     "timestamp": ts,
                     "time": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(ts)),
+                    "counterparty": counterparty,
                 })
         return {
             "address": address,
@@ -422,6 +446,7 @@ class QuartzChain:
             "known_miners": [m.hex() for m in self.known_miners],
             "current_difficulty": self.current_difficulty,
             "synthetic_utxos": getattr(self, 'synthetic_utxos', []),
+            "pending_msgs": getattr(self, '_pending_msgs', []),
             "mempool": [
                 {
                     "version": tx.version,
@@ -444,12 +469,28 @@ class QuartzChain:
                 for tx in self.mempool
             ],
         }
-        tmp = CHAIN_FILE + '.tmp'
+        with self._save_lock:
+            tmp = CHAIN_FILE + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, CHAIN_FILE)  # atomic: readers never see a partial file
+
+    def save_pending_msgs(self):
+        """Persist pending messages only (small, fast — safe to call per POST).
+
+        chain.json is 20+ MB and is written on block acceptance by the
+        mining thread; writing it per message post would hammer the disk
+        and race the mining thread. This delta file is the durable record
+        for messages.
+        """
+        tmp = PENDING_MSGS_FILE + '.tmp'
         with open(tmp, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump({"pending_msgs": getattr(self, '_pending_msgs', [])}, f)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, CHAIN_FILE)  # atomic: readers never see a partial file
+        os.replace(tmp, PENDING_MSGS_FILE)
 
     def load(self):
         """Load chain from disk."""
@@ -495,6 +536,17 @@ class QuartzChain:
         self.known_miners = set(bytes.fromhex(m) for m in data.get('known_miners', []))
         self.current_difficulty = data.get('current_difficulty', TESTNET_DIFFICULTY)
         self.synthetic_utxos = data.get('synthetic_utxos', [])
+        # Restore pending (unconfirmed) messages — incl. name registry entries.
+        # pending_msgs.json is authoritative (written on every message POST);
+        # chain.json's copy is a fallback for saves made before that file existed.
+        if os.path.exists(PENDING_MSGS_FILE):
+            try:
+                with open(PENDING_MSGS_FILE) as f:
+                    self._pending_msgs = json.load(f).get('pending_msgs', [])
+            except (json.JSONDecodeError, OSError):
+                self._pending_msgs = data.get('pending_msgs', [])
+        else:
+            self._pending_msgs = data.get('pending_msgs', [])
 
         # Restore mempool
         self.mempool = []
@@ -798,6 +850,9 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 "text": text,
                 "timestamp": time.time(),
             })
+            # Persist immediately so messages (incl. name registrations)
+            # survive node restarts — small delta file, not the 20 MB chain.
+            self.chain.save_pending_msgs()
 
             self.json_response({
                 "status": "queued",

@@ -18,6 +18,7 @@ import com.quartz.wallet.ble.MiningStats
 import com.quartz.wallet.ble.QuartzBLEManager
 import com.quartz.wallet.data.WalletStore
 import com.quartz.wallet.wallet.SoftwareWallet
+import com.quartz.wallet.crypto.QuartzCrypto
 import com.quartz.wallet.ui.theme.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -136,6 +137,10 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
     var showSend by remember { mutableStateOf(false) }
     var fauceting by remember { mutableStateOf(false) }
 
+    // On-chain name registry
+    var myName by remember { mutableStateOf<String?>(null) }
+    var showNameDialog by remember { mutableStateOf(false) }
+
     // BLE provisioning may have created a wallet — re-check when told so
     LaunchedEffect(walletCreated) {
         val store = WalletStore(context)
@@ -158,6 +163,10 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
     }
 
     LaunchedEffect(address) { if (address != null) refreshBalance() }
+
+    LaunchedEffect(address) {
+        address?.let { myName = SoftwareWallet.fetchName(it) }
+    }
 
     val pending = pendingWallet
     when {
@@ -251,6 +260,14 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                             Text("📋", color = QuartzAccent)
                         }
                     }
+                    myName?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "🏷 $it",
+                            color = QuartzAccent, fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
@@ -343,6 +360,13 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                         Text("Send", fontSize = 13.sp)
                     }
                 }
+            }
+
+            OutlinedButton(
+                onClick = { showNameDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(44.dp)
+            ) {
+                Text(if (myName == null) "🏷 Set On-Chain Name" else "🏷 Rename Wallet", fontSize = 13.sp)
             }
 
             Spacer(Modifier.height(24.dp))
@@ -456,13 +480,27 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
         )
     }
 
-    // ── Send dialog ───────────────────────────────────────────────
+    // ── Send dialog ───────────────────────────────────────────────────────
     if (showSend) {
         SendDialog(
             address = address ?: "",
             balanceSats = balanceSats ?: 0,
             onDismiss = { showSend = false },
             onSent = { msg -> showSend = false; statusMsg = msg; refreshBalance() }
+        )
+    }
+
+    // ── On-chain name dialog ────────────────────────────────────────
+    if (showNameDialog && address != null) {
+        NameDialog(
+            address = address!!,
+            initial = myName,
+            onDismiss = { showNameDialog = false },
+            onRegistered = { label ->
+                myName = label
+                showNameDialog = false
+                statusMsg = "🏷 Name registered — confirming in ~30s"
+            }
         )
     }
 }
@@ -528,6 +566,85 @@ private fun SeedRevealScreen(
 }
 
 @Composable
+private fun NameDialog(
+    address: String,
+    initial: String?,
+    onDismiss: () -> Unit,
+    onRegistered: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var label by remember { mutableStateOf(initial ?: "") }
+    var kind by remember { mutableStateOf("wallet") }
+    var kindMenu by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val kinds = listOf("wallet", "miner", "sensor", "station", "dev", "exchange", "other")
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("🏷 On-Chain Name") },
+        text = {
+            Column {
+                Text(
+                    "Your name lives on-chain, registered by your address. " +
+                    "On mainnet only the address owner can set it. A rename replaces the old name.",
+                    fontSize = 13.sp, color = QuartzMuted,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Box {
+                    OutlinedButton(onClick = { kindMenu = true }) {
+                        Text("Kind: $kind", fontSize = 13.sp)
+                    }
+                    DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
+                        kinds.forEach { k ->
+                            DropdownMenuItem(
+                                text = { Text(k) },
+                                onClick = { kind = k; kindMenu = false }
+                            )
+                        }
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = QuartzOrange, fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    error = null
+                    if (label.isBlank()) { error = "Enter a name"; return@Button }
+                    busy = true
+                    val finalLabel = label.trim()
+                    scope.launch {
+                        SoftwareWallet.registerName(address, finalLabel, kind)
+                            .onSuccess { onRegistered(finalLabel) }
+                            .onFailure {
+                                error = it.message ?: it.toString()
+                                busy = false
+                            }
+                    }
+                },
+                enabled = !busy,
+                colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+            ) { Text(if (busy) "Registering…" else "Register", color = QuartzBg) }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!busy) onDismiss() }) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
 private fun SendDialog(
     address: String,
     balanceSats: Long,
@@ -540,6 +657,16 @@ private fun SendDialog(
     var amount by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
+    var resolvedHint by remember { mutableStateOf<String?>(null) }
+
+    // Live on-chain name resolution while typing a recipient that isn't an address
+    LaunchedEffect(toAddress) {
+        val t = toAddress.trim()
+        resolvedHint = when {
+            t.isEmpty() || QuartzCrypto.isValidAddress(t) -> null
+            else -> SoftwareWallet.resolveAddressForLabel(t)?.first
+        }
+    }
 
     val keys = remember(address) { SoftwareWallet.load(context) }
     val watchOnly = keys == null
@@ -566,7 +693,23 @@ private fun SendDialog(
                 }
                 val amt = amount.toDoubleOrNull()
                 val sats = amt?.let { (it * 1e8).toLong() } ?: 0
-                SoftwareWallet.send(priv, from, toAddress, sats)
+                // Resolve recipient: raw address, or on-chain name lookup
+                var target = toAddress.trim()
+                if (!QuartzCrypto.isValidAddress(target)) {
+                    val hit = SoftwareWallet.resolveAddressForLabel(target)
+                    if (hit == null) {
+                        error = "Invalid address (no on-chain name matches \"$target\")"
+                        sending = false
+                        return@launch
+                    }
+                    if (hit.second) {
+                        error = "Name \"$target\" is claimed by multiple addresses — use the full address"
+                        sending = false
+                        return@launch
+                    }
+                    target = hit.first
+                }
+                SoftwareWallet.send(priv, from, target, sats)
                     .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
                     .onFailure { e ->
                         error = e.message ?: e.toString()
@@ -593,11 +736,19 @@ private fun SendDialog(
                     OutlinedTextField(
                         value = toAddress,
                         onValueChange = { toAddress = it.trim() },
-                        label = { Text("Recipient address") },
+                        label = { Text("Recipient address or name") },
                         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    resolvedHint?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "→ $it",
+                            fontSize = 11.sp, color = QuartzAccent,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = amount,

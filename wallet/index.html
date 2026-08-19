@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Quartz Wallet</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --card: #1a1a2e;
+            --border: #2a2a3e;
+            --text: #e4e4ef;
+            --muted: #8888a0;
+            --accent: #00d4aa;
+            --accent-dim: #00d4aa33;
+            --purple: #9d4edd;
+            --orange: #ff6b35;
+            --red: #ff4444;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --mono: 'SF Mono', Consolas, monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; overflow-x: hidden; min-height: 100vh; }
+
+        .header {
+            position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(12px); background: rgba(10,10,15,0.9);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .header .title { font-size: 18px; font-weight: 700; color: var(--accent); }
+        .header .network { font-size: 12px; color: var(--muted); }
+
+        .tabs { display: flex; border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 99; background: var(--bg); }
+        .tab { flex: 1; padding: 14px; text-align: center; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        .view { display: none; padding: 20px; }
+        .view.active { display: block; }
+
+        .setup { text-align: center; padding: 40px 20px; }
+        .setup .icon { font-size: 64px; margin-bottom: 24px; }
+        .setup h2 { font-size: 24px; margin-bottom: 8px; }
+        .setup p { color: var(--muted); margin-bottom: 32px; font-size: 15px; }
+
+        .balance-card {
+            background: linear-gradient(135deg, var(--card) 0%, #1a2a3e 100%);
+            border: 1px solid var(--border); border-radius: 20px;
+            padding: 28px 24px; margin-bottom: 24px;
+        }
+        .balance-card .label { color: var(--muted); font-size: 14px; margin-bottom: 4px; }
+        .balance-card .amount { font-size: 40px; font-weight: 800; letter-spacing: -0.02em; }
+        .balance-card .amount .unit { color: var(--accent); font-size: 20px; font-weight: 600; margin-left: 4px; }
+        .balance-card .usd { color: var(--muted); font-size: 14px; margin-top: 4px; }
+        .balance-card .address {
+            margin-top: 16px; padding: 10px 14px; background: var(--bg);
+            border-radius: 10px; font-family: var(--mono); font-size: 12px;
+            color: var(--muted); word-break: break-all; display: flex; align-items: center; gap: 8px;
+        }
+        .balance-card .address button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 14px; }
+
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+        .action-btn {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 14px; padding: 18px; text-align: center;
+            cursor: pointer; transition: border-color 0.2s; color: var(--text);
+            font-size: 15px; font-weight: 600;
+        }
+        .action-btn:active { border-color: var(--accent); }
+        .action-btn .icon { font-size: 24px; display: block; margin-bottom: 6px; }
+
+        .tx-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 0; border-bottom: 1px solid var(--border);
+        }
+        .tx-item:last-child { border: none; }
+        .tx-item .tx-left { display: flex; align-items: center; gap: 12px; }
+        .tx-item .tx-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .tx-item .tx-icon.sent { background: var(--orange)22; }
+        .tx-item .tx-icon.received { background: var(--accent)22; }
+        .tx-item .tx-info h4 { font-size: 15px; }
+        .tx-item .tx-info p { font-size: 12px; color: var(--muted); }
+        .tx-item .tx-amount { font-weight: 700; font-size: 15px; font-family: var(--mono); }
+        .tx-item .tx-amount.sent { color: var(--orange); }
+        .tx-item .tx-amount.received { color: var(--accent); }
+
+        .btn {
+            display: block; width: 100%; padding: 16px; border-radius: 14px;
+            font-size: 16px; font-weight: 700; text-align: center; cursor: pointer;
+            border: none; transition: all 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: var(--bg); }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+        .btn-danger { background: var(--red); color: white; }
+
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%; padding: 14px; background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; color: var(--text); font-size: 16px; font-family: var(--mono);
+        }
+        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+
+        .qr-container { text-align: center; padding: 24px; }
+        .qr-container canvas { border-radius: 16px; background: white; padding: 16px; }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
+            display: none; align-items: center; justify-content: center; padding: 20px;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+            padding: 24px; max-width: 400px; width: 100%; max-height: 80vh; overflow-y: auto;
+        }
+        .modal h3 { font-size: 20px; margin-bottom: 16px; }
+        .modal .close { float: right; cursor: pointer; color: var(--muted); font-size: 24px; }
+
+        .seed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 20px 0; }
+        .seed-word { background: var(--card); padding: 12px; border-radius: 8px; font-family: var(--mono); font-size: 14px; display: flex; gap: 8px; }
+        .seed-word .num { color: var(--muted); }
+        .seed-warning { background: var(--orange)15; border: 1px solid var(--orange); border-radius: 12px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: var(--orange); }
+
+        .pubkey-display {
+            margin-top: 12px; padding: 10px 14px; background: var(--bg); border-radius: 8px;
+            font-family: var(--mono); font-size: 10px; color: var(--muted); word-break: break-all;
+        }
+
+        .miner-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+        .miner-card .miner-header { display: flex; justify-content: space-between; align-items: center; }
+        .miner-card .miner-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent); }
+        .miner-card .miner-status .dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+        .empty .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+
+        .loading { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">🔮 Quartz</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="network" id="network-label">Testnet</div>
+            <button id="header-lock" onclick="lockWallet()" style="display:none; background:none; border:none; font-size:18px; cursor:pointer; padding:4px;">🔒</button>
+            <button id="header-settings" onclick="showModal('modal-settings')" style="display:none; background:none; border:none; font-size:18px; cursor:pointer; padding:4px;">⚙️</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('wallet', event)">Wallet</div>
+        <div class="tab" onclick="showTab('miner', event)">Miner</div>
+        <div class="tab" onclick="showTab('keys', event)">Keys</div>
+    </div>
+
+    <!-- Wallet View -->
+    <div class="view active" id="view-wallet">
+        <div id="wallet-setup" class="setup">
+            <div class="icon">🔮</div>
+            <h2>Welcome to Quartz</h2>
+            <p>Import your seed phrase to send and receive QZ.</p>
+
+            <div style="text-align: left; margin: 24px 0;">
+                <div style="background: var(--card); border: 1px solid var(--accent); border-radius: 14px; padding: 16px; margin-bottom: 12px;">
+                    <div style="font-weight: 700; font-size: 15px;">📥 Import Seed Phrase</div>
+                    <div style="color: var(--muted); font-size: 13px;">Enter the 12 words from your ESP32's serial output.</div>
+                    <button class="btn btn-primary" onclick="showModal('modal-import')" style="margin-top: 12px;">Import Wallet</button>
+                </div>
+
+                <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px;">
+                    <div style="font-weight: 700; font-size: 15px;">✨ Create New Wallet</div>
+                    <div style="color: var(--muted); font-size: 13px;">Generate a new seed phrase in your browser.</div>
+                    <button class="btn btn-secondary" onclick="createWallet()" style="margin-top: 12px;">Generate New Wallet</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="wallet-main" style="display: none;">
+            <div class="balance-card">
+                <div class="label">Total Balance <span id="lock-status" style="font-size: 11px; color: var(--orange); margin-left: 8px;"></span></div>
+                <div class="amount"><span id="balance">0.00000000</span><span class="unit">QZ</span></div>
+                <div class="usd" id="balance-usd">≈ $0.00 USD</div>
+                <div class="address">
+                    <span id="address">...</span><span id="address-name" style="display:none;color:var(--accent);font-weight:600;margin-left:6px"></span>
+                    <button onclick="showNameEditor()" title="Set on-chain name" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;">✏️</button>
+                    <button onclick="copyAddress()">📋</button>
+                </div>
+            </div>
+
+            <div class="actions">
+                <div class="action-btn" onclick="showReceive()">
+                    <span class="icon">📥</span>
+                    Receive
+                </div>
+                <div class="action-btn" onclick="showSend()">
+                    <span class="icon">📤</span>
+                    Send
+                </div>
+            </div>
+
+            <h3 style="font-size: 16px; margin-bottom: 12px;">Transactions</h3>
+            <div id="tx-list">
+                <div class="empty">
+                    <div class="icon">📋</div>
+                    <p>No transactions yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Miner View -->
+    <div class="view" id="view-miner">
+        <div id="miner-not-connected" class="setup">
+            <div class="icon">⛏️</div>
+            <h2>Connect Your ESP32</h2>
+            <p>Pair with your ESP32 miner via Bluetooth to monitor hashrate, blocks found, and rewards.</p>
+            <button class="btn btn-primary" onclick="pairMiner()">🔗 Pair ESP32 Miner</button>
+        </div>
+        <div id="miner-connected" style="display: none;">
+            <div class="balance-card">
+                <div class="label">Mining Status</div>
+                <div class="amount" style="font-size: 28px;"><span id="hashrate">0</span><span class="unit" style="font-size: 14px;">H/s</span></div>
+                <div class="usd">Blocks: <span id="blocks-found">0</span> · Rewards: <span id="miner-rewards">0.00</span> QZ</div>
+            </div>
+            <div class="miner-card">
+                <div class="miner-header">
+                    <div>
+                        <div style="font-weight: 600; font-size: 15px;">ESP32 Miner</div>
+                        <div style="color: var(--muted); font-size: 12px; font-family: var(--mono);" id="miner-id">AA:BB:CC:DD:EE:FF</div>
+                    </div>
+                    <div class="miner-status"><div class="dot"></div>Mining</div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px;">
+                    <div style="text-align: center;">
+                        <div style="color: var(--accent); font-weight: 700; font-size: 18px;" id="uptime">0h</div>
+                        <div style="color: var(--muted); font-size: 11px;">Uptime</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="color: var(--accent); font-weight: 700; font-size: 18px;" id="temp">--°C</div>
+                        <div style="color: var(--muted); font-size: 11px;">Temp</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="color: var(--accent); font-weight: 700; font-size: 18px;" id="power">0.5W</div>
+                        <div style="color: var(--muted); font-size: 11px;">Power</div>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-secondary" onclick="unpairMiner()" style="margin-top: 16px;">Disconnect</button>
+        </div>
+    </div>
+
+    <!-- Keys View -->
+    <div class="view" id="view-keys">
+        <div id="keys-empty" class="empty">
+            <div class="icon">🔑</div>
+            <p>No wallet loaded</p>
+        </div>
+        <div id="keys-content" style="display: none;">
+            <div id="key-mode-badge" style="text-align: center; margin-bottom: 16px; font-weight: 700; font-size: 14px;"></div>
+            <div class="balance-card">
+                <div class="label">Public Key (Ed25519)</div>
+                <div class="pubkey-display" id="pubkey-display">—</div>
+            </div>
+            <div class="balance-card">
+                <div class="label">Quartz Address</div>
+                <div class="pubkey-display" id="address-full">—</div>
+            </div>
+            <div class="balance-card">
+                <div class="label">Derivation Path</div>
+                <div class="pubkey-display">m/44'/789'/0'/0'/0'</div>
+            </div>
+            <div class="balance-card">
+                <div class="label">Signature Algorithm</div>
+                <div class="pubkey-display">Ed25519 (RFC 8032)</div>
+            </div>
+            <div class="balance-card">
+                <div class="label">Address Format</div>
+                <div class="pubkey-display">Base58(SHA-256(pubkey)[:20] + checksum)</div>
+            </div>
+
+            <h3 style="font-size: 16px; margin: 20px 0 12px;">Sign Message</h3>
+            <div class="form-group">
+                <input type="text" id="sign-input" placeholder="Message to sign...">
+            </div>
+            <button class="btn btn-primary" onclick="signMessage()">Sign</button>
+            <div id="sign-output" style="display:none; margin-top: 12px;">
+                <div class="pubkey-display" id="signature-display"></div>
+            </div>
+
+            <h3 style="font-size: 16px; margin: 20px 0 12px;">Verify Signature</h3>
+            <div class="form-group">
+                <input type="text" id="verify-message" placeholder="Original message...">
+            </div>
+            <div class="form-group">
+                <input type="text" id="verify-signature" placeholder="Hex signature...">
+            </div>
+            <button class="btn btn-secondary" onclick="verifyMessage()">Verify</button>
+            <div id="verify-result" style="margin-top: 12px; font-weight: 700;"></div>
+        </div>
+    </div>
+
+    <!-- Receive Modal -->
+    <div class="modal-overlay" id="modal-receive">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-receive')">×</span>
+            <h3>Receive QZ</h3>
+            <div class="qr-container"><canvas id="qr-canvas"></canvas></div>
+            <div class="form-group">
+                <label>Your Address</label>
+                <input type="text" id="receive-address" readonly>
+            </div>
+            <button class="btn btn-primary" onclick="copyAddress()">Copy Address</button>
+        </div>
+    </div>
+
+    <!-- Send Modal -->
+    <div class="modal-overlay" id="modal-send">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-send')">×</span>
+            <h3>Send QZ</h3>
+            <div class="form-group">
+                <label>Recipient Address</label>
+                <input type="text" id="send-to" placeholder="Q... or name (e.g. Quartz Dev Fund)" autocapitalize="none" oninput="onSendToInput()">
+            </div>
+            <div id="send-to-resolve" style="font-size:12px;color:var(--muted);margin:-8px 0 12px;min-height:16px;word-break:break-all;"></div>
+            <div class="form-group">
+                <label>Amount (QZ)</label>
+                <input type="number" id="send-amount" placeholder="0.00" step="0.00000001" min="0">
+            </div>
+            <div class="form-group">
+                <label>Fee (quartz-sats)</label>
+                <input type="number" id="send-fee" value="1000" step="100">
+            </div>
+            <button class="btn btn-primary" onclick="sendTransaction()">Sign & Send</button>
+        </div>
+    </div>
+
+    <!-- Seed Display Modal -->
+    <div class="modal-overlay" id="modal-seed">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-seed')">×</span>
+            <h3>🔒 Your Seed Phrase</h3>
+            <div class="seed-warning">
+                ⚠️ Write down these 12 words and keep them somewhere safe. Anyone with these words controls your coins. There is NO password recovery — lose these and your coins are gone forever.
+            </div>
+            <div class="seed-grid" id="seed-display"></div>
+            <div id="keygen-loading" style="text-align:center; padding:20px;"><span class="loading"></span> Generating Ed25519 keys...</div>
+            <div id="seed-actions" style="display:none;">
+                <p style="color: var(--muted); font-size: 13px; margin-bottom: 16px;">✅ I've written down all 12 words.</p>
+                <button class="btn btn-primary" onclick="confirmSeed()">Continue to Wallet</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="modal-import">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-import')">×</span>
+            <h3>Import Wallet</h3>
+            <div class="form-group">
+                <label>Seed Phrase (12 words)</label>
+                <textarea id="import-seed" rows="3" placeholder="word1 word2 word3... word12"></textarea>
+            </div>
+            <div class="form-group">
+                <label>PIN (4-8 digits)</label>
+                <input type="password" id="import-pin" placeholder="••••" inputmode="numeric" pattern="[0-9]*" maxlength="8" minlength="4"
+                       onkeydown="if(event.key==='Enter') importWallet()">
+                <div style="color: var(--muted); font-size: 12px; margin-top: 4px;">Encrypts your seed locally. Needed to send funds.</div>
+            </div>
+            <div id="import-loading" style="display:none; text-align:center; padding:12px;"><span class="loading"></span> Deriving keys...</div>
+            <button class="btn btn-primary" onclick="importWallet()">Import & Encrypt</button>
+        </div>
+    </div>
+
+    <!-- Unlock Modal (PIN prompt on reload) -->
+    <div class="modal-overlay" id="modal-unlock">
+        <div class="modal">
+            <h3>🔒 Unlock Wallet</h3>
+            <p style="color: var(--muted); font-size: 14px; margin-bottom: 16px;">Enter your PIN to unlock spending.</p>
+            <div class="form-group">
+                <input type="password" id="unlock-pin" placeholder="••••" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" autofocus
+                       onkeydown="if(event.key==='Enter') unlockWallet()">
+            </div>
+            <div id="unlock-error" style="color: var(--red); font-size: 13px; margin-bottom: 8px; display:none;">Wrong PIN. Try again.</div>
+            <button class="btn btn-primary" onclick="unlockWallet()">Unlock</button>
+            <button class="btn btn-secondary" onclick="lockWallet()" style="margin-top: 8px;">View as Watch-Only</button>
+        </div>
+    </div>
+
+    <!-- Change PIN / Lock -->
+    <div class="modal-overlay" id="modal-settings">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-settings')">×</span>
+            <h3>Wallet Settings</h3>
+            <button class="btn btn-primary" onclick="lockWallet()" style="margin-bottom: 8px;">🔒 Lock Now</button>
+            <button class="btn btn-secondary" onclick="exportWallet()" style="margin-bottom: 8px;">📤 Export Seed</button>
+            <button class="btn btn-danger" onclick="deleteWallet()">🗑 Delete Wallet</button>
+        </div>
+    </div>
+
+    <!-- Set Name Modal (on-chain name registry) -->
+    <div class="modal-overlay" id="modal-name">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-name')">×</span>
+            <h3>🏷️ Your On-Chain Name</h3>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">
+                Names are registered on-chain by your address — on mainnet only the address owner can set it (signature-verified). A rename replaces the old name. Free on testnet.
+            </p>
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="name-label" maxlength="100" placeholder="e.g. Norman's Wallet" onkeydown="if(event.key==='Enter') registerName()">
+            </div>
+            <div class="form-group">
+                <label>Kind</label>
+                <select id="name-kind">
+                    <option value="wallet" selected>Wallet</option>
+                    <option value="miner">Miner</option>
+                    <option value="sensor">Sensor</option>
+                    <option value="station">Station</option>
+                    <option value="dev">Dev</option>
+                    <option value="exchange">Exchange</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div id="name-status" style="font-size:13px;margin-bottom:8px;"></div>
+            <button class="btn btn-primary" onclick="registerName()">Register Name</button>
+        </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="view" id="view-settings" style="display:none;">
+        <div class="form-group">
+            <label>Node URL</label>
+            <input type="text" id="node-url" value="https://quartz.preview.saasclaw.ai">
+        </div>
+        <button class="btn btn-secondary" onclick="exportWallet()" style="margin-bottom: 12px;">📤 Export Seed Phrase</button>
+        <button class="btn btn-danger" onclick="deleteWallet()">🗑 Delete Wallet</button>
+    </div>
+
+    <script src="nacl.min.js"></script>
+    <script src="crypto.js"></script>
+    <script src="hardware-wallet.js"></script>
+    <script>
+        // --- Hardware Wallet (ESP32 BLE) ---
+        const hwWallet = new QuartzHardwareWallet();
+        let walletMode = 'none'; // 'software' | 'hardware' | 'none'
+
+        async function connectHardwareWallet() {
+            try {
+                document.getElementById('hw-pair-loading').style.display = 'block';
+                const result = await hwWallet.pair();
+                walletMode = 'hardware';
+
+                // Load wallet in watch-only mode using ESP32's public key
+                wallet = {
+                    words: null, // no seed phrase on phone
+                    privateKey: null, // no private key on phone
+                    publicKey: Array.from(result.publicKey),
+                    address: result.address,
+                    balance: 0,
+                    txs: []
+                };
+
+                renderWallet();
+                renderKeys();
+                showTab('wallet', { target: document.querySelector('.tab') });
+
+                // Start polling mining stats
+                startHardwareStats();
+            } catch (err) {
+                alert('Pairing failed: ' + err.message);
+            }
+            document.getElementById('hw-pair-loading').style.display = 'none';
+        }
+
+        async function hwSignTransaction(txData) {
+            // Hash the transaction data
+            const dataBytes = new TextEncoder().encode(JSON.stringify(txData));
+            const hashBuf = await crypto.subtle.digest('SHA-256', dataBytes);
+            const txHash = new Uint8Array(hashBuf);
+
+            // Send to ESP32 for signing — private key never on phone
+            const signature = await hwWallet.signTransaction(txHash);
+            return Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        let statsInterval = null;
+        async function startHardwareStats() {
+            if (statsInterval) clearInterval(statsInterval);
+            statsInterval = setInterval(async () => {
+                if (!hwWallet.connected) return;
+                try {
+                    const stats = await hwWallet.readStats();
+                    if (stats) {
+                        document.getElementById('hashrate').textContent = stats.hashrate;
+                        document.getElementById('blocks-found').textContent = stats.blocksFound;
+                        const hrs = Math.floor(stats.uptimeSec / 3600);
+                        const mins = Math.floor((stats.uptimeSec % 3600) / 60);
+                        document.getElementById('uptime').textContent = `${hrs}h ${mins}m`;
+                        document.getElementById('temp').textContent = stats.tempC + '°C';
+                        document.getElementById('power').textContent = (stats.powerMw / 1000).toFixed(1) + 'W';
+                    }
+                } catch (e) { /* ignore */ }
+            }, 3000);
+        }
+
+        // --- State ---
+        let wallet = null;
+        let pendingSeed = null;
+        const STORAGE_KEY = 'quartz-wallet-v2';
+        const NODE_URL = 'https://quartz.preview.saasclaw.ai';
+
+        // --- PIN-based encryption (Web Crypto API: PBKDF2 + AES-GCM) ---
+        async function derivePinKey(pin, salt) {
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw', new TextEncoder().encode(pin),
+                { name: 'PBKDF2' }, false, ['deriveKey']
+            );
+            return crypto.subtle.deriveKey(
+                { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false, ['encrypt', 'decrypt']
+            );
+        }
+
+        async function encryptSeed(pin, seedWords, privateKey) {
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const key = await derivePinKey(pin, salt);
+            const plaintext = JSON.stringify({
+                words: seedWords,
+                privateKey: Array.from(privateKey)
+            });
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv },
+                key,
+                new TextEncoder().encode(plaintext)
+            );
+            const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
+            combined.set(salt, 0);
+            combined.set(iv, salt.length);
+            combined.set(new Uint8Array(encrypted), salt.length + iv.length);
+            return btoa(String.fromCharCode(...combined));
+        }
+
+        async function decryptSeed(pin, encryptedB64) {
+            const combined = Uint8Array.from(atob(encryptedB64), c => c.charCodeAt(0));
+            const salt = combined.slice(0, 16);
+            const iv = combined.slice(16, 28);
+            const ciphertext = combined.slice(28);
+            const key = await derivePinKey(pin, salt);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv },
+                key,
+                ciphertext
+            );
+            return JSON.parse(new TextDecoder().decode(decrypted));
+        }
+
+        // --- Node API ---
+        async function apiGet(path) {
+            const resp = await fetch(NODE_URL + path);
+            if (!resp.ok) throw new Error(`API ${resp.status}`);
+            return resp.json();
+        }
+
+        async function apiPost(path, body) {
+            const resp = await fetch(NODE_URL + path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ error: resp.statusText }));
+                throw new Error(err.error || `API ${resp.status}`);
+            }
+            return resp.json();
+        }
+
+        async function refreshBalance() {
+            if (!wallet) return;
+            try {
+                const data = await apiGet('/api/v1/address/' + wallet.address);
+                wallet.balance = data.balance_sats || 0;
+                wallet.txs = (data.transactions || []).map(tx => ({
+                    type: tx.type === 'coinbase' ? 'received' : (tx.amount_sats > 0 ? 'received' : 'sent'),
+                    amount: Math.abs(tx.amount_sats) / 1e8,
+                    block: tx.block,
+                    time: tx.timestamp ? tx.timestamp * 1000 : tx.block * 30000, // approx
+                    txid: tx.txid?.slice(0, 16),
+                    counterparty: tx.counterparty || null
+                }));
+                saveWallet();
+                renderWallet();
+            } catch (e) {
+                console.log('Balance refresh failed:', e.message);
+            }
+        }
+
+        // --- Wallet creation with real crypto ---
+        async function createWallet() {
+            try {
+                showModal('modal-seed');
+                document.getElementById('keygen-loading').style.display = 'block';
+                document.getElementById('seed-actions').style.display = 'none';
+
+                const result = await createQuartzWallet();
+                pendingSeed = result;
+
+                // Display seed words
+                const grid = document.getElementById('seed-display');
+                grid.innerHTML = result.words.map((w, i) =>
+                    `<div class="seed-word"><span class="num">${i+1}.</span>${w}</div>`
+                ).join('');
+
+                document.getElementById('keygen-loading').style.display = 'none';
+                document.getElementById('seed-actions').style.display = 'block';
+            } catch (err) {
+                alert('Key generation failed: ' + err.message);
+                closeModal('modal-seed');
+            }
+        }
+
+        async function confirmSeed() {
+            if (!pendingSeed) return;
+            const pin = prompt('Set a PIN (4+ digits) to encrypt your wallet:');
+            if (!pin || pin.length < 4) { alert('PIN must be 4+ digits'); return; }
+
+            try {
+                const encrypted = await encryptSeed(pin, pendingSeed.words, pendingSeed.privateKey);
+                wallet = {
+                    words: pendingSeed.words,
+                    privateKey: Array.from(pendingSeed.privateKey),
+                    publicKey: Array.from(pendingSeed.publicKey),
+                    address: pendingSeed.address,
+                    balance: 0,
+                    txs: [],
+                    locked: false,
+                    encrypted_seed: encrypted
+                };
+                saveWallet();
+                closeModal('modal-seed');
+                pendingSeed = null;
+                renderWallet();
+                renderKeys();
+                refreshBalance();
+            } catch (err) {
+                alert('Encryption failed: ' + err.message);
+            }
+        }
+
+        async function importWallet() {
+            const seedText = document.getElementById('import-seed').value.trim().toLowerCase();
+            const pin = document.getElementById('import-pin').value.trim();
+            const words = seedText.split(/\s+/);
+
+            if (words.length !== 12) { alert('Enter exactly 12 words'); return; }
+            if (!pin || pin.length < 4) { alert('Enter a PIN (4+ digits)'); return; }
+
+            document.getElementById('import-loading').style.display = 'block';
+
+            try {
+                await loadCrypto();
+                const result = await importQuartzWallet(words);
+
+                // Encrypt seed with PIN
+                const encrypted = await encryptSeed(pin, words, result.privateKey);
+
+                wallet = {
+                    words: result.words,
+                    privateKey: Array.from(result.privateKey),
+                    publicKey: Array.from(result.publicKey),
+                    address: result.address,
+                    balance: 0,
+                    txs: [],
+                    locked: false
+                };
+
+                // Store encrypted seed + public data
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    publicKey: wallet.publicKey,
+                    address: wallet.address,
+                    encrypted_seed: encrypted,
+                    balance: 0,
+                    txs: []
+                }));
+
+                closeModal('modal-import');
+                document.getElementById('import-seed').value = '';
+                document.getElementById('import-pin').value = '';
+                renderWallet();
+                renderKeys();
+                refreshBalance();
+            } catch (err) {
+                alert('Import failed: ' + err.message);
+            }
+            document.getElementById('import-loading').style.display = 'none';
+        }
+
+        function saveWallet() {
+            if (!wallet) return;
+            const data = {
+                publicKey: wallet.publicKey,
+                address: wallet.address,
+                balance: wallet.balance || 0,
+                txs: wallet.txs || []
+            };
+            // Only store encrypted seed if wallet is unlocked
+            if (wallet.encrypted_seed) {
+                data.encrypted_seed = wallet.encrypted_seed;
+            }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        function loadWallet() {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (!stored) return;
+            try {
+                const data = JSON.parse(stored);
+                // Purge old format with raw seeds
+                if (data.words || data.privateKey) {
+                    localStorage.removeItem(STORAGE_KEY);
+                    return;
+                }
+                // Restore as watch-only (locked) if encrypted seed exists
+                wallet = {
+                    publicKey: data.publicKey,
+                    address: data.address,
+                    privateKey: null,
+                    words: null,
+                    encrypted_seed: data.encrypted_seed || null,
+                    balance: data.balance || 0,
+                    txs: data.txs || [],
+                    locked: !!data.encrypted_seed
+                };
+            } catch { wallet = null; }
+        }
+
+        async function unlockWallet() {
+            const pin = document.getElementById('unlock-pin').value.trim();
+            if (!pin || !wallet.encrypted_seed) return;
+
+            try {
+                const decrypted = await decryptSeed(pin, wallet.encrypted_seed);
+                wallet.words = decrypted.words;
+                wallet.privateKey = decrypted.privateKey;
+                wallet.locked = false;
+                document.getElementById('unlock-error').style.display = 'none';
+                document.getElementById('unlock-pin').value = '';
+                closeModal('modal-unlock');
+                renderWallet();
+                renderKeys();
+            } catch (e) {
+                document.getElementById('unlock-error').style.display = 'block';
+            }
+        }
+
+        function lockWallet() {
+            if (!wallet) return;
+            wallet.words = null;
+            wallet.privateKey = null;
+            wallet.locked = true;
+            closeModal('modal-unlock');
+            renderWallet();
+            renderKeys();
+        }
+
+        function deleteWallet() {
+            if (!confirm('Delete wallet? Make sure you have your seed phrase!')) return;
+            wallet = null;
+            localStorage.removeItem(STORAGE_KEY);
+            renderWallet();
+            renderKeys();
+        }
+
+        function exportWallet() {
+            if (!wallet || !wallet.words) {
+                alert('Seed not loaded. Re-import your seed phrase to export.');
+                return;
+            }
+            const text = wallet.words.join(' ');
+            if (navigator.share) {
+                navigator.share({ title: 'Quartz Seed Phrase', text });
+            } else {
+                prompt('Copy your seed phrase:', text);
+            }
+        }
+
+        // --- UI ---
+        function showTab(name, ev) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            if (ev) ev.target.classList.add('active');
+            document.getElementById('view-' + name).classList.add('active');
+        }
+
+        function showModal(id) { document.getElementById(id).classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        function showReceive() {
+            if (!wallet) return;
+            document.getElementById('receive-address').value = wallet.address;
+            drawQR(wallet.address);
+            showModal('modal-receive');
+        }
+
+        function showSend() { showModal('modal-send'); }
+
+        function copyAddress() {
+            if (!wallet) return;
+            navigator.clipboard.writeText(wallet.address);
+        }
+
+        async function sendTransaction() {
+            const to = document.getElementById('send-to').value.trim();
+            const amount = parseFloat(document.getElementById('send-amount').value);
+            if (!to || !amount || amount <= 0) { alert('Enter valid address and amount'); return; }
+            if (!wallet) { alert('No wallet loaded'); return; }
+            if (!wallet.privateKey) {
+                if (wallet.locked) {
+                    showModal('modal-unlock');
+                } else {
+                    alert('Re-import your seed phrase to send funds.');
+                    showModal('modal-import');
+                }
+                closeModal('modal-send');
+                return;
+            }
+
+            try {
+                await loadCrypto();
+                let toAddr = to;
+                if (!await validateAddress(toAddr)) {
+                    // Not an address — try on-chain name resolution
+                    const hit = await resolveAddressForLabel(toAddr);
+                    if (!hit) { alert('Invalid Quartz address (and no on-chain name matches "' + to + '")'); return; }
+                    if (hit.conflict && !confirm('The name "' + to + '" is claimed by multiple addresses.\nSend to the latest one?\n\n' + hit.address)) return;
+                    toAddr = hit.address;
+                }
+
+                const amountSats = Math.round(amount * 1e8);
+
+                // Debug: confirm we have keys
+                if (!wallet.privateKey) { alert('No private key — wallet not unlocked'); return; }
+                if (!wallet.publicKey) { alert('No public key'); return; }
+                console.log('sendTx: addr=' + wallet.address + ' to=' + toAddr + ' sats=' + amountSats);
+                console.log('sendTx: privKey len=' + (wallet.privateKey ? wallet.privateKey.length : 0));
+                console.log('sendTx: pubKey len=' + (wallet.publicKey ? wallet.publicKey.length : 0));
+
+                // Show sending state
+                const sendBtn = document.querySelector('#modal-send .btn-primary');
+                if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending...'; }
+
+                // Build the message to sign (must match what node verifies)
+                const signMsg = `${wallet.address}${to}${amountSats}`;
+                const msgBytes = new TextEncoder().encode(signMsg);
+                const privKey = new Uint8Array(wallet.privateKey);
+                const sig = signTransaction(privKey, msgBytes);
+                const sigHex = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
+                const pubHex = wallet.publicKey.map(b => b.toString(16).padStart(2, '0')).join('');
+                console.log('sendTx: sig=' + sigHex.slice(0, 16) + '... pub=' + pubHex.slice(0, 16) + '...');
+
+                // Broadcast to node
+                const result = await apiPost('/api/v1/send', {
+                    from: wallet.address,
+                    to: toAddr,
+                    amount: amount,
+                    signature: sigHex,
+                    public_key: pubHex
+                });
+
+                alert(`✅ Sent ${amount} QZ!\nTXID: ${result.txid}\nConfirms in ~30s`);
+                closeModal('modal-send');
+                document.getElementById('send-to').value = '';
+                document.getElementById('send-amount').value = '';
+
+                // Refresh balance after a delay
+                setTimeout(() => refreshBalance(), 5000);
+            } catch (err) {
+                alert('Send failed: ' + (err.message || err) + '\nType: ' + (err.name || 'unknown'));
+                console.error('sendTx error:', err);
+            } finally {
+                const sendBtn = document.querySelector('#modal-send .btn-primary');
+                if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+            }
+        }
+
+        function signMessage() {
+            const msg = document.getElementById('sign-input').value;
+            if (!msg || !wallet) return;
+            const data = new TextEncoder().encode(msg);
+            const sig = signTransaction(new Uint8Array(wallet.privateKey), data);
+            const sigHex = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
+            document.getElementById('sign-output').style.display = 'block';
+            document.getElementById('signature-display').textContent = sigHex;
+        }
+
+        function verifyMessage() {
+            const msg = document.getElementById('verify-message').value;
+            const sigHex = document.getElementById('verify-signature').value.trim();
+            if (!msg || !sigHex || !wallet) return;
+            const data = new TextEncoder().encode(msg);
+            const sig = new Uint8Array(sigHex.match(/../g).map(h => parseInt(h, 16)));
+            const valid = verifyTxSignature(new Uint8Array(wallet.publicKey), data, sig);
+            const result = document.getElementById('verify-result');
+            result.textContent = valid ? '✅ Valid signature' : '❌ Invalid signature';
+            result.style.color = valid ? 'var(--accent)' : 'var(--red)';
+        }
+
+        // On-chain name registry — resolve address → human-readable name
+        let _nameCache = null;
+        let _nameCacheAt = 0;
+        async function getRegistry() {
+            try {
+                if (!_nameCache || Date.now() - _nameCacheAt > 60000) {
+                    const data = await apiGet('/api/v1/messages');
+                    const map = {};
+                    (data.messages || []).forEach(m => {
+                        const text = m.data_text || '';
+                        if (!text.startsWith('NAME:REGISTER') || !m.from) return;
+                        const parts = {};
+                        text.split('|').forEach(p => { const i = p.indexOf(':'); if (i > 0) parts[p.slice(0,i)] = p.slice(i+1); });
+                        if (!parts.LABEL) return;
+                        const prev = map[m.from];
+                        if (!prev || (m.timestamp || 0) >= prev.ts) map[m.from] = { label: parts.LABEL, ts: m.timestamp || 0 };
+                    });
+                    _nameCache = map;
+                    _nameCacheAt = Date.now();
+                }
+                return _nameCache;
+            } catch (e) { return null; }
+        }
+
+        async function resolveName(address) {
+            const reg = await getRegistry();
+            if (!reg) return null;
+            const entry = reg[address];
+            return entry ? entry.label : null;
+        }
+
+        // Reverse lookup: label → address. Case-insensitive. Returns
+        // { address, conflict } — conflict=true if the label is claimed by
+        // more than one address (client shows the address so users can't be fooled).
+        async function resolveAddressForLabel(label) {
+            const reg = await getRegistry();
+            if (!reg) return null;
+            const want = label.trim().toLowerCase();
+            let found = null, conflict = false;
+            for (const [addr, e] of Object.entries(reg)) {
+                if (e.label.toLowerCase() === want) {
+                    if (found && found !== addr) conflict = true;
+                    // latest registrant wins on duplicate labels by same addr
+                    if (!found || e.ts >= (reg[found].ts || 0)) found = addr;
+                }
+            }
+            return found ? { address: found, conflict } : null;
+        }
+
+        // Live resolution hint under the send recipient field
+        async function onSendToInput() {
+            const el = document.getElementById('send-to-resolve');
+            const val = document.getElementById('send-to').value.trim();
+            if (!val || val.startsWith('Q')) { el.textContent = ''; return; }
+            const hit = await resolveAddressForLabel(val);
+            if (hit) {
+                el.innerHTML = hit.conflict
+                    ? `⚠️ Name claimed by multiple addresses — showing latest: <span style="color:var(--orange)">${hit.address}</span>`
+                    : `✓ <span style="color:var(--accent)">${hit.address}</span>`;
+            } else {
+                el.textContent = 'No on-chain name matches — using as raw address';
+            }
+        }
+
+        function showNameEditor() {
+            if (!wallet) return;
+            document.getElementById('name-status').textContent = '';
+            document.getElementById('name-label').value = '';
+            // Pre-fill with current name if any
+            resolveName(wallet.address).then(n => {
+                if (n) document.getElementById('name-label').value = n;
+            });
+            showModal('modal-name');
+        }
+
+        async function registerName() {
+            if (!wallet) return;
+            const label = document.getElementById('name-label').value.trim();
+            const kind = document.getElementById('name-kind').value;
+            const status = document.getElementById('name-status');
+            if (!label) { status.style.color = 'var(--red)'; status.textContent = 'Enter a name'; return; }
+            const text = `NAME:REGISTER|LABEL:${label}|KIND:${kind}`;
+            if (text.length > 160) { status.style.color = 'var(--red)'; status.textContent = 'Name too long'; return; }
+            status.style.color = 'var(--muted)';
+            status.textContent = 'Broadcasting…';
+            try {
+                await apiPost('/api/v1/messages/send', {
+                    from: wallet.address,
+                    to: 'name:registry',
+                    text
+                });
+                _nameCache = null; // force re-fetch so our own UI sees it
+                status.style.color = 'var(--accent)';
+                status.textContent = '✓ Registered — confirming in ~30s';
+                setTimeout(() => { closeModal('modal-name'); renderWallet(); }, 1200);
+            } catch (e) {
+                status.style.color = 'var(--red)';
+                status.textContent = 'Failed: ' + e.message;
+            }
+        }
+
+        function renderWallet() {
+            if (!wallet) {
+                document.getElementById('wallet-setup').style.display = 'block';
+                document.getElementById('wallet-main').style.display = 'none';
+                return;
+            }
+            document.getElementById('wallet-setup').style.display = 'none';
+            document.getElementById('wallet-main').style.display = 'block';
+            document.getElementById('header-settings').style.display = 'inline';
+            document.getElementById('header-lock').style.display = (wallet.locked || !wallet.privateKey) ? 'none' : 'inline';
+            document.getElementById('balance').textContent = (wallet.balance / 1e8).toFixed(8);
+            document.getElementById('address').textContent = wallet.address.slice(0, 10) + '...' + wallet.address.slice(-6);
+
+            // Resolve on-chain name for this address (NAME:REGISTER messages)
+            resolveName(wallet.address).then(name => {
+                const nameEl = document.getElementById('address-name');
+                if (name) {
+                    nameEl.textContent = name;
+                    nameEl.style.display = 'inline';
+                } else {
+                    nameEl.style.display = 'none';
+                }
+            });
+
+            // Show lock status
+            const lockEl = document.getElementById('lock-status');
+            if (wallet.locked || !wallet.privateKey) {
+                lockEl.textContent = '🔒 Locked';
+            } else {
+                lockEl.textContent = '🔓 Unlocked';
+            }
+
+            const txList = document.getElementById('tx-list');
+            if (!wallet.txs.length) {
+                txList.innerHTML = '<div class="empty"><div class="icon">📋</div><p>No transactions yet</p></div>';
+            } else {
+                txList.innerHTML = wallet.txs.map(tx => `
+                    <div class="tx-item">
+                        <div class="tx-left">
+                            <div class="tx-icon ${tx.type}">${tx.type === 'sent' ? '📤' : '📥'}</div>
+                            <div class="tx-info">
+                                <h4 class="tx-title" data-cp="${tx.counterparty || ''}">${tx.type === 'sent' ? 'Sent' : 'Received'}</h4>
+                                <p>${new Date(tx.time).toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div class="tx-amount ${tx.type}">${tx.type === 'sent' ? '-' : '+'}${tx.amount.toFixed(8)} QZ</div>
+                    </div>
+                `).join('');
+                // Async-decorate tx titles with counterparty names / short addresses
+                txList.querySelectorAll('.tx-title[data-cp]:not([data-cp=""])').forEach(async el => {
+                    const cp = el.dataset.cp;
+                    const base = el.textContent;
+                    const short = cp.slice(0, 8) + '…' + cp.slice(-4);
+                    el.textContent = base + ' · ' + short;
+                    const name = await resolveName(cp);
+                    if (name) el.textContent = base + ' · ' + name;
+                });
+            }
+        }
+
+        function renderKeys() {
+            if (!wallet) {
+                document.getElementById('keys-empty').style.display = 'block';
+                document.getElementById('keys-content').style.display = 'none';
+                return;
+            }
+            document.getElementById('keys-empty').style.display = 'none';
+            document.getElementById('keys-content').style.display = 'block';
+            const pubHex = wallet.publicKey.map(b => b.toString(16).padStart(2, '0')).join('');
+            document.getElementById('pubkey-display').textContent = pubHex;
+            document.getElementById('address-full').textContent = wallet.address;
+
+            // Show hardware wallet indicator
+            const hwBadge = document.getElementById('key-mode-badge');
+            if (hwBadge) {
+                if (walletMode === 'hardware') {
+                    hwBadge.innerHTML = '🔐 Keys on ESP32 — hardware wallet mode';
+                    hwBadge.style.color = 'var(--accent)';
+                } else {
+                    hwBadge.innerHTML = '📱 Keys in browser — software mode';
+                    hwBadge.style.color = 'var(--orange)';
+                }
+            }
+        }
+
+        // --- QR ---
+        function drawQR(text) {
+            if (typeof QRCode === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+                script.onload = () => QRCode.toCanvas(document.getElementById('qr-canvas'), text, { width: 200, margin: 1 }, () => {});
+                document.head.appendChild(script);
+            } else {
+                QRCode.toCanvas(document.getElementById('qr-canvas'), text, { width: 200, margin: 1 }, () => {});
+            }
+        }
+
+        // --- BLE Miner ---
+        let minerDevice = null;
+
+        async function pairMiner() {
+            if (!navigator.bluetooth) {
+                alert('Web Bluetooth not supported. Use Chrome on Android or desktop.');
+                return;
+            }
+            try {
+                minerDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'Quartz' }],
+                    optionalServices: ['0000qz01-0000-1000-8000-00805f9b34fb']
+                });
+                document.getElementById('miner-not-connected').style.display = 'none';
+                document.getElementById('miner-connected').style.display = 'block';
+                startMinerStats();
+            } catch (err) {
+                alert('Could not connect: ' + err.message);
+            }
+        }
+
+        function unpairMiner() {
+            minerDevice = null;
+            document.getElementById('miner-not-connected').style.display = 'block';
+            document.getElementById('miner-connected').style.display = 'none';
+        }
+
+        function startMinerStats() {
+            let hashrate = 800 + Math.floor(Math.random() * 400);
+            let startTime = Date.now();
+            setInterval(() => {
+                hashrate += Math.floor((Math.random() - 0.5) * 100);
+                hashrate = Math.max(500, Math.min(1500, hashrate));
+                document.getElementById('hashrate').textContent = hashrate;
+                const hrs = Math.floor((Date.now() - startTime) / 3600000);
+                const mins = Math.floor((Date.now() - startTime) / 60000) % 60;
+                document.getElementById('uptime').textContent = `${hrs}h ${mins}m`;
+                document.getElementById('temp').textContent = (45 + Math.floor(Math.random() * 10)) + '°C';
+                document.getElementById('power').textContent = (0.4 + Math.random() * 0.2).toFixed(1) + 'W';
+            }, 2000);
+        }
+
+        // --- Init ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+        loadWallet();
+        renderWallet();
+        renderKeys();
+
+        // If wallet exists but locked, prompt for PIN
+        if (wallet && wallet.locked) {
+            showModal('modal-unlock');
+        }
+
+        // Auto-refresh balance every 30s
+        setInterval(() => {
+            if (wallet) refreshBalance();
+        }, 30000);
+        if (wallet) refreshBalance();
+
+        // Auto-lock after 5 minutes of no activity
+        let lockTimer = null;
+        function resetLockTimer() {
+            if (lockTimer) clearTimeout(lockTimer);
+            lockTimer = setTimeout(() => {
+                if (wallet && wallet.privateKey && !wallet.locked) {
+                    lockWallet();
+                }
+            }, 5 * 60 * 1000); // 5 minutes
+        }
+        ['click', 'keydown', 'touchstart'].forEach(ev =>
+            document.addEventListener(ev, resetLockTimer, { passive: true })
+        );
+        resetLockTimer();
+    </script>
+</body>
+</html>
