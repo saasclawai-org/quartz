@@ -118,7 +118,7 @@ static esp_err_t i2c_probe_pins(int sda, int scl) {
 static void ssd1306_init_seq(void) {
     /* Standard SSD1306 128x64 init */
     ssd_cmd(0xAE);              /* display off */
-    ssd_cmd(0x20); ssd_cmd(0x00); /* horizontal addressing (we set pages manually) */
+    ssd_cmd(0x20); ssd_cmd(0x02); /* PAGE addressing (0xB0/0x00/0x10 used in flush) */
     ssd_cmd(0xB0);              /* page 0 */
     ssd_cmd(0xC8);              /* scan direction: COM remapped (flip vertical) */
     ssd_cmd(0x00);              /* low col */
@@ -240,37 +240,41 @@ void quartz_display_clear(uint16_t color) {
     memset(s_fb, (color != QZ_COLOR_BLACK) ? 0xFF : 0x00, FB_SIZE);
 }
 
-/* Small text: 8x8 (rows 3..10 of the 8x16 glyphs) */
+/* Map any char to the font's 64-glyph table (ASCII 32-95, uppercase only).
+ * Mirrors the ILI9341 driver: lowercase folds up, anything else → space. */
+static uint8_t font_index(uint8_t ch) {
+    if (ch >= 'a' && ch <= 'z') ch -= 32;
+    if (ch < 32 || ch > 95) return 0;  /* space */
+    return ch - 32;
+}
+
+/* Small text: 8x8 — rows 2..9 of each 8x16 glyph (verified body band) */
 static void text8(int x, int y, const char *text, uint16_t fg, uint16_t bg) {
     bool fgon = (fg != QZ_COLOR_BLACK);
     bool bgon = (bg != QZ_COLOR_BLACK);
-    while (*text && x < DISP_W - 8) {
-        uint8_t ch = (uint8_t)*text++;
-        if (ch < 32 || ch > 126) ch = '?';
-        const uint8_t *glyph = &quartz_font8x16[ch - 32][0];
-        for (int col = 0; col < 8; col++, x++) {
-            uint8_t bits = glyph[3 + col];   /* row 3..10 */
-            for (int row = 0; row < 8; row++) {
-                bool on = (bits & (0x80 >> row)) ? fgon : bgon;
-                px_set(x, y + row, on);
-            }
+    while (*text && x <= DISP_W - 8) {
+        const uint8_t *glyph = &quartz_font8x16[font_index((uint8_t)*text++)][0];
+        for (int row = 0; row < 8; row++) {
+            uint8_t bits = glyph[2 + row];   /* body band rows 2..9 */
+            for (int col = 0; col < 8; col++)
+                px_set(x + col, y + row, (bits & (0x80 >> col)) ? fgon : bgon);
         }
+        x += 8;
     }
 }
 
-/* Scaled glyph blit — used for big (x2) and huge (x4) text */
+/* Scaled glyph blit — row-major font, MSB = leftmost pixel.
+ * scale 1 → 8x16, scale 2 → 16x32 */
 static void text_scaled(int x, int y, const char *text, int scale,
                         uint16_t fg, uint16_t bg) {
     bool fgon = (fg != QZ_COLOR_BLACK);
     bool bgon = (bg != QZ_COLOR_BLACK);
     while (*text) {
-        uint8_t ch = (uint8_t)*text++;
-        if (ch < 32 || ch > 126) ch = '?';
-        const uint8_t *glyph = &quartz_font8x16[ch - 32][0];
-        for (int col = 0; col < 8; col++) {
-            uint8_t bits = glyph[col];
-            for (int row = 0; row < 16; row++) {
-                bool on = (bits & (0x80 >> row)) ? fgon : bgon;
+        const uint8_t *glyph = &quartz_font8x16[font_index((uint8_t)*text++)][0];
+        for (int row = 0; row < 16; row++) {
+            uint8_t bits = glyph[row];
+            for (int col = 0; col < 8; col++) {
+                bool on = (bits & (0x80 >> col)) ? fgon : bgon;
                 for (int sy = 0; sy < scale; sy++)
                     for (int sx = 0; sx < scale; sx++)
                         px_set(x + col * scale + sx, y + row * scale + sy, on);
@@ -382,14 +386,24 @@ static int status_header(const char *title) {
     return 12;
 }
 
-/* Animated mining indicator: spinner + activity bars.
- * 22px wide, 10px tall at (x, y). */
+/* Animated mining indicator: pixel-art spinner + activity bars.
+ * 22px wide, 8px tall at (x, y). '|' is not in the 64-glyph font —
+ * so the spinner frames are bitmaps, not font chars. */
+static const uint8_t spin_frames[4][8] = {
+    {0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18},  /* | */
+    {0x03,0x06,0x0C,0x18,0x30,0x60,0xC0,0x80},  /* / */
+    {0x00,0x00,0x00,0xFF,0xFF,0x00,0x00,0x00},  /* - */
+    {0xC0,0x60,0x30,0x18,0x0C,0x06,0x03,0x01},  /* \ */
+};
+
 static void draw_mining_indicator(int x, int y, bool active) {
-    static const char spin[4] = { '|', '/', '-', '\\' };
-    char s[2] = { active ? spin[s_anim & 3] : 'x', 0 };
-    text8(x, y, s, QZ_COLOR_WHITE, QZ_COLOR_BLACK);
-    if (!active) {
-        text8(x + 10, y, "IDLE", QZ_COLOR_DARKGRAY, QZ_COLOR_BLACK);
+    if (active) {
+        const uint8_t *f = spin_frames[s_anim & 3];
+        for (int row = 0; row < 8; row++)
+            for (int col = 0; col < 8; col++)
+                px_set(x + col, y + row, f[row] & (0x80 >> col));
+    } else {
+        text8(x, y, "IDLE", QZ_COLOR_DARKGRAY, QZ_COLOR_BLACK);
         return;
     }
     /* Equalizer bars — heights cycle with animation counter */
@@ -400,6 +414,16 @@ static void draw_mining_indicator(int x, int y, bool active) {
     for (int b = 0; b < 4; b++) {
         for (int j = 0; j < h[b]; j++)
             px_set(x + 12 + b * 3, y + 8 - j, true);
+    }
+}
+
+/* Compact wallet form: lead..tail, fits a 128px line */
+static void short_addr_fmt(const char *addr, int lead, int tail, char *out, size_t outsz) {
+    size_t len = addr ? strlen(addr) : 0;
+    if (len > (size_t)(lead + tail + 2)) {
+        snprintf(out, outsz, "%.*s..%s", lead, addr, addr + len - tail);
+    } else {
+        snprintf(out, outsz, "%s", addr ? addr : "-");
     }
 }
 
@@ -420,13 +444,10 @@ void quartz_display_mining_stats(
 
     /* Device identity — wallet short form */
     y += 12;
-    if (wallet_address && strlen(wallet_address) > 16) {
-        char short_addr[20];
-        memcpy(short_addr, wallet_address, 8);
-        short_addr[8] = '.'; short_addr[9] = '.'; short_addr[10] = '.';
-        memcpy(short_addr + 11, wallet_address + strlen(wallet_address) - 5, 5);
-        short_addr[16] = '\0';
-        snprintf(buf, sizeof(buf), "ID %s", short_addr);
+    if (wallet_address && strlen(wallet_address) > 12) {
+        char sa[16];
+        short_addr_fmt(wallet_address, 6, 4, sa, sizeof(sa));
+        snprintf(buf, sizeof(buf), "ID %s", sa);
     } else {
         snprintf(buf, sizeof(buf), "ID %s", wallet_address ? wallet_address : "-");
     }
@@ -469,13 +490,10 @@ void quartz_display_id_screen(
 
     y += 23;
     text8(2, y, "WALLET", QZ_COLOR_WHITE, QZ_COLOR_BLACK);
-    if (wallet_address && strlen(wallet_address) > 16) {
-        char short_addr[20];
-        memcpy(short_addr, wallet_address, 8);
-        short_addr[8] = '.'; short_addr[9] = '.'; short_addr[10] = '.';
-        memcpy(short_addr + 11, wallet_address + strlen(wallet_address) - 5, 5);
-        short_addr[16] = '\0';
-        text8(2, y + 11, short_addr, QZ_COLOR_YELLOW, QZ_COLOR_BLACK);
+    if (wallet_address && strlen(wallet_address) > 14) {
+        char sa[16];
+        short_addr_fmt(wallet_address, 8, 4, sa, sizeof(sa));
+        text8(2, y + 11, sa, QZ_COLOR_YELLOW, QZ_COLOR_BLACK);
     } else {
         text8(2, y + 11, wallet_address ? wallet_address : "-", QZ_COLOR_YELLOW, QZ_COLOR_BLACK);
     }
@@ -516,7 +534,7 @@ void quartz_display_fleet_screen(
     text8(2, y, buf, QZ_COLOR_WHITE, QZ_COLOR_BLACK);
 
     y += 11;
-    snprintf(buf, sizeof(buf), "REWARDS %.3f QZ", rewards_qz_milli / 1000.0);
+    snprintf(buf, sizeof(buf), "REWARDS %.2f QZ", rewards_qz_milli / 1000.0);
     text8(2, y, buf, QZ_COLOR_YELLOW, QZ_COLOR_BLACK);
 
     y += 11;
@@ -540,12 +558,12 @@ void quartz_display_error(const char *msg) {
     quartz_display_clear(QZ_COLOR_BLACK);
     quartz_display_fill_rect(0, 0, DISP_W, 9, QZ_COLOR_WHITE);
     text8(1, 0, "ERROR", QZ_COLOR_BLACK, QZ_COLOR_WHITE);
-    /* wrap message at 16 chars/line, up to 5 lines */
+    /* wrap message at 15 chars/line, up to 5 lines */
     if (msg) {
         int y = 14, len = strlen(msg);
-        for (int off = 0; off < len && y < 60; off += 16) {
-            char line[17];
-            int n = len - off < 16 ? len - off : 16;
+        for (int off = 0; off < len && y < 60; off += 15) {
+            char line[16];
+            int n = len - off < 15 ? len - off : 15;
             memcpy(line, msg + off, n);
             line[n] = '\0';
             text8(2, y, line, QZ_COLOR_WHITE, QZ_COLOR_BLACK);
@@ -583,9 +601,9 @@ void quartz_display_message(const char *from, const char *text, int block_height
     y += 11;
     if (text) {
         int len = strlen(text);
-        for (int off = 0; off < len && y < 64; off += 16) {
-            char line[17];
-            int n = len - off < 16 ? len - off : 16;
+        for (int off = 0; off < len && y < 64; off += 15) {
+            char line[16];
+            int n = len - off < 15 ? len - off : 15;
             memcpy(line, text + off, n);
             line[n] = '\0';
             text8(2, y, line, QZ_COLOR_WHITE, QZ_COLOR_BLACK);
@@ -618,15 +636,17 @@ void quartz_display_qr_payment(const char *address, float amount) {
     int qr_len = strlen(qr_str);
     int version = quartz_qr_version_for_data(qr_len, QR_ECC_LOW);
     int modules = 21 + 4 * (version - 1);
-    int quiet = 2;
 
-    /* scale 2 fits full height for versions up to ~5 */
-    int scale = 2;
-    if ((modules + 2 * quiet) * scale > DISP_H) scale = 1;
+    /* Screen is black around the code — the display itself acts as the
+     * quiet zone, so maximize scale within 128x64. */
+    int scale = 64 / modules;
+    if (scale < 1) scale = 1;
+    if (scale > 2) scale = 2;  /* keep modules crisp at 2px/module */
 
     int qr_px = modules * scale;
     int qr_x = (DISP_W - qr_px) / 2;
     int qr_y = (DISP_H - qr_px) / 2;
+    if (qr_y < 0) qr_y = 0;
 
     int rc = quartz_qr_display(qr_str, QR_ECC_LOW, qr_x, qr_y, scale,
                                QZ_COLOR_BLACK, QZ_COLOR_WHITE);
@@ -638,9 +658,9 @@ void quartz_display_qr_payment(const char *address, float amount) {
         if (address) {
             int len = strlen(address);
             int y = 14;
-            for (int off = 0; off < len && y < 64; off += 16) {
-                char line[17];
-                int n = len - off < 16 ? len - off : 16;
+            for (int off = 0; off < len && y < 64; off += 15) {
+                char line[16];
+                int n = len - off < 15 ? len - off : 15;
                 memcpy(line, address + off, n);
                 line[n] = '\0';
                 text8(2, y, line, QZ_COLOR_CYAN, QZ_COLOR_BLACK);
