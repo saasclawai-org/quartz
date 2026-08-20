@@ -36,7 +36,7 @@ from quartz.crypto import create_new_wallet, public_key_to_address, sign_message
 from quartz.consensus import (
     ConsensusEngine, UTXOSet, UTXO, Mempool,
     validate_transaction, validate_block, apply_block,
-    MAX_BLOCK_TXS, MAX_BLOCK_SIZE,
+    MAX_BLOCK_TXS, MAX_BLOCK_SIZE, TX_DATA_LIMIT,
 )
 
 # Override difficulty for fast testnet blocks (real network uses 20)
@@ -60,6 +60,41 @@ DEMO_MINERS = [
     {"id": bytes([0xAA, 0xBB, 0xCC, 0x01, 0x00, 0x04]), "name": "m5stack-001"},
     {"id": bytes([0xAA, 0xBB, 0xCC, 0x01, 0x00, 0x05]), "name": "heltec-002"},
 ]
+
+
+# ============================================================
+# Message data-carrier helpers
+#
+# Messages (incl. NAME:REGISTER name-registry entries) are confirmed
+# inside block transactions as zero-value data carriers. The payload
+# is a compact JSON envelope so confirmed messages stay
+# self-describing on-chain:
+#   {"f":"<from>","t":"<to>","x":"<text>"}
+# ============================================================
+
+def _msg_entry_to_tx(entry: dict) -> Transaction:
+    """Build the on-chain data-carrier tx for a pending message entry."""
+    envelope = json.dumps(
+        {"f": entry.get('from', ''), "t": entry.get('to', ''),
+         "x": entry.get('text', '')},
+        separators=(',', ':'), ensure_ascii=False,
+    ).encode('utf-8')
+    return Transaction(version=1, inputs=[], outputs=[], data=envelope)
+
+
+def _parse_msg_envelope(data: bytes):
+    """Decode a carrier payload → (from, to, text).
+
+    Falls back to plain-text semantics for non-envelope data.
+    """
+    try:
+        env = json.loads(data.decode('utf-8'))
+        if isinstance(env, dict) and 'x' in env:
+            return (str(env.get('f', '')), str(env.get('t', '')),
+                    str(env.get('x', '')))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        pass
+    return ('', '', data.decode('utf-8', errors='replace'))
 
 
 class QuartzChain:
@@ -183,6 +218,20 @@ class QuartzChain:
         # Select mempool txs through consensus engine
         selected_txs = self.consensus.mempool.select_for_block(self.consensus.utxo_set)
 
+        # Attach pending messages as zero-fee data-carrier txs, filling
+        # whatever block slots remain (oldest first). These are the
+        # messaging / IoT / name-registry carriers.
+        msg_txs = []
+        if not hasattr(self, '_pending_msgs'):
+            self._pending_msgs = []
+        for entry in list(self._pending_msgs):
+            if len(selected_txs) + len(msg_txs) + 1 >= MAX_BLOCK_TXS:
+                break
+            tx = _msg_entry_to_tx(entry)
+            if any(t.txid == tx.txid for t in msg_txs):
+                continue  # dedupe identical messages within a block
+            msg_txs.append(tx)
+
         # Calculate total fees from selected txs
         total_fees = 0
         for tx in selected_txs:
@@ -191,7 +240,7 @@ class QuartzChain:
 
         # Coinbase transaction (reward + fees)
         coinbase = Transaction.coinbase(miner_id, miner_reward + dev_reward + total_fees, height)
-        block = Block(header=header, transactions=[coinbase] + selected_txs)
+        block = Block(header=header, transactions=[coinbase] + selected_txs + msg_txs)
         block.build_header()
 
         # Mine (simulated — real ESP32 would do CrystalHash)
@@ -238,12 +287,30 @@ class QuartzChain:
                 if live.has(bytes.fromhex(u['txid']), u['index'])
             ]
 
+        # Drain the pending-message queue: carriers included in this
+        # block are now confirmed inside a block transaction.
+        confirmed_msg_count = 0
+        if msg_txs:
+            with self._save_lock:
+                included = {tx.txid for tx in msg_txs}
+                before = len(self._pending_msgs)
+                self._pending_msgs = [
+                    m for m in self._pending_msgs
+                    if _msg_entry_to_tx(m).txid not in included
+                ]
+                confirmed_msg_count = before - len(self._pending_msgs)
+                if confirmed_msg_count:
+                    self.save_pending_msgs()
+
         print(f"⛏️  Block #{height} mined by {miner_name or miner_id.hex()}")
         print(f"   Hash: {block.header.hash.hex()[:16]}...")
         print(f"   Nonce: {block.header.nonce} (attempts: {attempts})")
         print(f"   Reward: {miner_reward / 1e8:.1f} QZ → miner, {dev_reward / 1e8:.1f} QZ → dev fund, {total_fees / 1e8:.4f} QZ fees")
         print(f"   Total supply: {sum(self.balances.values()) / 1e8:.1f} QZ")
         print(f"   Mempool: {self.consensus.mempool.size()} txs, UTXOs: {len(self.consensus.utxo_set)}")
+        if confirmed_msg_count:
+            print(f"   📨 Messages confirmed: {confirmed_msg_count} "
+                  f"(pending: {len(self._pending_msgs)})")
 
         self.save()
         return block
@@ -692,16 +759,20 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                         "confirmed": False,
                     })
 
-            # Confirmed messages from recent blocks
+            # Confirmed messages from recent blocks (data-carrier
+            # envelopes — parsed so from/to survive confirmation)
             for i, block in enumerate(reversed(self.chain.blocks[-50:])):
                 block_height = len(self.chain.blocks) - 1 - i
                 for tx in block.transactions:
-                    if hasattr(tx, 'data') and tx.data and len(tx.data) > 0:
+                    if getattr(tx, 'data', None) and len(tx.data) > 0:
+                        m_from, m_to, m_text = _parse_msg_envelope(tx.data)
                         messages.append({
                             "txid": tx.txid.hex()[:16],
                             "block": block_height,
+                            "from": m_from,
+                            "to": m_to,
                             "data_hex": tx.data.hex(),
-                            "data_text": tx.data.decode('utf-8', errors='replace')[:160],
+                            "data_text": m_text[:160],
                             "timestamp": block.header.timestamp,
                             "confirmed": True,
                         })
@@ -816,7 +887,9 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 pass
 
         if path == '/api/v1/messages/send':
-            # Send a message via on-chain transaction
+            # Send a message via an on-chain data-carrier transaction.
+            # Queued in _pending_msgs; the block builder attaches the
+            # carrier tx to the next mined block (zero-fee, no UTXO impact).
             sender = body.get('from', 'anonymous')
             recipient = body.get('to', '')
             text = body.get('text', '')
@@ -828,31 +901,27 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 self.json_error(400, "Message too long (160 chars max)")
                 return
 
-            # Create a transaction with data carrier
-            tx = Transaction(
-                version=1,
-                inputs=[],
-                outputs=[],
-                data=text.encode('utf-8'),
-            )
-
-            # Add transaction to mempool (actual Transaction object)
-            self.chain.mempool.append(tx)
-
-            # Store the message transaction directly on next block
-            # (simplified: store in mempool and include in next mined block)
-            if not hasattr(self.chain, '_pending_msgs'):
-                self.chain._pending_msgs = []
-            self.chain._pending_msgs.append({
-                "txid": tx.txid.hex()[:16],
+            entry = {
+                "txid": "",  # carrier txid — filled below
                 "from": sender,
                 "to": recipient,
                 "text": text,
                 "timestamp": time.time(),
-            })
-            # Persist immediately so messages (incl. name registrations)
-            # survive node restarts — small delta file, not the 20 MB chain.
-            self.chain.save_pending_msgs()
+            }
+            tx = _msg_entry_to_tx(entry)
+            if len(tx.data) > TX_DATA_LIMIT:
+                self.json_error(400, f"Message too long for on-chain carrier "
+                                     f"({len(tx.data)} bytes > {TX_DATA_LIMIT})")
+                return
+            entry["txid"] = tx.txid.hex()[:16]
+
+            with self.chain._save_lock:
+                if not hasattr(self.chain, '_pending_msgs'):
+                    self.chain._pending_msgs = []
+                self.chain._pending_msgs.append(entry)
+                # Persist immediately so messages (incl. name registrations)
+                # survive node restarts — small delta file, not the 20 MB chain.
+                self.chain.save_pending_msgs()
 
             self.json_response({
                 "status": "queued",

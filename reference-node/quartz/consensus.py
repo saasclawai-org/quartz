@@ -349,6 +349,20 @@ def validate_transaction(tx: Transaction, utxo_set: UTXOSet,
 
         return (True, 0, spends, creates, "valid coinbase")
 
+    # --- Data-carrier (message) transactions ---
+    # Zero-value txs with no inputs/outputs that carry only `data`
+    # (messaging / IoT / name-registry layer). They create and spend
+    # nothing, pay no fee, and have no UTXO-set impact. Included in
+    # blocks by the miner alongside regular value transfers.
+    if len(tx.inputs) == 0 and len(tx.outputs) == 0:
+        if not tx.data:
+            return (False, 0, spends, creates,
+                    "empty transaction (no inputs, outputs or data)")
+        if len(tx.data) > TX_DATA_LIMIT:
+            return (False, 0, spends, creates,
+                    f"data exceeds limit: {len(tx.data)} > {TX_DATA_LIMIT}")
+        return (True, 0, spends, creates, "valid data carrier")
+
     # --- Regular transaction ---
 
     # Must have inputs and outputs
