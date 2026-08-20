@@ -60,6 +60,18 @@ uint32_t g_last_hps = 0;  /* current hashrate, read by mining_submit */
 #define QUARTZ_NODE_HOST "167.233.19.85"
 #define QUARTZ_NODE_PORT 21100
 
+/* === Buttons ===
+ * ESP32 (M5Stack Core): 3 buttons A/B/C on GPIO 39/38/37.
+ * ESP32-S3 (Heltec V3): 1 USER button on GPIO0 — cycles screens.
+ */
+/* PIN entry state — shared by display paths on all boards */
+static char s_pin_display[9] = {0};
+static int s_pin_len = 0;
+static int s_pin_digit = 0;
+static float s_payment_amount = 0.1f;  /* default QR amount */
+
+#ifdef CONFIG_IDF_TARGET_ESP32
+
 /* === M5Stack Core Buttons === */
 #define BTN_A_PIN   39   /* Left button (SENSOR_VN) */
 #define BTN_B_PIN   38   /* Middle button */
@@ -69,12 +81,6 @@ uint32_t g_last_hps = 0;  /* current hashrate, read by mining_submit */
 static bool btn_a_pressed = false;
 static bool btn_b_pressed = false;
 static bool btn_c_pressed = false;
-static float s_payment_amount = 0.1f;  /* default QR amount */
-
-/* PIN entry state (M5Stack 3-button input) */
-static char s_pin_display[9] = {0};
-static int s_pin_len = 0;
-static int s_pin_digit = 0;
 static uint32_t btn_last_read_sec = 0;
 static uint32_t btn_debounce_count = 0;
 static int64_t btn_a_low_since_us = 0;  /* timestamp when A first read low */
@@ -236,6 +242,71 @@ static void poll_buttons(void) {
         return;
     }
 }
+
+#else /* CONFIG_IDF_TARGET_ESP32S3 — Heltec V3 USER button */
+
+#define S3_BTN_PIN             0    /* USER / BOOT button */
+#define S3_BTN_DEBOUNCE_US     300000
+#define S3_BTN_COOLDOWN_SEC     1
+#define S3_BTN_STARTUP_GRACE    10
+
+static int64_t s3_btn_low_since_us = 0;
+static bool s3_btn_latched = false;
+static uint32_t s3_btn_last_sec = 0;
+
+static void init_buttons(void) {
+    gpio_config_t conf = {
+        .pin_bit_mask = 1ULL << S3_BTN_PIN,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&conf);
+}
+
+/* USER button: cycle ID → MINING → FLEET → PAYMENT → ID.
+ * Long-press (>1.5s) on PAYMENT bumps the QR amount. */
+static void poll_buttons(void) {
+    uint32_t now = esp_timer_get_time() / 1000000;
+    if (now < S3_BTN_STARTUP_GRACE) return;
+    if (s3_btn_last_sec && (now - s3_btn_last_sec) < S3_BTN_COOLDOWN_SEC) return;
+
+    int64_t now_us = esp_timer_get_time();
+    bool raw = (gpio_get_level(S3_BTN_PIN) == 0);
+
+    if (raw) {
+        if (s3_btn_low_since_us == 0) s3_btn_low_since_us = now_us;
+        if (!s3_btn_latched && (now_us - s3_btn_low_since_us) >= S3_BTN_DEBOUNCE_US) {
+            s3_btn_latched = true;
+            s3_btn_last_sec = now;
+
+            qz_screen_t cur = quartz_display_get_screen();
+            switch (cur) {
+            case QZ_SCREEN_ID:
+                quartz_display_set_screen(QZ_SCREEN_MINING);
+                break;
+            case QZ_SCREEN_MINING:
+                quartz_display_set_screen(QZ_SCREEN_FLEET);
+                break;
+            case QZ_SCREEN_FLEET:
+                quartz_display_set_screen(QZ_SCREEN_PAYMENT);
+                quartz_display_qr_payment(quartz_wallet_get_address(),
+                                          s_payment_amount);
+                break;
+            case QZ_SCREEN_PAYMENT:
+            default:
+                quartz_display_set_screen(QZ_SCREEN_ID);
+                break;
+            }
+        }
+    } else {
+        s3_btn_low_since_us = 0;
+        s3_btn_latched = false;
+    }
+}
+
+#endif /* target buttons */
 
 /* === Persistent serial commands (available while mining) ===
  * Post-setup the old first-boot command loop never ran — 'setpin' was

@@ -269,7 +269,7 @@ PYTHON:UNINITIALIZED=/home/nmoore/.espressif/python_env/idf5.3_py3.14_env/bin/py
 PYTHON_DEPS_CHECKED:UNINITIALIZED=1
 
 //No help, variable specified on the command line.
-SDKCONFIG:UNINITIALIZED=/dev/null
+SDKCONFIG:UNINITIALIZED=/home/nmoore/.openclaw/workspace/quartz/firmware/sdkconfig
 
 //Value Computed by CMake
 bootloader_BINARY_DIR:STATIC=/home/nmoore/.openclaw/workspace/quartz/firmware/build-s3/bootloader

@@ -5,7 +5,7 @@
     "project_path":       "/opt/esp-idf/components/bootloader/subproject",
     "idf_path":           "/opt/esp-idf",
     "build_dir":          "/home/nmoore/.openclaw/workspace/quartz/firmware/build-s3/bootloader",
-    "config_file":        "/dev/null",
+    "config_file":        "/home/nmoore/.openclaw/workspace/quartz/firmware/sdkconfig",
     "config_defaults":    "",
     "bootloader_elf":     "",
     "app_elf":            "bootloader.elf",
