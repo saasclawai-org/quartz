@@ -81,7 +81,7 @@ typedef enum {
 // Packet Structure (fits in 242 bytes)
 // ============================================================
 
-# All LoRa packets have this header (13 bytes packed)
+// All LoRa packets have this header (13 bytes packed)
 typedef struct __attribute__((packed)) {
     uint8_t  type;         // qz_lora_pkt_type_t
     uint8_t  ttl;          // decremented at each hop, dropped at 0
