@@ -26,14 +26,17 @@ else
     || echo "PyNaCl: not installable — node runs watch-only (fine for standby)"
 fi
 
-# 3. Install files
+# 3. Install files. Keep an existing chain.json — a reinstall must
+#    not clobber live state with the (older) bundle-baked snapshot.
 mkdir -p "$DEST"
 cp -r "$DIR/quartz" "$DIR/testnet.py" "$DEST/"
-if [ -f "$DIR/testnet-data/chain.json" ]; then
-  mkdir -p "$DEST/testnet-data"
+mkdir -p "$DEST/testnet-data"
+if [ ! -f "$DEST/testnet-data/chain.json" ] \
+    && [ -f "$DIR/testnet-data/chain.json" ]; then
   cp "$DIR/testnet-data/chain.json" "$DEST/testnet-data/"
-  [ -f "$DIR/testnet-data/dev-wallet.json" ] && \
-    cp "$DIR/testnet-data/dev-wallet.json" "$DEST/testnet-data/" || true
+fi
+if [ -f "$DIR/testnet-data/dev-wallet.json" ]; then
+  cp "$DIR/testnet-data/dev-wallet.json" "$DEST/testnet-data/"
 fi
 
 # 4. systemd service (QUARTZ_NO_MINER=1 inside the unit = read-only standby:
@@ -41,7 +44,8 @@ fi
 #    QUARTZ_SYNC_URL keeps the chain continuously fresh)
 cp "$DIR/quartz-node.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now quartz-node
+systemctl enable quartz-node >/dev/null 2>&1 || true
+systemctl restart quartz-node   # ALWAYS restart: pick up new code/env
 
 # 5. Local firewall (if ufw present): allow the node port on LAN
 if command -v ufw >/dev/null; then
@@ -53,6 +57,7 @@ echo
 systemctl --no-pager -l status quartz-node | head -8
 echo
 echo "✅ Node running on port 21100 (standby + mining gateway)"
+echo "   Updated: journalctl -u quartz-node -f  → '🔄 Synced +N blocks' lines = p2p mode"
 echo "   Test:     curl http://$(hostname -I 2>/dev/null | awk '{print $1}'):21100/api/v1/info"
 echo "   Mine:     point ESP32 firmware NODE_HOST at this Pi's LAN IP"
 echo "   Logs:     journalctl -u quartz-node -f"
