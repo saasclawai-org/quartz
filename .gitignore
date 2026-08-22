@@ -16,3 +16,5 @@ firmware-espnow-test/build-*/
 firmware-espnow-test/sdkconfig.*/
 firmware-ml-demo/build-*/
 firmware-ml-demo/sdkconfig
+firmware/build-s3/
+*.log
