@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔐 Sign in with Quartz — Quartz Demo</title>
+<style>
+:root {
+  --bg: #0a0a0f; --card: #1a1a2e; --accent: #9933ff;
+  --accent2: #00d4aa; --text: #e4e4ef; --muted: #8888a0; --warn: #ff6b35;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); font-size: 26px; margin-bottom: 6px; }
+h2 { color: var(--accent2); font-size: 18px; margin: 20px 0 8px; }
+p { margin-bottom: 10px; }
+.muted { color: var(--muted); font-size: 14px; }
+.card { background: var(--card); border-radius: 12px; padding: 24px; margin: 16px 0; border: 1px solid #2a2a3e; text-align: center; }
+.btn { background: var(--accent); color: #fff; border: none; padding: 14px 28px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin: 4px; }
+.btn.ghost { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 8px 16px; font-size: 14px; font-weight: 500; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+code { background: #12121f; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: var(--accent2); word-break: break-all; }
+input, textarea { background: #12121f; color: var(--text); border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 12px; font-size: 14px; width: 100%; margin: 6px 0; font-family: inherit; }
+textarea { font-family: 'SF Mono', Consolas, monospace; resize: vertical; }
+.step { display: none; text-align: left; }
+.step.active { display: block; }
+.ok { color: var(--accent2); } .bad { color: var(--warn); }
+.session { font-size: 18px; font-weight: 700; color: var(--accent2); }
+.log { text-align: left; margin-top: 14px; font-size: 13px; color: var(--muted); font-family: 'SF Mono', Consolas, monospace; }
+.log div { padding: 2px 0; border-bottom: 1px solid #1f1f30; }
+a { color: var(--accent); }
+footer { text-align: center; color: var(--muted); padding: 24px; border-top: 1px solid #2a2a3e; margin-top: 32px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔐 Sign in with Quartz</h1>
+  <p class="muted">No password. No email. Your wallet key signs a one-time challenge — that signature
+  <b>is</b> the login. Same key that holds your coins proves your identity.</p>
+
+  <div class="card">
+    <div class="step active" id="s1">
+      <h2>1 · Get a challenge</h2>
+      <p class="muted">The node issues a single-use challenge bound to this site.</p>
+      <button class="btn" id="get-challenge">Get challenge</button>
+    </div>
+    <div class="step" id="s2">
+      <h2>2 · Sign it with your wallet</h2>
+      <p class="muted">Challenge:</p>
+      <code id="challenge" style="display:block; margin: 6px 0 14px"></code>
+      <div id="pin-unlock" style="display:none">
+        <p class="muted">Quartz wallet detected on this browser (<code id="known-addr"></code>)</p>
+        <input type="password" id="pin" placeholder="Wallet PIN" autocomplete="off">
+        <button class="btn" id="sign-pin">🔓 Sign with wallet</button>
+        <p class="muted" style="margin-top:10px">— or —</p>
+      </div>
+      <textarea id="seed" rows="3" placeholder="…or paste your 12-word seed phrase"></textarea>
+      <button class="btn ghost" id="sign-seed">✍️ Sign with seed phrase</button>
+      <p class="muted" style="margin-top:12px">The seed never leaves this page — it's only used to derive the
+      signature locally, then discarded.</p>
+    </div>
+    <div class="step" id="s3">
+      <h2>3 · Verified</h2>
+      <p class="session" id="session-line"></p>
+      <p class="muted" id="verify-line"></p>
+      <button class="btn ghost" id="logout" style="margin-top:12px">Log out</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <p class="muted">This is the same pattern as "Sign in with Ethereum," minus the gas and the
+  chainsplaining: challenge → Ed25519 signature → on-chain-key proof. Any site can verify it with one
+  API call (<code>POST /api/v1/auth/verify</code>). See also the
+  <a href="/demos/paywall.html">pay-per-read sensor demo</a> — payment as auth.</p>
+</div>
+<footer>🔮 Quartz testnet demo — key-based login, zero accounts</footer>
+
+<script src="/wallet/nacl.min.js"></script>
+<script src="/wallet/crypto.js"></script>
+<script>
+const NODE = location.origin;
+let currentChallenge = null, wallet = null;
+const $ = id => document.getElementById(id);
+const log = t => { const d = document.createElement('div'); d.textContent = t; $('log').appendChild(d); };
+
+function show(step) { ['s1','s2','s3'].forEach((s,i) => $(s).classList.toggle('active', s === step)); }
+
+// --- PIN-encrypted vault (same scheme as the web wallet) ---
+async function derivePinKey(pin, salt) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(pin),
+    { name: 'PBKDF2' }, false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt','decrypt']);
+}
+async function decryptSeed(pin, encryptedB64) {
+  const combined = Uint8Array.from(atob(encryptedB64), c => c.charCodeAt(0));
+  const salt = combined.slice(0, 16), iv = combined.slice(16, 28), ct = combined.slice(28);
+  const key = await derivePinKey(pin, salt);
+  const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return JSON.parse(new TextDecoder().decode(dec));
+}
+
+const hex = u8 => Array.from(u8, b => b.toString(16).padStart(2, '0')).join('');
+
+async function finishLogin(privKey, pubKey, addr) {
+  const sig = signTransaction(privKey, new TextEncoder().encode(currentChallenge));
+  log('✍️ signed challenge locally (' + sig.length + ' bytes)');
+  const r = await fetch(NODE + '/api/v1/auth/verify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: addr, public_key: hex(pubKey),
+                           challenge: currentChallenge, signature: hex(sig) })
+  }).then(x => x.json());
+  if (r.valid) {
+    log('✅ node verified signature + address');
+    $('session-line').textContent = 'Logged in as ' + r.address;
+    $('verify-line').textContent = 'Proven: control of the private key for this address. That is the entire auth model.';
+    show('s3');
+  } else {
+    log('❌ verify failed: ' + (r.error || 'unknown'));
+    alert('Verification failed: ' + (r.error || 'invalid signature'));
+  }
+}
+
+$('get-challenge').onclick = async () => {
+  const r = await fetch(NODE + '/api/v1/auth/challenge?origin=' + encodeURIComponent(location.host))
+    .then(x => x.json());
+  currentChallenge = r.challenge;
+  $('challenge').textContent = r.challenge;
+  log('🎲 challenge issued (single-use, 5-min expiry)');
+  // detect wallet vault (same origin as /wallet/)
+  try {
+    const stored = JSON.parse(localStorage.getItem('quartz-wallet-v2'));
+    if (stored && stored.address && stored.encrypted_seed) {
+      $('pin-unlock').style.display = 'block';
+      $('known-addr').textContent = stored.address.slice(0, 14) + '…';
+    }
+  } catch (e) {}
+  show('s2');
+};
+
+$('sign-pin').onclick = async () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem('quartz-wallet-v2'));
+    const dec = await decryptSeed($('pin').value, stored.encrypted_seed);
+    const priv = Uint8Array.from(dec.privateKey);
+    await finishLogin(priv, Uint8Array.from(stored.publicKey), stored.address);
+  } catch (e) { alert('Wrong PIN (or corrupt vault)'); }
+  $('pin').value = '';
+};
+
+$('sign-seed').onclick = async () => {
+  const words = $('seed').value.trim().split(/\s+/);
+  if (words.length !== 12) { alert('Need exactly 12 words'); return; }
+  try {
+    await loadCrypto();  // needs /demos/bip39-english.json
+    const w = await importQuartzWallet(words);
+    log('🔑 derived keypair for ' + w.address);
+    await finishLogin(w.privateKey, w.publicKey, w.address);
+  } catch (e) { alert('Invalid seed phrase'); }
+  $('seed').value = '';
+};
+
+$('logout').onclick = () => { currentChallenge = null; $('log').innerHTML = ''; show('s1'); };
+</script>
+</body>
+</html>

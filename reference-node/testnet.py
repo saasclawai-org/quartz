@@ -30,7 +30,8 @@ from quartz.blockchain import (
     retarget_difficulty_bits as _retarget_bits,
 )
 from quartz.crystal_hash import crystal_hash_verify, check_difficulty
-from quartz.crypto import create_new_wallet, public_key_to_address, sign_message
+from quartz.crypto import (create_new_wallet, public_key_to_address,
+                           sign_message, verify_signature, validate_address)
 
 # Consensus engine
 from quartz.consensus import (
@@ -840,6 +841,28 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
         if path == '/' or path == '/api':
             self.json_response({"name": "Quartz Testnet", "version": "0.1.0", "status": "running"})
 
+        if path == '/api/v1/auth/challenge':
+            # Login-with-Quartz step 1: issue a single-use signing challenge.
+            # The client signs it with their wallet key; /auth/verify checks
+            # the signature AND that the nonce is fresh and unused.
+            qs = parse_qs(parsed.query)
+            origin = qs.get('origin', [''])[0][:100]
+            nonce = os.urandom(16).hex()
+            if not hasattr(self.chain, '_auth_challenges'):
+                self.chain._auth_challenges = {}
+            # opportunistic cleanup (>10 min old)
+            now = time.time()
+            for c, ts in list(self.chain._auth_challenges.items()):
+                if now - ts > 600:
+                    del self.chain._auth_challenges[c]
+            challenge = f"quartz-login:{origin}:{nonce}"
+            # store the FULL challenge string — verify matches exactly, so a
+            # tampered origin/domain can't ride a stolen nonce
+            self.chain._auth_challenges[challenge] = now
+            self.json_response({"challenge": challenge,
+                                "nonce": nonce,
+                                "expires_in": 300})
+
         elif path == '/api/v1/info':
             self.json_response(self.chain.get_chain_info())
 
@@ -1254,6 +1277,47 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             # Save state
             self.chain.save()
             self.json_response({"status": "ok", "amount": "100 QZ", "address": address})
+
+        elif path == '/api/v1/auth/verify':
+            # Login-with-Quartz step 2: verify wallet-signed challenge.
+            # Proves control of the address's private key — signature must
+            # verify, derived address must match, nonce must be fresh & unused.
+            address = body.get('address', '')
+            challenge = body.get('challenge', '')
+            sig_hex = body.get('signature', '')
+            pk_hex = body.get('public_key', '')
+            if not all((address, challenge, sig_hex, pk_hex)):
+                self.json_error(400, 'Missing address/challenge/signature/public_key')
+                return
+            # local import: the /send branch below re-imports these names
+            # locally, shadowing module-level bindings for the whole
+            # function scope (UnboundLocalError otherwise)
+            from quartz.crypto import (verify_signature, validate_address,
+                                       public_key_to_address as pk_to_addr)
+            if not hasattr(self.chain, '_auth_challenges'):
+                self.chain._auth_challenges = {}
+            issued = self.chain._auth_challenges.get(challenge)
+            if issued is None or time.time() - issued > 300:
+                self.json_error(401, 'Unknown or expired challenge')
+                return
+            del self.chain._auth_challenges[challenge]  # single-use
+            try:
+                pub = bytes.fromhex(pk_hex)
+                sig = bytes.fromhex(sig_hex)
+            except ValueError:
+                self.json_error(400, 'Bad hex in public_key/signature')
+                return
+            if not validate_address(address):
+                self.json_error(400, 'Invalid address format')
+                return
+            if pk_to_addr(pub) != address:
+                self.json_error(401, 'Public key does not match address')
+                return
+            if not verify_signature(pub, challenge.encode(), sig):
+                self.json_error(401, 'Invalid signature')
+                return
+            self.json_response({"valid": True, "address": address,
+                                "logged_in_at": int(time.time())})
 
         elif path == '/api/v1/send':
             # Broadcast a signed transaction
