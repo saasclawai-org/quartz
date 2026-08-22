@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌡 Pay-per-Read Sensor — Quartz Demo</title>
+<style>
+:root {
+  --bg: #0a0a0f; --card: #1a1a2e; --accent: #9933ff;
+  --accent2: #00d4aa; --text: #e4e4ef; --muted: #8888a0; --warn: #ff6b35;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); font-size: 26px; margin-bottom: 6px; }
+h2 { color: var(--accent2); font-size: 18px; margin: 20px 0 8px; }
+p { margin-bottom: 10px; }
+.muted { color: var(--muted); font-size: 14px; }
+.card { background: var(--card); border-radius: 12px; padding: 24px; margin: 16px 0; border: 1px solid #2a2a3e; text-align: center; }
+.btn { background: var(--accent); color: #fff; border: none; padding: 14px 28px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+code { background: #12121f; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: var(--accent2); word-break: break-all; }
+#qr { margin: 16px auto; width: 220px; height: 220px; background: #fff; padding: 10px; border-radius: 8px; display: none; }
+.state { font-size: 15px; margin-top: 8px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; animation: pulse 1.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+.wait .dot { background: var(--warn); } .paid .dot { background: var(--accent2); animation: none; }
+.reading { font-size: 22px; color: var(--accent2); font-weight: 700; margin: 12px 0; }
+.steps { text-align: left; margin-top: 18px; font-size: 14px; color: var(--muted); }
+.ok { color: var(--accent2); }
+a { color: var(--accent); }
+footer { text-align: center; color: var(--muted); padding: 24px; border-top: 1px solid #2a2a3e; margin-top: 32px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🌡 Pay-per-Read Sensor</h1>
+  <p class="muted">A device sells its data instead of publishing it free. Pay testnet QZ, the reading
+  is delivered on-chain to <b>you</b> — the payment itself is the auth. No accounts, no API keys.</p>
+
+  <div class="card" id="main">
+    <div id="idle">
+      <h2 id="devname">cold-01</h2>
+      <p class="muted">Simulated cold-chain sensor (browser plays the device — on real hardware an ESP32/Pi posts the reading)</p>
+      <button class="btn" id="buy">Buy one reading — <span id="price">0.1</span> QZ</button>
+    </div>
+    <div id="flow" style="display:none">
+      <div id="qr"></div>
+      <code id="uri" style="font-size:12px"></code>
+      <div class="state wait" id="status"><span class="dot"></span>Waiting for payment…</div>
+      <div class="steps" id="steps">
+        <div>1. Scan / pay from the <a href="/wallet/" target="_blank">Quartz wallet</a> (testnet faucet inside)</div>
+        <div>2. Detection is on-chain — this page watches the block data</div>
+        <div>3. Reading arrives as an on-chain message to your address</div>
+      </div>
+      <p class="reading" id="reading" style="display:none"></p>
+      <p class="muted" id="txline" style="display:none"></p>
+    </div>
+  </div>
+
+  <p class="muted">Everything here is a real testnet transaction — explore the results afterwards in the
+  <a href="/explorer/" target="_blank">block explorer</a>. Host the same flow on a Pi with
+  <code>demos/sensor_paywall.py</code> (<a href="https://github.com/saasclawai-org/quartz" target="_blank">GitHub</a>).</p>
+</div>
+<footer>🔮 Quartz testnet demo — machine payments for hobby hardware</footer>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const ADDRESS = qs.get('address') || 'QzSensorPaywall111111111111111111';
+const PRICE   = parseFloat(qs.get('price') || '0.1');
+const DEVICE  = qs.get('device')  || 'cold-01';
+const NODE    = location.origin;
+
+let reqTime = 0, seenTxids = new Set(), payTimer = null, msgTimer = null;
+
+document.getElementById('price').textContent = PRICE;
+document.getElementById('devname').textContent = DEVICE;
+
+async function api(path, opts) {
+  const r = await fetch(NODE + path, opts);
+  return r.json();
+}
+
+async function prefillOld() {
+  // don't re-serve payments older than this page load
+  const d = await api('/api/v1/address/' + ADDRESS);
+  (d.transactions || []).forEach(t => { if (t.timestamp < reqTime) seenTxids.add(t.txid); });
+}
+
+document.getElementById('buy').onclick = async () => {
+  document.getElementById('idle').style.display = 'none';
+  document.getElementById('flow').style.display = 'block';
+  reqTime = Math.floor(Date.now() / 1000);
+  await prefillOld();
+
+  const uri = `quartz:${ADDRESS}?amount=${PRICE.toFixed(8)}&label=${DEVICE}%20reading`;
+  document.getElementById('uri').textContent = uri;
+  try {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+    s.onload = () => QRCode.toCanvas(uri, { width: 200, margin: 1 },
+        (err, c) => { if (!err) { const q = document.getElementById('qr');
+          q.style.display = 'block'; q.replaceWith(c); c.id = 'qr'; } });
+    document.head.appendChild(s);
+  } catch (e) { /* QR optional */ }
+
+  payTimer = setInterval(watchPayments, 5000);
+  watchPayments();
+};
+
+async function watchPayments() {
+  const d = await api('/api/v1/address/' + ADDRESS);
+  for (const t of (d.transactions || [])) {
+    if (seenTxids.has(t.txid)) continue;
+    seenTxids.add(t.txid);
+    if (t.direction !== 'in' || t.timestamp < reqTime) continue;
+    if (!t.counterparty || t.amount_sats < PRICE * 1e8) continue;
+    gotPayment(t);
+    return;
+  }
+}
+
+function gotPayment(t) {
+  clearInterval(payTimer);
+  const st = document.getElementById('status');
+  st.className = 'state paid';
+  st.innerHTML = `<span class="dot"></span>Payment confirmed — ${t.amount_qz} QZ from ${t.counterparty.slice(0, 10)}…`;
+
+  // read the "sensor" and deliver on-chain to the payer
+  const temp = (3.5 + (Math.random() - 0.5) * 2).toFixed(1);
+  const humid = (40 + Math.random() * 20).toFixed(1);
+  const text = `TEMP:${temp}C|HUM:${humid}%|DEV:${DEVICE}|PAID:${t.amount_qz}QZ|TS:${Math.floor(Date.now()/1000)}`;
+  api('/api/v1/messages/send', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: DEVICE, to: t.counterparty, text })
+  }).then(r => {
+    const rd = document.getElementById('reading');
+    rd.style.display = 'block';
+    rd.textContent = `🌡 ${temp}°C · 💧 ${humid}% RH`;
+    const tx = document.getElementById('txline');
+    tx.style.display = 'block';
+    tx.innerHTML = `Delivered on-chain to ${t.counterparty.slice(0, 14)}… (msg ${r.txid || '?'}) — ` +
+      `<a href="/explorer/" target="_blank">watch it confirm in the explorer</a>`;
+    st.innerHTML = `<span class="dot"></span><span class="ok">✅ Reading delivered</span>`;
+  });
+}
+</script>
+</body>
+</html>
