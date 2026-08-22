@@ -55,9 +55,9 @@ int g_scratchpad_size = QUARTZ_SCRATCHPAD_SIZE;
 static const char *TAG = "MAIN";
 uint32_t g_last_hps = 0;  /* current hashrate, read by mining_submit */
 
-/* === Testnet Configuration === */
-#define QUARTZ_NODE_HOST "167.233.19.85"
-#define QUARTZ_NODE_PORT 21100
+/* === Testnet Configuration ===
+ * The real node endpoint lives in quartz_wifi.h (NODE_HOST/NODE_PORT) —
+ * override at build time or edit there. */
 
 /* === M5Stack Core Buttons === */
 #define BTN_A_PIN   39   /* Left button (SENSOR_VN) */
@@ -471,7 +471,7 @@ static void mining_task(void *pvParameters) {
     ESP_LOGI(TAG, "  Firmware: %s", FW_VERSION_STRING);
     ESP_LOGI(TAG, "  Protocol: %d", QUARTZ_VERSION);
     ESP_LOGI(TAG, "  Target: ESP32-C3 (generic)");
-    ESP_LOGI(TAG, "  Node: %s:%d", QUARTZ_NODE_HOST, QUARTZ_NODE_PORT);
+    ESP_LOGI(TAG, "  Node: %s:%d", NODE_HOST, NODE_PORT);
     ESP_LOGI(TAG, "========================================");
 
     /* Initialize entropy subsystem */

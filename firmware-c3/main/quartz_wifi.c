@@ -46,7 +46,11 @@ static bool s_portal_seed_confirmed = false;
 static int s_portal_challenge_idx = 0;  /* random word index for confirmation */
 
 /* Node configuration */
+/* Node port — override at build time (-DNODE_PORT=21100) or edit here.
+ * LAN gateways (Pi bundle) listen on 21100; the seed's port 80 is nginx. */
+#ifndef NODE_PORT
 #define NODE_PORT   80
+#endif
 #define NODE_PATH_WORK    "/api/v1/mining/work"
 #define NODE_PATH_SUBMIT  "/api/v1/mining/submit"
 #define NODE_PATH_INFO    "/api/v1/info"
