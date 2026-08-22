@@ -1027,6 +1027,8 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                             'txid': tx['txid'],
                             'amount': tx['amount_sats'],
                             'confirmations': max(1, len(self.chain.blocks) - tx.get('block', 0)),
+                            'timestamp': tx.get('timestamp', 0),
+                            'block': tx.get('block', 0),
                         })
 
                 self.json_response({

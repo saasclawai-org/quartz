@@ -596,7 +596,7 @@
                     type: tx.type === 'coinbase' ? 'received' : (tx.amount_sats > 0 ? 'received' : 'sent'),
                     amount: Math.abs(tx.amount_sats) / 1e8,
                     block: tx.block,
-                    time: tx.timestamp ? tx.timestamp * 1000 : tx.block * 30000, // approx
+                    time: tx.timestamp ? tx.timestamp * 1000 : null, // server always sends it; never fake a date
                     txid: tx.txid?.slice(0, 16),
                     counterparty: tx.counterparty || null
                 }));
@@ -1060,7 +1060,7 @@
                             <div class="tx-icon ${tx.type}">${tx.type === 'sent' ? '📤' : '📥'}</div>
                             <div class="tx-info">
                                 <h4 class="tx-title" data-cp="${tx.counterparty || ''}">${tx.type === 'sent' ? 'Sent' : 'Received'}</h4>
-                                <p>${new Date(tx.time).toLocaleString()}</p>
+                                <p>${tx.time ? new Date(tx.time).toLocaleString() : 'recent block'}</p>
                             </div>
                         </div>
                         <div class="tx-amount ${tx.type}">${tx.type === 'sent' ? '-' : '+'}${tx.amount.toFixed(8)} QZ</div>
