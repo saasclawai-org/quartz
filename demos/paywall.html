@@ -19,6 +19,7 @@ p { margin-bottom: 10px; }
 .card { background: var(--card); border-radius: 12px; padding: 24px; margin: 16px 0; border: 1px solid #2a2a3e; text-align: center; }
 .btn { background: var(--accent); color: #fff; border: none; padding: 14px 28px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
 .btn:disabled { opacity: 0.4; cursor: default; }
+.btn.ghost { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 8px 16px; font-size: 14px; font-weight: 500; margin: 4px; }
 code { background: #12121f; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: var(--accent2); word-break: break-all; }
 #qr-wrap { margin: 16px auto; width: 220px; background: #fff; padding: 10px; border-radius: 8px; display: none; }
 .state { font-size: 15px; margin-top: 8px; }
@@ -47,6 +48,10 @@ footer { text-align: center; color: var(--muted); padding: 24px; border-top: 1px
     <div id="flow" style="display:none">
       <div id="qr-wrap" style="display:none"><canvas id="qr" width="200" height="200"></canvas></div>
       <code id="uri" style="font-size:12px"></code>
+      <div style="margin-top:12px">
+        <button class="btn ghost" id="copy-addr" style="display:none">📋 Copy address</button>
+        <button class="btn ghost" id="copy-uri" style="display:none">🔗 Copy payment link</button>
+      </div>
       <div class="state wait" id="status"><span class="dot"></span>Waiting for payment…</div>
       <div class="steps" id="steps">
         <div>1. Scan / pay from the <a href="/wallet/" target="_blank">Quartz wallet</a> (testnet faucet inside)</div>
@@ -81,6 +86,22 @@ async function api(path, opts) {
   return r.json();
 }
 
+function wireCopy(id, getText) {
+  const b = document.getElementById(id);
+  b.onclick = async () => {
+    const t = getText();
+    try { await navigator.clipboard.writeText(t); }
+    catch (e) {  // non-secure-context fallback
+      const ta = document.createElement('textarea');
+      ta.value = t; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    const old = b.textContent;
+    b.textContent = '✅ Copied';
+    setTimeout(() => b.textContent = old, 1500);
+  };
+}
+
 async function prefillOld() {
   // don't re-serve payments older than this page load
   const d = await api('/api/v1/address/' + ADDRESS);
@@ -95,6 +116,10 @@ document.getElementById('buy').onclick = async () => {
 
   const uri = `quartz:${ADDRESS}?amount=${PRICE.toFixed(8)}&label=${DEVICE}%20reading`;
   document.getElementById('uri').textContent = uri;
+  wireCopy('copy-addr', () => ADDRESS);
+  wireCopy('copy-uri', () => uri);
+  document.getElementById('copy-addr').style.display = 'inline-block';
+  document.getElementById('copy-uri').style.display = 'inline-block';
   try {
     const draw = () => QRCode.toCanvas(document.getElementById('qr'), uri,
         { width: 200, margin: 1 },
