@@ -182,7 +182,7 @@ qz_pay_state_t quartz_pay_poll(void) {
     /* Check node for incoming payment */
     /* Build API URL: /api/v1/address/<addr>/txs */
     char url[256];
-    snprintf(url, sizeof(url), "http://quartz.preview.saasclaw.ai/api/v1/address/%s/txs",
+    snprintf(url, sizeof(url), "http://" NODE_HOST "/api/v1/address/%s/txs",
              s_request.address);
 
     /* Use the WiFi HTTP client to check for payments */

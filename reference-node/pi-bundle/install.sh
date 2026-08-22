@@ -52,8 +52,9 @@ sleep 2
 echo
 systemctl --no-pager -l status quartz-node | head -8
 echo
-echo "✅ Node running on port 21100 (read-only standby)"
+echo "✅ Node running on port 21100 (standby + mining gateway)"
 echo "   Test:     curl http://$(hostname -I 2>/dev/null | awk '{print $1}'):21100/api/v1/info"
+echo "   Mine:     point ESP32 firmware NODE_HOST at this Pi's LAN IP"
 echo "   Logs:     journalctl -u quartz-node -f"
 echo
 echo "Snapshot refresh (anytime, from the seed node):"

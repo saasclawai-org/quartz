@@ -46,7 +46,6 @@ static bool s_portal_seed_confirmed = false;
 static int s_portal_challenge_idx = 0;  /* random word index for confirmation */
 
 /* Node configuration */
-#define NODE_HOST   "quartz.preview.saasclaw.ai"
 #define NODE_PORT   80
 #define NODE_PATH_WORK    "/api/v1/mining/work"
 #define NODE_PATH_SUBMIT  "/api/v1/mining/submit"

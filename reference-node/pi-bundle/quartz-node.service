@@ -1,5 +1,5 @@
 [Unit]
-Description=Quartz testnet node (standby/read-only)
+Description=Quartz testnet node (gateway: standby + mining relay)
 After=network-online.target
 Wants=network-online.target
 
@@ -11,6 +11,9 @@ Environment=QUARTZ_NO_MINER=1
 # Continuous chain sync: poll seed every 30s, pull snapshot when >=5 blocks
 # behind (or >=1 block behind for >5 min). Hot-swaps — no restarts needed.
 Environment=QUARTZ_SYNC_URL=https://quartz.preview.saasclaw.ai
+# Gateway mode: ESP32s mine against THIS node on the LAN; submits are
+# relayed to the upstream seed (blocks are built at its tip, so no orphans)
+Environment=QUARTZ_RELAY_URL=https://quartz.preview.saasclaw.ai
 Restart=always
 RestartSec=5
 # Hardening (harmless on any Debian/Raspberry Pi OS)

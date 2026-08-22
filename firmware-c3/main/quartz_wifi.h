@@ -15,6 +15,13 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* Quartz node this miner talks to. Override with
+ * -DNODE_HOST=\"192.168.1.50\" (e.g. your own Raspberry Pi gateway)
+ * or edit the default here and rebuild. */
+#ifndef NODE_HOST
+#define NODE_HOST   "quartz.preview.saasclaw.ai"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

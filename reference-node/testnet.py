@@ -16,7 +16,7 @@ import os
 import struct
 import time
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 # Add parent dir to path
@@ -659,10 +659,76 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
     """HTTP API for block explorer and wallets."""
 
     chain = None  # set by main()
+    relay_url = None  # set by main() when QUARTZ_RELAY_URL is configured
+
+    # Gateway mode: consensus/mutating endpoints are forwarded to the
+    # upstream node verbatim. Block building happens at the upstream tip
+    # (share-triggered mining), so relaying cannot orphan a miner's work.
+    # Read/explorer endpoints keep being served from the local synced chain.
+    RELAY_PREFIXES = (
+        '/api/v1/mining/work',    # GET — work must come from the true tip
+        '/api/v1/mining/submit',  # POST — block is built at consensus
+        '/api/v1/messages/send',  # POST — pending-message state
+        '/api/v1/faucet',         # POST — creates a transaction
+        '/api/v1/send',           # POST — creates a transaction
+        '/api/v1/mine',           # POST — demo block trigger
+        '/api/v1/agent/decide',   # POST — LLM demo
+        '/api/v1/inference/',     # all inference endpoints
+    )
+
+    def _should_relay(self, path):
+        return (self.relay_url
+                and any(path == p or path.startswith(p)
+                        for p in self.RELAY_PREFIXES))
+
+    def _relay_request(self, method):
+        """Forward this request to the upstream node, stream its answer
+        back verbatim. Upstream unreachable -> 502 with a clear message;
+        local chain serving is unaffected."""
+        import urllib.request, urllib.error, gzip as _gzip
+        url = self.relay_url + self.path  # raw path: keeps query string
+        data = None
+        if method == 'POST':
+            n = int(self.headers.get('Content-Length', 0) or 0)
+            if n:
+                data = self.rfile.read(n)
+        req = urllib.request.Request(
+            url, data=data, method=method,
+            headers={'Accept-Encoding': 'gzip',
+                     'Content-Type': 'application/json'})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                raw = r.read()
+                if r.headers.get('Content-Encoding', '').lower() == 'gzip':
+                    raw = _gzip.decompress(raw)
+                self.send_response(r.status)
+                self.send_header('Content-Type',
+                                 r.headers.get('Content-Type', 'application/json'))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            self.send_response(e.code)
+            self.send_header('Content-Type',
+                             e.headers.get('Content-Type', 'application/json'))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Length', str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+        except Exception as e:
+            self.json_error(502, f"upstream node unreachable "
+                                 f"({type(e).__name__}) — mining paused, "
+                                 f"local chain serving continues")
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/') or '/'
+
+        if self._should_relay(path):
+            self._relay_request('GET')
+            return
 
         if path == '/' or path == '/api':
             self.json_response({"name": "Quartz Testnet", "version": "0.1.0", "status": "running"})
@@ -886,6 +952,11 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/')
+
+        # Relay BEFORE reading the body — _relay_request consumes it itself
+        if self._should_relay(path):
+            self._relay_request('POST')
+            return
 
         content_length = int(self.headers.get('Content-Length', 0))
         body = {}
@@ -1670,6 +1741,17 @@ def main():
     chain = QuartzChain()
     QuartzAPIHandler.chain = chain
 
+    # Gateway mode: forward consensus/mutating endpoints upstream
+    relay_url = os.environ.get('QUARTZ_RELAY_URL', '').rstrip('/')
+    if relay_url:
+        if os.environ.get('QUARTZ_NO_MINER') != '1':
+            # Local simulator + relay = two miners on divergent snapshots =
+            # instant chain fork. Refuse loudly instead.
+            raise SystemExit(
+                "QUARTZ_RELAY_URL requires QUARTZ_NO_MINER=1 — a gateway "
+                "node must never run its own mining simulator.")
+        QuartzAPIHandler.relay_url = relay_url
+
     # Start mining simulator in background (unless disabled — two
     # simulators mining separate snapshots = instant chain fork)
     if os.environ.get('QUARTZ_NO_MINER') == '1':
@@ -1680,6 +1762,10 @@ def main():
             t.start()
             print(f"🔄 Continuous sync from {sync_url} "
                   f"(poll every {os.environ.get('QUARTZ_SYNC_INTERVAL', '30')}s)")
+    if relay_url:
+        print(f"⛏ Gateway mode: mining submits relay to {relay_url} — "
+              f"point ESP32s at this node (LAN IP port "
+              f"{QUARTZ_PORT})")
     else:
         miner_thread = threading.Thread(target=mining_simulator, args=(chain,), daemon=True)
         miner_thread.start()
@@ -1690,7 +1776,11 @@ def main():
     print()
 
     # Start HTTP server
-    server = HTTPServer(('0.0.0.0', QUARTZ_PORT), QuartzAPIHandler)
+    # Threading: a 31 MB snapshot transfer must never block a mining
+    # submit (or any other request). Each connection gets its own thread;
+    # the hot-swap sync already assumes concurrent handler threads.
+    server = ThreadingHTTPServer(('0.0.0.0', QUARTZ_PORT), QuartzAPIHandler)
+    server.daemon_threads = True
     try:
         server.serve_forever()
     except KeyboardInterrupt:
