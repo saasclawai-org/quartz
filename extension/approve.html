@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+:root { --bg:#0a0a0f; --card:#1a1a2e; --accent:#9933ff; --ok:#00d4aa; --red:#ff4d6d; --text:#e4e4ef; --muted:#8888a0; }
+body { font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; padding:16px; width:400px; }
+h3 { margin:2px 0 12px; font-size:15px; color:var(--accent); }
+.card { background:var(--card); border:1px solid #2a2a3e; border-radius:10px; padding:12px; margin-bottom:10px; }
+.label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.val { font-family:'SF Mono',Consolas,monospace; font-size:13px; word-break:break-all; margin-top:3px; }
+.msg { max-height:110px; overflow-y:auto; }
+button { border:none; border-radius:8px; padding:12px; font-size:14px; font-weight:600; cursor:pointer; width:48%; }
+.approve { background:var(--accent); color:#fff; }
+.reject { background:#2a2a3e; color:var(--text); }
+.row { display:flex; gap:4%; }
+input { width:100%; box-sizing:border-box; background:#12121f; color:var(--text); border:1px solid #2a2a3e; border-radius:8px; padding:10px; font-size:15px; margin:8px 0; }
+.err { color:var(--red); font-size:12px; min-height:14px; }
+.muted { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+  <div id="view">
+    <h3>🔮 Quartz Wallet</h3>
+    <div id="body">
+      <div class="card"><div class="label">Website</div><div class="val" id="origin">…</div></div>
+      <div class="card"><div class="label">Your address</div><div class="val" id="addr">…</div></div>
+      <div class="card" id="msgcard" style="display:none"><div class="label">Asks you to sign</div><div class="val msg" id="msg"></div>
+        <p class="muted" style="margin:8px 0 0">Signing proves you hold this key. It never moves funds and is safe — but only sign messages you recognize.</p></div>
+      <div class="card" id="connectnote" style="display:none"><p style="margin:0;font-size:13px">This site wants to <b>connect</b> to your Quartz wallet and see your address.</p></div>
+      <input type="password" id="pin" placeholder="PIN to unlock" style="display:none" autocomplete="off">
+      <div class="err" id="err"></div>
+      <div class="row"><button class="reject" id="reject">Reject</button><button class="approve" id="approve">Approve</button></div>
+    </div>
+    <div id="done" style="display:none;text-align:center;padding:30px 0">
+      <div style="font-size:34px" id="doneicon"></div>
+      <p id="donetext"></p>
+      <p class="muted">You can close this window.</p>
+    </div>
+  </div>
+<script src="approve.js"></script>
+</body>
+</html>

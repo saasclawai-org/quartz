@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+:root { --bg:#0a0a0f; --card:#1a1a2e; --accent:#9933ff; --ok:#00d4aa; --red:#ff4d6d; --text:#e4e4ef; --muted:#8888a0; }
+body { font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; padding:16px; width:320px; }
+h3 { margin:2px 0 12px; font-size:15px; color:var(--accent); }
+.card { background:var(--card); border:1px solid #2a2a3e; border-radius:10px; padding:12px; margin-bottom:10px; }
+.label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.val { font-family:'SF Mono',Consolas,monospace; font-size:12px; word-break:break-all; margin-top:3px; }
+button { border:none; border-radius:8px; padding:11px; font-size:13px; font-weight:600; cursor:pointer; width:100%; margin-top:6px; }
+.primary { background:var(--accent); color:#fff; }
+.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+input, textarea { width:100%; box-sizing:border-box; background:#12121f; color:var(--text); border:1px solid #2a2a3e; border-radius:8px; padding:10px; font-size:13px; margin:6px 0; }
+textarea { font-family:'SF Mono',Consolas,monospace; resize:vertical; }
+.err { color:var(--red); font-size:12px; min-height:14px; }
+.muted { color:var(--muted); font-size:12px; }
+.badge { display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; }
+.badge.ok { background:rgba(0,212,170,.15); color:var(--ok); }
+.badge.lock { background:rgba(255,77,109,.15); color:var(--red); }
+.seedbox { background:#12121f; border:1px solid var(--ok); border-radius:8px; padding:10px; font-family:'SF Mono',Consolas,monospace; font-size:12px; margin:8px 0; line-height:1.7; }
+</style>
+</head>
+<body>
+<h3>🔮 Quartz Wallet</h3>
+
+<!-- onboard -->
+<div id="onboard">
+  <p class="muted">Import your existing Quartz wallet, or generate a fresh one for testing.</p>
+  <textarea id="words" rows="3" placeholder="12-word seed phrase (optional — leave empty to create new)"></textarea>
+  <input type="password" id="pin" placeholder="Choose a PIN (4+ chars)">
+  <input type="password" id="pin2" placeholder="Repeat PIN">
+  <div class="err" id="err"></div>
+  <button class="primary" id="go">Create / Import wallet</button>
+</div>
+
+<!-- main view -->
+<div id="main" style="display:none">
+  <div class="card">
+    <div class="label">Address <span id="statebadge" class="badge lock">locked</span></div>
+    <div class="val" id="addr"></div>
+  </div>
+  <input type="password" id="unlockpin" placeholder="PIN" style="display:none">
+  <button class="primary" id="unlockbtn" style="display:none">Unlock</button>
+  <button class="ghost" id="lockbtn" style="display:none">🔒 Lock now</button>
+  <div id="newwallet" style="display:none">
+    <div class="card" style="border-color:var(--ok)">
+      <div class="label">Your new seed phrase — write it down</div>
+      <div class="seedbox" id="seedwords"></div>
+      <p class="muted">This is shown once. It is the only way to recover this wallet in the web wallet or the extension.</p>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:12px">Extension signs messages and logins. Zero network requests. Sites must ask for each signature.</p>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>

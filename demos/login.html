@@ -60,6 +60,11 @@ footer { text-align: center; color: var(--muted); padding: 24px; border-top: 1px
       <p class="muted" style="margin-top:10px">— or —</p>
       <textarea id="blob" rows="3" placeholder='…or paste the login blob from the wallet app (Keys → Sign Message → “Copy login blob")'></textarea>
       <button class="btn ghost" id="sign-blob">📥 Verify blob from wallet app</button>
+      <div id="ext-box" style="display:none; margin-top:14px">
+        <p class="muted">— or —</p>
+        <button class="btn" id="sign-ext">🧩 Sign in with the Quartz extension</button>
+        <p class="muted">One click — the extension pops up asking to approve. Your key never touches this page.</p>
+      </div>
       <p class="muted" style="margin-top:12px">Best practice on unfamiliar sites: never paste your seed —
       sign in the <a href="/wallet/" target="_blank">wallet app</a> (Keys tab → Sign Message), then paste the blob here.</p>
     </div>
@@ -191,6 +196,35 @@ $('sign-blob').onclick = async () => {
 };
 
 $('logout').onclick = () => { currentChallenge = null; $('log').innerHTML = ''; show('s1'); };
+
+// Option D: browser extension (window.quartz) — the MetaMask shape, popup included
+function armExtension() {
+  if (window.quartz) $('ext-box').style.display = 'block';
+}
+armExtension();
+window.addEventListener('quartz#initialized', armExtension);
+
+$('sign-ext').onclick = async () => {
+  try {
+    const accounts = await window.quartz.request({ method: 'quartz_accounts' });
+    log('🧩 extension connected: ' + accounts[0].address);
+    const r = await window.quartz.request({ method: 'quartz_signMessage', params: { message: currentChallenge } });
+    log('✍️ extension signed (approval granted)');
+    const v = await fetch(NODE + '/api/v1/auth/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: r.address, public_key: r.public_key,
+                             challenge: r.message, signature: r.signature })
+    }).then(x => x.json());
+    if (v.valid) {
+      log('✅ node verified extension signature');
+      $('session-line').textContent = 'Logged in as ' + v.address;
+      $('verify-line').textContent = 'Proven via browser extension — one click, zero key exposure, a real approve popup. Fully the MetaMask shape.';
+      show('s3');
+    } else { alert('Verification failed: ' + (v.error || 'invalid')); }
+  } catch (e) {
+    log('🧩 extension: ' + e.message);
+  }
+};
 </script>
 </body>
 </html>
