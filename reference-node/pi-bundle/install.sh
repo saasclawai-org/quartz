@@ -39,9 +39,9 @@ if [ -f "$DIR/testnet-data/dev-wallet.json" ]; then
   cp "$DIR/testnet-data/dev-wallet.json" "$DEST/testnet-data/"
 fi
 
-# 4. systemd service (QUARTZ_NO_MINER=1 inside the unit = read-only standby:
-#    serving the snapshot without mining, so it can never fork the chain;
-#    QUARTZ_SYNC_URL keeps the chain continuously fresh)
+# 4. systemd service (QUARTZ_NO_MINER=1 = no simulated fleet miner on user
+#    nodes — real hardware mining still works; QUARTZ_PEERS keeps the
+#    chain continuously fresh via incremental p2p sync)
 cp "$DIR/quartz-node.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable quartz-node >/dev/null 2>&1 || true
@@ -57,11 +57,9 @@ echo
 systemctl --no-pager -l status quartz-node | head -8
 echo
 echo "✅ Node running on port 21100 (standby + mining gateway)"
-echo "   Updated: journalctl -u quartz-node -f  → '🔄 Synced +N blocks' lines = p2p mode"
+echo "   Logs:     journalctl -u quartz-node -f  → '🔄 Synced +N blocks' = p2p mode"
 echo "   Test:     curl http://$(hostname -I 2>/dev/null | awk '{print $1}'):21100/api/v1/info"
-echo "   Mine:     point ESP32 firmware NODE_HOST at this Pi's LAN IP"
-echo "   Logs:     journalctl -u quartz-node -f"
+echo "   Mine:     ESP32 captive portal → Node field = this Pi's LAN IP (no rebuild)"
 echo
-echo "Snapshot refresh (anytime, from the seed node):"
-echo "  curl -s https://quartz.preview.saasclaw.ai/api/v1/info >/dev/null && echo seed alive"
-echo "  scp seed:/srv/quartz/chain.json /opt/quartz-node/testnet-data/ && sudo systemctl restart quartz-node"
+echo "Miners/stats live on whichever node builds the blocks — check:"
+echo "  curl -s https://quartz.preview.saasclaw.ai/api/v1/info   (hardware miners, hashrate)"

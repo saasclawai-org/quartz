@@ -59,7 +59,7 @@ Status legend: **[LIVE]** running on the testnet today · **[BENCH]** built, awa
 
 **Claim:** The Bitcoin lesson, learned before launch: infrastructure before incentives. Running a Quartz node is a 15-minute, one-tarball job on a Raspberry Pi.
 
-**State today [LIVE]:** `quartz-pi-node.tar.gz` — install script, systemd unit, snapshot sync from the reference node. Standby mode (`QUARTZ_NO_MINER=1`) is baked in so a second node *cannot* accidentally fork the chain.
+**State today [LIVE]:** `quartz-pi-node.tar.gz` — install script, systemd unit, continuous p2p sync (block gossip over HTTP, kilobyte batches — validated, no trusted seed required). Nodes are mining gateways: ESP32s work/submit through their owner's node; if the wider network is unreachable the node builds blocks locally (rewards in the coinbase, recognized chain-wide). Verified in the field: a Pi + ESP32 mining through it with zero manual plumbing.
 
 **[ROADMAP] sequencing:** easy self-hosted nodes first → dockerized one-liners → pay-per-service (signed templates, 90/10 split) only at the mesh fork → bonded registration for Sybil resistance when real money is at stake.
 

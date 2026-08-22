@@ -196,9 +196,20 @@ See **[setup guide](https://quartz.preview.saasclaw.ai/setup.html)** for the com
 
 Browser flasher (Chrome/Edge): <https://quartz.preview.saasclaw.ai/download.html>
 
-Or command line:
+Single merged image (easiest — flashes at 0x0, no toolchain needed; pick your board, wallet/settings in NVS survive a re-flash — do NOT `erase_flash`):
+
+- Classic ESP32 (WROOM/D0WD, e.g. DevKitC): [`quartz-esp32-merged.bin`](https://quartz.preview.saasclaw.ai/downloads/quartz-esp32-merged.bin)
+- ESP32-S3: [`quartz-s3-merged.bin`](https://quartz.preview.saasclaw.ai/downloads/quartz-s3-merged.bin)
+
 ```bash
 pip install esptool
+python -m esptool --chip esp32 --port COM9 --baud 460800 write_flash 0x0 quartz-esp32-merged.bin
+```
+
+First boot opens a captive portal (`Quartz-XXXX` AP → http://192.168.4.1): enter WiFi + the **Node** your miner works through — your own Raspberry Pi node's LAN IP if you run one (see below), or leave the default. Changed networks later? Serial terminal → `wifi` command re-opens the portal.
+
+Or the classic three-bin layout:
+```bash
 python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash \
   0x1000 bootloader-v048.bin 0x10000 partition-table-v048.bin 0x20000 quartz-app-v048.bin
 ```
@@ -213,6 +224,19 @@ The seed phrase is shown on **serial output** on first boot. Write it down on pa
 The seed never goes over WiFi. The captive portal is for WiFi setup only.
 
 ### Run a Node
+
+**Raspberry Pi / any Linux box (recommended, ~2 minutes):** a one-tarball
+install — continuously p2p-synced chain, mining gateway for your ESP32s,
+and autonomous block-building if the rest of the network is unreachable.
+
+```bash
+curl -LO https://quartz.preview.saasclaw.ai/downloads/quartz-pi-node.tar.gz
+tar xzf quartz-pi-node.tar.gz && cd quartz-pi-node && sudo bash install.sh
+```
+
+Full guide: [`reference-node/pi-bundle/README.md`](reference-node/pi-bundle/README.md)
+
+**From source (dev):**
 ```bash
 git clone https://github.com/saasclawai-org/quartz.git
 cd quartz/reference-node
