@@ -56,6 +56,11 @@ typedef struct {
 extern qz_wifi_state_t g_wifi_state;
 extern qz_mining_state_t g_mining_state;
 
+/* Runtime node endpoint (captive-portal configurable, NVS-backed;
+ * falls back to the NODE_HOST/NODE_PORT compile-time defaults) */
+const char *quartz_wifi_node_host(void);
+int         quartz_wifi_node_port(void);
+
 /* === Lifecycle === */
 
 /**

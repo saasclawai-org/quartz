@@ -182,8 +182,8 @@ qz_pay_state_t quartz_pay_poll(void) {
     /* Check node for incoming payment */
     /* Build API URL: /api/v1/address/<addr>/txs */
     char url[256];
-    snprintf(url, sizeof(url), "http://" NODE_HOST "/api/v1/address/%s/txs",
-             s_request.address);
+    snprintf(url, sizeof(url), "http://%s/api/v1/address/%s/txs",
+             quartz_wifi_node_host(), s_request.address);
 
     /* Use the WiFi HTTP client to check for payments */
     /* For now, we do a simple GET and look for matching amount */

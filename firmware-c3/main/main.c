@@ -471,7 +471,7 @@ static void mining_task(void *pvParameters) {
     ESP_LOGI(TAG, "  Firmware: %s", FW_VERSION_STRING);
     ESP_LOGI(TAG, "  Protocol: %d", QUARTZ_VERSION);
     ESP_LOGI(TAG, "  Target: ESP32-C3 (generic)");
-    ESP_LOGI(TAG, "  Node: %s:%d", NODE_HOST, NODE_PORT);
+    ESP_LOGI(TAG, "  Node: %s:%d", quartz_wifi_node_host(), quartz_wifi_node_port());
     ESP_LOGI(TAG, "========================================");
 
     /* Initialize entropy subsystem */
@@ -676,6 +676,7 @@ static void mining_task(void *pvParameters) {
                             if (nvs_open("qz_wifi", NVS_READWRITE, &h) == ESP_OK) {
                                 nvs_erase_key(h, "ssid");
                                 nvs_erase_key(h, "pass");
+                                nvs_erase_key(h, "node");
                                 nvs_commit(h);
                                 nvs_close(h);
                             }

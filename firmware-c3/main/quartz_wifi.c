@@ -59,6 +59,7 @@ static int s_portal_challenge_idx = 0;  /* random word index for confirmation */
 #define WIFI_NVS_NS   "qz_wifi"
 #define WIFI_KEY_SSID "ssid"
 #define WIFI_KEY_PASS "pass"
+#define WIFI_KEY_NODE "node"
 
 /* State */
 qz_wifi_state_t g_wifi_state = QZ_WIFI_UNPROVISIONED;
@@ -67,6 +68,19 @@ qz_mining_state_t g_mining_state = QZ_MINING_IDLE;
 static char s_ip_str[16] = {0};
 static bool s_got_ip = false;
 static bool s_wifi_started = false;
+
+/* Runtime node endpoint — set from NVS (captive portal) at init,
+ * falls back to the compile-time NODE_HOST/NODE_PORT defaults. */
+static char s_node_host[64] = {0};
+static int  s_node_port = -1;   /* -1 = not loaded yet */
+
+const char *quartz_wifi_node_host(void) {
+    return s_node_host[0] ? s_node_host : NODE_HOST;
+}
+
+int quartz_wifi_node_port(void) {
+    return s_node_port > 0 ? s_node_port : NODE_PORT;
+}
 
 #ifdef ESP_PLATFORM
 
@@ -90,6 +104,64 @@ static void save_wifi_creds(const char *ssid, const char *pass) {
     if (nvs_open(WIFI_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     nvs_set_str(h, WIFI_KEY_SSID, ssid);
     nvs_set_str(h, WIFI_KEY_PASS, pass);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+/* --- Node endpoint config (host[:port]) --------------------------------- */
+
+/* Parse "host[:port]" into the runtime endpoint. Port defaults to 80
+ * (nginx-fronted nodes). Returns false on invalid spec (state unchanged). */
+static bool node_parse(const char *spec) {
+    char host[64] = {0};
+    int port = 80;
+    const char *colon = strchr(spec, ':');
+    if (colon) {
+        size_t hlen = (size_t)(colon - spec);
+        if (hlen == 0 || hlen >= sizeof(host)) return false;
+        memcpy(host, spec, hlen);
+        port = atoi(colon + 1);
+        if (port < 1 || port > 65535) return false;
+    } else {
+        if (!spec[0] || strlen(spec) >= sizeof(host)) return false;
+        memcpy(host, spec, strlen(spec));
+    }
+    snprintf(s_node_host, sizeof(s_node_host), "%s", host);
+    s_node_port = port;
+    return true;
+}
+
+static void load_node_config(void) {
+    char spec[80] = {0};
+    size_t len = sizeof(spec);
+    /* Compile-time defaults first */
+    snprintf(s_node_host, sizeof(s_node_host), "%s", NODE_HOST);
+    s_node_port = NODE_PORT;
+
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_get_str(h, WIFI_KEY_NODE, spec, &len) == ESP_OK && spec[0]) {
+        if (node_parse(spec)) {
+            ESP_LOGI(TAG, "🎯 Node endpoint (portal): %s:%d", s_node_host, s_node_port);
+        } else {
+            ESP_LOGW(TAG, "bad node spec '%s' in NVS — using default", spec);
+        }
+    }
+    nvs_close(h);
+}
+
+static void save_node_spec(const char *spec) {
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_str(h, WIFI_KEY_NODE, spec);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+static void clear_node_spec(void) {
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_erase_key(h, WIFI_KEY_NODE);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -144,7 +216,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
  * the binary size down and avoid extra component deps.
  */
 
-static const char *PORTAL_HTML =
+/* Format string: %s = current node endpoint (host or host:port) */
+static const char *PORTAL_HTML_FMT =
     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
     "<!DOCTYPE html><html><head>"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -164,10 +237,53 @@ static const char *PORTAL_HTML =
     "<form action='/save' method='POST'>"
     "<input name='ssid' placeholder='WiFi Name (SSID)' required>"
     "<input name='pass' type='password' placeholder='WiFi Password'>"
+    "<input name='node' placeholder='Node (host[:port])' value='%s'>"
+    "<p>Node = where this miner gets work &amp; submits shares.<br>"
+    "Point it at your own Raspberry Pi gateway (e.g. 192.168.1.142:21100)"
+    " or leave the default seed.</p>"
     "<button type='submit'>Start Mining ⚡</button>"
     "</form>"
     "<p>Miner will restart and begin mining automatically</p>"
     "</body></html>";
+
+static int hexval(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* URL-encoded form field extraction. Field-boundary aware: matches the
+ * name only at the start of the body or right after '&', so an SSID
+ * containing "pass=" can't be mistaken for the password field. Decodes
+ * '+' (space) and %XX. Returns decoded length, 0 if absent. */
+static size_t form_field(const char *body, const char *name,
+                         char *out, size_t out_len) {
+    size_t nlen = strlen(name);
+    if (out_len < 2) return 0;
+    const char *p = body;
+    while (p && *p) {
+        if (((p == body) || (p > body && p[-1] == '&')) &&
+            strncmp(p, name, nlen) == 0 && p[nlen] == '=') {
+            const char *v = p + nlen + 1;
+            size_t oi = 0;
+            while (*v && *v != '&' && oi + 1 < out_len) {
+                if (*v == '+') { out[oi++] = ' '; v++; }
+                else if (v[0] == '%' && v[1] && v[2]) {
+                    int hi = hexval(v[1]), lo = hexval(v[2]);
+                    if (hi >= 0 && lo >= 0) { out[oi++] = (char)((hi << 4) | lo); v += 3; }
+                    else out[oi++] = *v++;
+                } else out[oi++] = *v++;
+            }
+            out[oi] = '\0';
+            return oi;
+        }
+        p = strchr(p, '&');
+        if (p) p++;
+    }
+    out[0] = '\0';
+    return 0;
+}
 
 static void portal_task(void *pv) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -206,47 +322,26 @@ static void portal_task(void *pv) {
             char *body = strstr(buf, "\r\n\r\n");
             if (body) body += 4;
 
-            char ssid[64] = {0}, pass[64] = {0};
+            char ssid[64] = {0}, pass[64] = {0}, node[80] = {0};
             if (body) {
-                /* Simple URL-encoded form parsing */
-                char *s = strstr(body, "ssid=");
-                char *p = strstr(body, "pass=");
-                if (s) {
-                    s += 5;
-                    char *end = strchr(s, '&');
-                    int slen = end ? (end - s) : strlen(s);
-                    if (slen > 63) slen = 63;
-                    /* URL decode + and %xx */
-                    int oi = 0;
-                    for (int i = 0; i < slen && oi < 63; i++) {
-                        if (s[i] == '+') ssid[oi++] = ' ';
-                        else if (s[i] == '%' && i + 2 < slen) {
-                            int hi = (s[i+1] >= '0' && s[i+1] <= '9') ? s[i+1]-'0' : (s[i+1]>='a'?s[i+1]-'a'+10:s[i+1]-'A'+10);
-                            int lo = (s[i+2] >= '0' && s[i+2] <= '9') ? s[i+2]-'0' : (s[i+2]>='a'?s[i+2]-'a'+10:s[i+2]-'A'+10);
-                            ssid[oi++] = (hi << 4) | lo;
-                            i += 2;
-                        } else ssid[oi++] = s[i];
-                    }
-                }
-                if (p) {
-                    p += 5;
-                    int plen = strlen(p);
-                    if (plen > 63) plen = 63;
-                    int oi = 0;
-                    for (int i = 0; i < plen && oi < 63; i++) {
-                        if (p[i] == '+') pass[oi++] = ' ';
-                        else if (p[i] == '%' && i + 2 < plen) {
-                            int hi = (p[i+1] >= '0' && p[i+1] <= '9') ? p[i+1]-'0' : (p[i+1]>='a'?p[i+1]-'a'+10:p[i+1]-'A'+10);
-                            int lo = (p[i+2] >= '0' && p[i+2] <= '9') ? p[i+2]-'0' : (p[i+2]>='a'?p[i+2]-'a'+10:p[i+2]-'A'+10);
-                            pass[oi++] = (hi << 4) | lo;
-                            i += 2;
-                        } else pass[oi++] = p[i];
-                    }
-                }
+                form_field(body, "ssid", ssid, sizeof(ssid));
+                form_field(body, "pass", pass, sizeof(pass));
+                form_field(body, "node", node, sizeof(node));
             }
 
             if (ssid[0]) {
                 save_wifi_creds(ssid, pass);
+                if (node[0]) {
+                    if (node_parse(node)) {
+                        save_node_spec(node);
+                        ESP_LOGI(TAG, "✅ Node endpoint saved: %s:%d",
+                                 s_node_host, s_node_port);
+                    } else {
+                        ESP_LOGW(TAG, "⚠️ invalid node '%s' ignored (keep existing)", node);
+                    }
+                } else {
+                    clear_node_spec();   /* empty field = compiled default */
+                }
                 ESP_LOGI(TAG, "✅ WiFi creds saved: SSID='%s'", ssid);
 
                 const char *resp =
@@ -277,8 +372,19 @@ static void portal_task(void *pv) {
          *   3. BLE (bonded devices only)
          * This is a security hardening — WiFi is plaintext, anyone nearby can sniff. */
 
-        /* Serve the portal page */
-        send(csock, PORTAL_HTML, strlen(PORTAL_HTML), 0);
+        /* Serve the portal page (with current node endpoint prefilled).
+         * page is static — portal task stack is 4K and already holds buf. */
+        static char page[2560];
+        char nodeval[80];
+        if (quartz_wifi_node_port() == 80)
+            snprintf(nodeval, sizeof(nodeval), "%s", quartz_wifi_node_host());
+        else
+            snprintf(nodeval, sizeof(nodeval), "%s:%d",
+                     quartz_wifi_node_host(), quartz_wifi_node_port());
+        int plen = snprintf(page, sizeof(page), PORTAL_HTML_FMT, nodeval);
+        if (plen < 0) plen = 0;
+        if ((size_t)plen >= sizeof(page)) plen = (int)sizeof(page) - 1;
+        send(csock, page, plen, 0);
         close(csock);
     }
 }
@@ -355,6 +461,9 @@ void quartz_wifi_init(void) {
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL);
 
+    /* Runtime node endpoint: NVS override (portal) or compile-time default */
+    load_node_config();
+
     char ssid[64] = {0}, pass[64] = {0};
 
     if (load_wifi_creds(ssid, sizeof(ssid), pass, sizeof(pass))) {
@@ -398,18 +507,18 @@ static int http_request(const char *method, const char *path,
     /* Connect to node (DNS resolve first) */
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(NODE_PORT);
+    addr.sin_port = htons((uint16_t)s_node_port);
 
     /* DNS resolution */
-    struct hostent *he = gethostbyname(NODE_HOST);
+    struct hostent *he = gethostbyname(s_node_host);
     if (!he || !he->h_addr_list[0]) {
-        ESP_LOGW(TAG, "DNS failed for %s", NODE_HOST);
+        ESP_LOGW(TAG, "DNS failed for %s", s_node_host);
         close(sock);
         return -3;
     }
     struct in_addr **addr_list = (struct in_addr **)he->h_addr_list;
     addr.sin_addr = *addr_list[0];
-    ESP_LOGI(TAG, "DNS: %s -> %s", NODE_HOST, inet_ntoa(addr.sin_addr));
+    ESP_LOGI(TAG, "DNS: %s -> %s", s_node_host, inet_ntoa(addr.sin_addr));
 
     /* Set timeout */
     struct timeval tv = {.tv_sec = 5, .tv_usec = 0};
@@ -428,11 +537,11 @@ static int http_request(const char *method, const char *path,
         req_len = snprintf(req, sizeof(req),
             "%s %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\n"
             "Content-Length: %d\r\nConnection: close\r\n\r\n%s",
-            method, path, NODE_HOST, (int)strlen(body), body);
+            method, path, s_node_host, (int)strlen(body), body);
     } else {
         req_len = snprintf(req, sizeof(req),
             "%s %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",
-            method, path, NODE_HOST);
+            method, path, s_node_host);
     }
     send(sock, req, req_len, 0);
 
