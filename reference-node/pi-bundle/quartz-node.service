@@ -13,8 +13,10 @@ Environment=QUARTZ_NO_MINER=1
 # (block-level incremental sync from whichever peer is furthest ahead;
 # the 31MB snapshot is only pulled on first bootstrap / deep divergence)
 Environment=QUARTZ_PEERS=https://quartz.preview.saasclaw.ai
-# Gateway mode: ESP32s mine against THIS node on the LAN; submits are
-# relayed to the upstream seed (blocks are built at its tip, so no orphans)
+# Gateway mode: ESP32s mine against THIS node on the LAN. Submits are
+# relay-first — blocks build at the strongest tip; if the upstream is
+# unreachable the node builds blocks LOCALLY on its synced chain
+# (autonomy failover). Set QUARTZ_LOCAL_MINE=1 to always build locally.
 Environment=QUARTZ_RELAY_URL=https://quartz.preview.saasclaw.ai
 Restart=always
 RestartSec=5

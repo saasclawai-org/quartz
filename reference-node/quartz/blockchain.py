@@ -130,19 +130,40 @@ class Transaction:
         return hashlib.sha256(self.serialize()).digest()
 
     @classmethod
-    def coinbase(cls, miner_id: bytes, reward: int, height: int) -> 'Transaction':
-        """Create a coinbase transaction."""
+    def coinbase(cls, miner_id: bytes, reward: int, height: int,
+             payout_addr: str = None, dev_reward: int = 0,
+             dev_addr: str = None) -> 'Transaction':
+        """Create a coinbase transaction.
+
+        v2 (payout_addr set): outputs pay the miner's wallet address
+        directly — script_pubkey IS the address ("Q..." ASCII). Blocks
+        become self-contained: any node can derive balances from block
+        data alone (what _script_to_addr expects). Optional dev-fund
+        output as a second output.
+
+        v1 (no payout_addr): legacy sha256(miner_id) script — synthetic
+        fleet miners; balances credited by the producing node's dict.
+
+        Both forms keep sum(outputs) == reward (+dev_reward), satisfying
+        the consensus cap (sum <= subsidy + fees).
+        """
         fake_input = (
             b'\x00' * 32,
             height & 0xFF,
             b'\x00' * 64,
             miner_id + b'\x00' * 26,
         )
-        script = hashlib.sha256(miner_id).digest()
+        if payout_addr:
+            outputs = [(reward, payout_addr.encode('utf-8'))]
+            if dev_reward > 0 and dev_addr:
+                outputs.append((dev_reward, dev_addr.encode('utf-8')))
+        else:
+            script = hashlib.sha256(miner_id).digest()
+            outputs = [(reward, script)]
         return cls(
             version=1,
             inputs=[fake_input],
-            outputs=[(reward, script)],
+            outputs=outputs,
         )
 
 

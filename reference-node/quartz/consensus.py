@@ -1047,6 +1047,23 @@ class ConsensusEngine:
         """
         spent_by_key = {(u.txid, u.index): u for u in (spent_utxos or [])}
 
+        # v2 coinbases pay wallet addresses directly (script IS the
+        # address string) — credit them from block data so balances are
+        # derivable by ANY node applying the block (p2p). v1 coinbases
+        # (sha256 scripts) are still credited by the producing node's dict.
+        if block.transactions:
+            cb = block.transactions[0]
+            if cb.inputs and cb.inputs[0][0] == b'\x00' * 32:  # coinbase marker
+                for amount, script in cb.outputs:
+                    if amount <= 0:
+                        continue
+                    try:
+                        s = script.decode('utf-8')
+                    except (UnicodeDecodeError, ValueError):
+                        continue
+                    if len(s) >= 26 and s[0] in ('Q', 'T'):
+                        self.balances[s] = self.balances.get(s, 0) + amount
+
         for tx in block.transactions[1:]:  # skip coinbase
             # Debit spent inputs (senders)
             for prev_hash, idx, _sig, _pubkey in tx.inputs:
@@ -1093,8 +1110,9 @@ class ConsensusEngine:
             _, fee, _, _, _ = validate_transaction(tx, self.utxo_set, height=height)
             total_fees += fee
 
-        # Build coinbase
-        coinbase = Transaction.coinbase(miner_id, miner_reward + total_fees, height)
+        # Build coinbase (v2 payout when a wallet address is known)
+        coinbase = Transaction.coinbase(miner_id, miner_reward + total_fees, height,
+                                         payout_addr=miner_addr)
 
         # Build block
         header = BlockHeader(

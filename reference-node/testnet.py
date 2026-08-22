@@ -317,7 +317,24 @@ class QuartzChain:
             total_fees += fee
 
         # Coinbase transaction (reward + fees)
-        coinbase = Transaction.coinbase(miner_id, miner_reward + dev_reward + total_fees, height)
+        # Coinbase v2: when the miner gave a wallet address, pay it
+        # DIRECTLY in the coinbase script (self-contained blocks — any
+        # node can derive balances from block data) with the dev-fund
+        # share as a second output. Without an address (synthetic fleet
+        # miners) keep the legacy v1 single-output form.
+        dev_addr = self.dev_wallet['address'] if self.dev_wallet else None
+        if miner_addr and dev_addr:
+            coinbase = Transaction.coinbase(miner_id, miner_reward + total_fees,
+                                            height, payout_addr=miner_addr,
+                                            dev_reward=dev_reward,
+                                            dev_addr=dev_addr)
+        elif miner_addr:
+            coinbase = Transaction.coinbase(
+                miner_id, miner_reward + dev_reward + total_fees, height,
+                payout_addr=miner_addr)
+        else:
+            coinbase = Transaction.coinbase(
+                miner_id, miner_reward + dev_reward + total_fees, height)
         block = Block(header=header, transactions=[coinbase] + selected_txs + msg_txs)
         block.build_header()
 
@@ -343,12 +360,15 @@ class QuartzChain:
             print(f"❌ Block REJECTED by consensus: {reason}")
             return block  # return the block anyway for API compat
 
-        # Update legacy balance dict (consensus engine handles UTXO set)
-        credit_addr = miner_addr or hashlib.sha256(miner_id).hexdigest()[:34]
-        self.balances[credit_addr] = self.balances.get(credit_addr, 0) + miner_reward
-        if dev_reward > 0 and self.dev_wallet:
-            dev_addr = self.dev_wallet['address']
-            self.balances[dev_addr] = self.balances.get(dev_addr, 0) + dev_reward
+        # Balance credits: v2 coinbases (any payout_addr) were already
+        # credited from block data by consensus._update_balances
+        # (accept_block). Only pure-v1 blocks need the legacy manual credit.
+        if not miner_addr:
+            credit_addr = hashlib.sha256(miner_id).hexdigest()[:34]
+            self.balances[credit_addr] = self.balances.get(credit_addr, 0) + miner_reward
+            if dev_reward > 0 and self.dev_wallet:
+                dev_addr = self.dev_wallet['address']
+                self.balances[dev_addr] = self.balances.get(dev_addr, 0) + dev_reward
 
         # Sync difficulty from consensus engine
         self.current_difficulty = self.consensus.current_difficulty
@@ -742,9 +762,9 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
     # upstream node verbatim. Block building happens at the upstream tip
     # (share-triggered mining), so relaying cannot orphan a miner's work.
     # Read/explorer endpoints keep being served from the local synced chain.
+    # NOTE: mining/work + mining/submit are handled hybrid (relay-first,
+    # local fallback) inside their handlers — see _try_forward.
     RELAY_PREFIXES = (
-        '/api/v1/mining/work',    # GET — work must come from the true tip
-        '/api/v1/mining/submit',  # POST — block is built at consensus
         '/api/v1/messages/send',  # POST — pending-message state
         '/api/v1/faucet',         # POST — creates a transaction
         '/api/v1/send',           # POST — creates a transaction
@@ -758,17 +778,13 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 and any(path == p or path.startswith(p)
                         for p in self.RELAY_PREFIXES))
 
-    def _relay_request(self, method):
+    def _do_forward(self, method, data=None):
         """Forward this request to the upstream node, stream its answer
-        back verbatim. Upstream unreachable -> 502 with a clear message;
-        local chain serving is unaffected."""
+        back verbatim. Returns True if a response was delivered to the
+        client (including upstream HTTP errors), False ONLY on
+        connection-level failure (nothing written — caller may fall back)."""
         import urllib.request, urllib.error, gzip as _gzip
         url = self.relay_url + self.path  # raw path: keeps query string
-        data = None
-        if method == 'POST':
-            n = int(self.headers.get('Content-Length', 0) or 0)
-            if n:
-                data = self.rfile.read(n)
         req = urllib.request.Request(
             url, data=data, method=method,
             headers={'Accept-Encoding': 'gzip',
@@ -785,6 +801,7 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Length', str(len(raw)))
                 self.end_headers()
                 self.wfile.write(raw)
+                return True
         except urllib.error.HTTPError as e:
             raw = e.read()
             self.send_response(e.code)
@@ -794,10 +811,23 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)
+            return True
         except Exception as e:
+            print(f"⚠️ upstream {self.relay_url} unreachable "
+                  f"({type(e).__name__})", flush=True)
+            return False
+
+    def _relay_request(self, method):
+        """Blind relay (no local fallback): forward upstream, answer 502
+        with a clear message if the upstream is unreachable."""
+        data = None
+        if method == 'POST':
+            n = int(self.headers.get('Content-Length', 0) or 0)
+            if n:
+                data = self.rfile.read(n)
+        if not self._do_forward(method, data):
             self.json_error(502, f"upstream node unreachable "
-                                 f"({type(e).__name__}) — mining paused, "
-                                 f"local chain serving continues")
+                                 f"— local chain serving continues")
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -876,6 +906,13 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 self.json_error(400, "Invalid block height")
 
         elif path == '/api/v1/mining/work':
+            # Hybrid: prefer work from the upstream tip (strongest chain);
+            # if the upstream is unreachable, serve a template from OUR
+            # synced tip — the miner keeps working through an outage.
+            if (self.relay_url
+                    and os.environ.get('QUARTZ_LOCAL_MINE') != '1'
+                    and self._do_forward('GET')):
+                return
             # Return block template for ESP32 miners
             height = len(self.chain.blocks)
             prev_block = self.chain.blocks[-1]
@@ -1123,6 +1160,19 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             })
 
         elif path == '/api/v1/mining/submit':
+            # Hybrid submit: relay-first (block built at the strongest tip
+            # → fewest orphans); if the upstream is unreachable, build the
+            # block LOCALLY on our synced tip (autonomy failover — the
+            # chain keeps growing through a seed outage, and our p2p peers
+            # will adopt whichever branch gets furthest ahead).
+            if (self.relay_url
+                    and os.environ.get('QUARTZ_LOCAL_MINE') != '1'):
+                raw = json.dumps(body).encode()
+                if self._do_forward('POST', raw):
+                    return
+                print("⛏ upstream unreachable — building block locally "
+                      "(autonomy failover)", flush=True)
+
             # ESP32 miner submitting a found nonce
             job_id = body.get('job_id', '')
             nonce = body.get('nonce', 0)

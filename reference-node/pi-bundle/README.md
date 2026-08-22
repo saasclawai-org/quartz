@@ -49,20 +49,21 @@ to any other. That's the mesh: N sources, no single point of failure.
 
 ## Mine through your own node
 
-This bundle runs in **gateway mode**: it is a standby node (continuously
-synced) *plus* a mining relay. ESP32s point at the Pi's LAN address
-(`NODE_HOST` in `quartz_wifi.c`, then rebuild firmware) — their work fetches
-and block submits are relayed to the upstream consensus node, while all
-reads (explorer, balances, messages) are served locally from the synced
-chain. Miners on your LAN keep working even if your internet is slow;
-if the upstream is unreachable, submits return a clear 502 and local
-serving continues.
+This bundle runs in **gateway mode**: standby node (continuously synced
+via `QUARTZ_PEERS`) *plus* a mining hub. ESP32s point at the Pi's LAN
+address (`NODE_HOST` in `quartz_wifi.c`, then rebuild firmware).
 
-Configure via the unit file:
+**Submits are relay-first with local autonomy:** while the upstream peer
+is reachable, blocks are built at the strongest tip (fewest orphans).
+If it goes down, your node builds blocks on its own synced chain — your
+miners keep mining through an outage, and the mesh reconverges
+(whichever branch grows furthest wins; the loser resyncs).
+Rewards pay your wallet address directly **in the coinbase** — balances
+are carried by the block itself, recognized by every node. Set
+`QUARTZ_LOCAL_MINE=1` to always build locally (fully seedless mesh).
 
-- `QUARTZ_SYNC_URL` — chain sync source (continuous, hot-swap)
-- `QUARTZ_RELAY_URL` — where mining submits are forwarded
-  (remove to run a pure read-only standby node)
+If the upstream is unreachable, non-mining relays (faucet, sends) return
+a clear 502; local chain serving always continues.
 
 ## Making it public (optional)
 
