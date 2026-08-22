@@ -1,0 +1,23 @@
+[Unit]
+Description=Quartz Bridge — LoRa mesh relay for Quartz network
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/quartz-bridge/quartz_bridge.py \
+    --gateway quartz.preview.saasclaw.ai \
+    --region US915 \
+    --lora-port 1738 \
+    --log-level info
+Restart=always
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=10
+FinalKillSignal=SIGKILL
+
+User=root
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
