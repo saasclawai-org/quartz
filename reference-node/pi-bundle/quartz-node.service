@@ -8,6 +8,9 @@ Type=simple
 ExecStart=/usr/bin/python3 /opt/quartz-node/testnet.py
 WorkingDirectory=/opt/quartz-node
 Environment=QUARTZ_NO_MINER=1
+# Continuous chain sync: poll seed every 30s, pull snapshot when >=5 blocks
+# behind (or >=1 block behind for >5 min). Hot-swaps — no restarts needed.
+Environment=QUARTZ_SYNC_URL=https://quartz.preview.saasclaw.ai
 Restart=always
 RestartSec=5
 # Hardening (harmless on any Debian/Raspberry Pi OS)

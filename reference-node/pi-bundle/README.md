@@ -26,17 +26,21 @@ That's it. The installer:
 
 Verify: `curl http://<pi-ip>:21100/api/v1/info` → JSON with chain height.
 
-## Keeping the snapshot fresh
+## Continuous chain sync
 
-The node loads `testnet-data/chain.json` at boot and serves it. To refresh:
+The service runs with `QUARTZ_SYNC_URL=https://quartz.preview.saasclaw.ai`, so
+the node **syncs continuously** — no cron needed:
 
-```bash
-curl -o /opt/quartz-node/testnet-data/chain.json \
-  https://quartz.preview.saasclaw.ai/api/v1/snapshot
-sudo systemctl restart quartz-node
-```
+- polls the seed's `/api/v1/info` every 30 s (`QUARTZ_SYNC_INTERVAL`)
+- pulls a fresh snapshot when ≥5 blocks behind (`QUARTZ_SYNC_MIN_LAG`) or when
+  ≥1 block behind for >5 min (`QUARTZ_SYNC_MAX_LAG_SECONDS`)
+- validates, atomically replaces `chain.json`, rebuilds state, and hot-swaps
+  the serving chain — zero downtime, never serves partial state
+- if the seed is unreachable it keeps serving its last good snapshot and retries
 
-(A cron line can do this nightly — snapshot refresh is read-only and safe.)
+Tuning (optional, in the unit file): lower `QUARTZ_SYNC_MIN_LAG` to 1 for a
+tight 1-block-follow; raise the intervals if the Pi's bandwidth matters more
+than freshness.
 
 ## Making it public (optional)
 

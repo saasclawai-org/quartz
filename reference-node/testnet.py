@@ -1574,6 +1574,84 @@ def mining_simulator(chain):
             print(f"Mining error: {e}")
 
 
+def _http_get(url, timeout=30):
+    """GET with transparent gzip support. Returns raw (decompressed) bytes."""
+    import urllib.request
+    import gzip as _gzip
+    req = urllib.request.Request(url, headers={'Accept-Encoding': 'gzip'})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read()
+        if r.headers.get('Content-Encoding', '').lower() == 'gzip':
+            raw = _gzip.decompress(raw)
+        return raw
+
+
+def standby_sync():
+    """Continuous chain sync for standby nodes (QUARTZ_NO_MINER=1).
+
+    Polls the seed node's /api/v1/info every QUARTZ_SYNC_INTERVAL seconds.
+    When the local chain falls behind, pulls a fresh snapshot, validates it,
+    atomically replaces chain.json, rebuilds state, and hot-swaps the serving
+    chain — no restart needed. The API never serves a partial state: the
+    handler's chain reference is swapped in a single assignment.
+
+    Pull policy (bandwidth-friendly — snapshot is the full chain file):
+      - pull if lag >= QUARTZ_SYNC_MIN_LAG blocks (default 5), OR
+      - pull if lag >= 1 block and the last pull was > QUARTZ_SYNC_MAX_DELAY
+        seconds ago (default 300) so the node never goes fully stale.
+    """
+    seed = os.environ['QUARTZ_SYNC_URL'].rstrip('/')
+    interval = int(os.environ.get('QUARTZ_SYNC_INTERVAL', '30'))
+    min_lag = int(os.environ.get('QUARTZ_SYNC_MIN_LAG', '5'))
+    max_delay = int(os.environ.get('QUARTZ_SYNC_MAX_LAG_SECONDS', '300'))
+    last_pull = 0.0
+
+    while True:
+        try:
+            info = json.loads(_http_get(seed + '/api/v1/info').decode())
+            seed_height = int(info.get('height', 0))
+            seed_hash = info.get('best_hash', '')
+            local = QuartzAPIHandler.chain
+            local_height = len(local.blocks)
+            lag = seed_height - local_height
+            now = time.time()
+
+            # Height diverged backwards (shouldn't happen) → pull to resync.
+            # In-memory blocks are Block objects: hash = block.header.hash.hex()
+            diverged = (lag <= 0 and seed_hash and local.blocks
+                        and local.blocks[-1].header.hash.hex() != seed_hash)
+
+            if lag >= min_lag or diverged or (lag >= 1 and now - last_pull >= max_delay):
+                raw = _http_get(seed + '/api/v1/snapshot', timeout=300)
+                data = json.loads(raw)  # validate fully before touching disk
+                blocks = data.get('blocks')
+                if isinstance(blocks, list) and len(blocks) > local_height:
+                    tmp = CHAIN_FILE + '.sync'
+                    with open(tmp, 'wb') as f:
+                        f.write(raw)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp, CHAIN_FILE)  # atomic
+                    new_chain = QuartzChain()  # rebuild state from disk
+                    if len(new_chain.blocks) > local_height:
+                        QuartzAPIHandler.chain = new_chain  # hot-swap
+                        last_pull = time.time()
+                        print(f"🔄 Synced: height {local_height} → "
+                              f"{len(new_chain.blocks)} from {seed}", flush=True)
+                    else:
+                        print("⚠️ sync: snapshot rebuild not ahead, keeping old chain",
+                              flush=True)
+                else:
+                    print(f"⚠️ sync: snapshot not ahead (seed={seed_height}, "
+                          f"local={local_height}), skipping", flush=True)
+        except Exception as e:
+            # Transient network/seed errors: log and retry next interval.
+            # Standby node keeps serving its last good snapshot meanwhile.
+            print(f"⚠️ sync: {type(e).__name__}: {e} (retrying in {interval}s)",
+                  flush=True)
+        time.sleep(interval)
+
+
 def main():
     print("=" * 60)
     print("  Quartz Testnet Seed Node v0.1.0")
@@ -1587,6 +1665,12 @@ def main():
     # simulators mining separate snapshots = instant chain fork)
     if os.environ.get('QUARTZ_NO_MINER') == '1':
         print("\n🛑 Mining simulator DISABLED (QUARTZ_NO_MINER=1) — standby/read-only node")
+        sync_url = os.environ.get('QUARTZ_SYNC_URL')
+        if sync_url:
+            t = threading.Thread(target=standby_sync, daemon=True)
+            t.start()
+            print(f"🔄 Continuous sync from {sync_url} "
+                  f"(poll every {os.environ.get('QUARTZ_SYNC_INTERVAL', '30')}s)")
     else:
         miner_thread = threading.Thread(target=mining_simulator, args=(chain,), daemon=True)
         miner_thread.start()
