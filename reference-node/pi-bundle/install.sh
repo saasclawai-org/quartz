@@ -14,7 +14,19 @@ echo "== Quartz node install =="
 command -v python3 >/dev/null || { echo "python3 not found"; exit 1; }
 python3 --version
 
-# 2. Install files
+# 2. Optional: full wallet/signing support (PyNaCl). The standby node
+#    boots and syncs fine WITHOUT it (watch-only) — this is best-effort.
+if python3 -c "import nacl" 2>/dev/null; then
+  echo "PyNaCl: already present"
+else
+  ( apt-get install -y python3-pynacl 2>/dev/null \
+      || pip3 install --break-system-packages pynacl 2>/dev/null \
+      || pip3 install pynacl 2>/dev/null ) \
+    && echo "PyNaCl: installed (full wallet support)" \
+    || echo "PyNaCl: not installable — node runs watch-only (fine for standby)"
+fi
+
+# 3. Install files
 mkdir -p "$DEST"
 cp -r "$DIR/quartz" "$DIR/testnet.py" "$DEST/"
 if [ -f "$DIR/testnet-data/chain.json" ]; then
@@ -24,13 +36,14 @@ if [ -f "$DIR/testnet-data/chain.json" ]; then
     cp "$DIR/testnet-data/dev-wallet.json" "$DEST/testnet-data/" || true
 fi
 
-# 3. systemd service (QUARTZ_NO_MINER=1 inside the unit = read-only standby:
-#    serving the snapshot without mining, so it can never fork the chain)
+# 4. systemd service (QUARTZ_NO_MINER=1 inside the unit = read-only standby:
+#    serving the snapshot without mining, so it can never fork the chain;
+#    QUARTZ_SYNC_URL keeps the chain continuously fresh)
 cp "$DIR/quartz-node.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now quartz-node
 
-# 4. Local firewall (if ufw present): allow the node port on LAN
+# 5. Local firewall (if ufw present): allow the node port on LAN
 if command -v ufw >/dev/null; then
   ufw allow 21100/tcp >/dev/null 2>&1 || true
 fi

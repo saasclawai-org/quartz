@@ -113,14 +113,23 @@ class QuartzChain:
 
         os.makedirs(DATA_DIR, exist_ok=True)
 
-        # Load or create dev wallet
+        # Load or create dev wallet. On dependency-light standby boxes
+        # (e.g. a Raspberry Pi without PyNaCl) wallet CREATION is impossible
+        # — every consumer already guards on dev_wallet being None, so boot
+        # in watch-only mode rather than crash-looping the service.
         if os.path.exists(DEV_WALLET_FILE):
             with open(DEV_WALLET_FILE) as f:
                 self.dev_wallet = json.load(f)
         else:
-            self.dev_wallet = create_new_wallet()
-            with open(DEV_WALLET_FILE, 'w') as f:
-                json.dump(self.dev_wallet, f, indent=2)
+            try:
+                self.dev_wallet = create_new_wallet()
+                with open(DEV_WALLET_FILE, 'w') as f:
+                    json.dump(self.dev_wallet, f, indent=2)
+            except NotImplementedError as e:
+                self.dev_wallet = None
+                print(f"⚠️ Dev wallet not created ({e}) — running watch-only. "
+                      f"Standby duty unaffected; install PyNaCl for signing.",
+                      flush=True)
 
         # Load or create chain
         if os.path.exists(CHAIN_FILE):
