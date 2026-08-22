@@ -3,7 +3,7 @@
 // clients — bumped to v3 2026-08-22 after the Jan-1970 tx date bug).
 // Shell strategy is now stale-while-revalidate: serve cache instantly,
 // fetch the fresh copy in the background, and swap it in for next load.
-const CACHE_NAME = 'quartz-wallet-v3';
+const CACHE_NAME = 'quartz-wallet-v4';
 const ASSETS = [
     '/wallet/',
     '/wallet/manifest.json',

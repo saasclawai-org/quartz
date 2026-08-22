@@ -287,13 +287,23 @@
                 <div class="pubkey-display">Base58(SHA-256(pubkey)[:20] + checksum)</div>
             </div>
 
-            <h3 style="font-size: 16px; margin: 20px 0 12px;">Sign Message</h3>
+            <h3 style="font-size: 16px; margin: 20px 0 12px;">✍️ Sign Message</h3>
+            <p style="color: var(--muted); font-size: 13px; margin-bottom: 8px;">Paste any message or login challenge (e.g. <code>quartz-login:…</code>). Signing never broadcasts anything — it just proves you hold the key.</p>
             <div class="form-group">
-                <input type="text" id="sign-input" placeholder="Message to sign...">
+                <textarea id="sign-input" rows="3" placeholder="Message or challenge to sign..."></textarea>
             </div>
             <button class="btn btn-primary" onclick="signMessage()">Sign</button>
             <div id="sign-output" style="display:none; margin-top: 12px;">
-                <div class="pubkey-display" id="signature-display"></div>
+                <div class="balance-card">
+                    <div class="label">Signature (hex)</div>
+                    <div class="pubkey-display" id="signature-display"></div>
+                    <button class="btn btn-secondary" style="margin-top:8px; width:100%;" onclick="copyBlob('signature-display', 'Copy Signature')">📋 Copy</button>
+                </div>
+                <div class="balance-card">
+                    <div class="label">Login blob (paste into any “Sign in with Quartz” site)</div>
+                    <div class="pubkey-display" id="sigblob-display" style="font-size: 11px;"></div>
+                    <button class="btn btn-primary" style="margin-top:8px; width:100%;" onclick="copyBlob('sigblob-display', 'Copy Login Blob')">📋 Copy login blob</button>
+                </div>
             </div>
 
             <h3 style="font-size: 16px; margin: 20px 0 12px;">Verify Signature</h3>
@@ -896,13 +906,31 @@
         }
 
         function signMessage() {
-            const msg = document.getElementById('sign-input').value;
+            const msg = document.getElementById('sign-input').value.trim();
             if (!msg || !wallet) return;
+            if (wallet.locked || !wallet.privateKey) {
+                showModal('modal-unlock');
+                return;
+            }
             const data = new TextEncoder().encode(msg);
             const sig = signTransaction(new Uint8Array(wallet.privateKey), data);
-            const sigHex = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
+            const hex = u8 => Array.from(u8, b => b.toString(16).padStart(2, '0')).join('');
+            const sigHex = hex(sig);
+            const pubHex = Array.from(wallet.publicKey, b => b.toString(16).padStart(2, '0')).join('');
+            const blob = JSON.stringify({ address: wallet.address, public_key: pubHex,
+                                           message: msg, signature: sigHex });
             document.getElementById('sign-output').style.display = 'block';
             document.getElementById('signature-display').textContent = sigHex;
+            document.getElementById('sigblob-display').textContent = blob;
+        }
+
+        function copyBlob(id, label) {
+            const text = document.getElementById(id).textContent;
+            const done = () => { const b = event.target; const t = b.textContent;
+                b.textContent = '✅ Copied'; setTimeout(() => b.textContent = t, 1500); };
+            if (navigator.clipboard) navigator.clipboard.writeText(text).then(done).catch(() => {
+                prompt(label + ':', text); });
+            else prompt(label + ':', text);
         }
 
         function verifyMessage() {

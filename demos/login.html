@@ -57,8 +57,11 @@ footer { text-align: center; color: var(--muted); padding: 24px; border-top: 1px
       </div>
       <textarea id="seed" rows="3" placeholder="…or paste your 12-word seed phrase"></textarea>
       <button class="btn ghost" id="sign-seed">✍️ Sign with seed phrase</button>
-      <p class="muted" style="margin-top:12px">The seed never leaves this page — it's only used to derive the
-      signature locally, then discarded.</p>
+      <p class="muted" style="margin-top:10px">— or —</p>
+      <textarea id="blob" rows="3" placeholder='…or paste the login blob from the wallet app (Keys → Sign Message → “Copy login blob")'></textarea>
+      <button class="btn ghost" id="sign-blob">📥 Verify blob from wallet app</button>
+      <p class="muted" style="margin-top:12px">Best practice on unfamiliar sites: never paste your seed —
+      sign in the <a href="/wallet/" target="_blank">wallet app</a> (Keys tab → Sign Message), then paste the blob here.</p>
     </div>
     <div class="step" id="s3">
       <h2>3 · Verified</h2>
@@ -161,6 +164,30 @@ $('sign-seed').onclick = async () => {
     await finishLogin(w.privateKey, w.publicKey, w.address);
   } catch (e) { alert('Invalid seed phrase'); }
   $('seed').value = '';
+};
+
+// Option C: blob signed in the wallet app — key material never touched this page
+$('sign-blob').onclick = async () => {
+  let b;
+  try { b = JSON.parse($('blob').value.trim()); }
+  catch (e) { alert('That is not a login blob — use the wallet app: Keys → Sign Message → Copy login blob'); return; }
+  if (!b.address || !b.public_key || !b.signature || !b.message) { alert('Blob is missing fields'); return; }
+  if (b.message !== currentChallenge) { alert('Blob was signed for a different challenge — get a fresh one here, sign it in the wallet, and come back.'); return; }
+  const r = await fetch(NODE + '/api/v1/auth/verify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: b.address, public_key: b.public_key,
+                           challenge: b.message, signature: b.signature })
+  }).then(x => x.json());
+  if (r.valid) {
+    log('✅ node verified wallet-app signature (key never left the wallet)');
+    $('session-line').textContent = 'Logged in as ' + r.address;
+    $('verify-line').textContent = 'Proven via wallet-app signature — the site never saw your key material. This is the MetaMask shape.';
+    show('s3');
+  } else {
+    log('❌ verify failed: ' + (r.error || 'unknown'));
+    alert('Verification failed: ' + (r.error || 'invalid signature'));
+  }
+  $('blob').value = '';
 };
 
 $('logout').onclick = () => { currentChallenge = null; $('log').innerHTML = ''; show('s1'); };
