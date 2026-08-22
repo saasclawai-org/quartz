@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🥧 Run a Quartz Node</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --card: #1a1a2e;
+  --accent: #9933ff;
+  --accent2: #00d4aa;
+  --text: #e4e4ef;
+  --muted: #8888a0;
+  --warn: #ff6b35;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.quartz-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10,10,15,0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #2a2a3e;
+}
+.quartz-nav-inner {
+  max-width: 900px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px;
+}
+.quartz-nav-logo { color: var(--accent); text-decoration: none; font-weight: 700; font-size: 18px; }
+.quartz-nav-links { display: flex; gap: 24px; }
+.quartz-nav-links a { color: var(--muted); text-decoration: none; font-size: 15px; transition: color 0.2s; }
+.quartz-nav-links a:hover { color: var(--text); }
+.quartz-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+.quartz-nav-toggle span { display: block; width: 24px; height: 2px; background: var(--text, #e4e4ef); border-radius: 2px; }
+.quartz-nav-toggle span + span { margin-top: 5px; }
+@media (max-width: 900px) {
+  .quartz-nav-toggle { display: block; }
+  .quartz-nav-links { display: none; flex-direction: column; position: absolute; top: 100%; left: 0; right: 0; background: rgba(10,10,15,0.98); border-bottom: 1px solid var(--border, #2a2a3e); padding: 0; }
+  .quartz-nav-links.open { display: flex; }
+  .quartz-nav-links a { padding: 14px 20px; border-bottom: 1px solid var(--border, #2a2a3e); }
+}
+.container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); margin-bottom: 8px; font-size: 32px; }
+h2 { color: var(--accent2); margin: 32px 0 12px; font-size: 22px; }
+h3 { color: var(--text); margin: 20px 0 8px; font-size: 18px; }
+p { margin-bottom: 12px; }
+.muted { color: var(--muted); }
+.warn { color: var(--warn); font-weight: 600; }
+.step {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 16px 0;
+  border-left: 3px solid var(--accent);
+}
+.step-num {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  text-align: center; line-height: 32px;
+  font-weight: 700; font-size: 16px;
+  margin-right: 8px;
+}
+.step-title {
+  font-size: 20px; font-weight: 600;
+  vertical-align: middle;
+}
+.flow {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 20px 0; padding: 16px; background: #12121f; border-radius: 8px;
+  border: 1px solid #2a2a3e;
+}
+.flow-step {
+  background: var(--card);
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  font-size: 14px;
+}
+.flow-arrow { color: var(--accent); font-size: 18px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 16px 0; }
+.card {
+  background: var(--card); border-radius: 12px; padding: 18px;
+  border: 1px solid #2a2a3e;
+}
+.card h3 { margin-top: 0; }
+code {
+  background: #12121f; padding: 2px 6px; border-radius: 4px;
+  font-family: 'SF Mono', Consolas, monospace; font-size: 14px; color: var(--accent2);
+}
+pre {
+  background: #12121f; padding: 16px; border-radius: 8px;
+  overflow-x: auto; margin: 12px 0; border: 1px solid #2a2a3e;
+}
+pre code { background: none; padding: 0; color: var(--text); }
+.note {
+  background: rgba(0,212,170,0.08);
+  border-left: 3px solid var(--accent2);
+  padding: 12px 16px; border-radius: 0 8px 8px 0;
+  margin: 12px 0;
+}
+.danger {
+  background: rgba(255,107,53,0.08);
+  border-left: 3px solid var(--warn);
+  padding: 12px 16px; border-radius: 0 8px 8px 0;
+  margin: 12px 0;
+}
+ul, ol { padding-left: 20px; margin: 8px 0; }
+li { margin-bottom: 4px; }
+a { color: var(--accent); }
+footer {
+  text-align: center; color: var(--muted);
+  padding: 32px 20px; border-top: 1px solid #2a2a3e; margin-top: 40px;
+}
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<nav class="quartz-nav">
+  <div class="quartz-nav-inner">
+    <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+    <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+      <a href="/hardware.html">Hardware</a>
+      <a href="/mining.html">Mining</a>
+      <a href="/energy.html">Energy</a>
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/agents.html">Agents</a>
+      <a href="/security.html">Security</a>
+      <a href="/explorer/">Explorer</a>
+      <a href="/names.html">Names</a>
+      <a href="/wallet/">Wallet</a>
+      <a href="/download.html">Download</a>
+      <a href="/node.html" style="color:#00d4aa;font-weight:600">Node</a>
+      <a href="/setup.html">Setup</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <h1>🥧 Run a Quartz Node</h1>
+  <p class="muted">One tarball, one command, about two minutes. Own your corner of the network.</p>
+
+  <div class="flow">
+    <span class="flow-step">1. Install</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">2. Verify sync</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">3. Point miners at it</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">🌐 You're the network</span>
+  </div>
+
+  <h2>Why run your own node?</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>📚 Your chain, verified</h3>
+      <p class="muted">A full copy of the chain on your hardware, kept fresh by peer-to-peer sync — kilobyte batches, every block validated (PoW + linkage + UTXO rules). You don't trust anyone's word; your node checked it.</p>
+    </div>
+    <div class="card">
+      <h3>⛏️ Your miners' gateway</h3>
+      <p class="muted">Your ESP32s work and submit through <b>your</b> node on your LAN — not some stranger's server. Rewards pay your miner's wallet address directly <b>in the coinbase</b>: the block itself is the receipt.</p>
+    </div>
+    <div class="card">
+      <h3>🛡️ Network resilience</h3>
+      <p class="muted">Every node serves the chain to other nodes and serves miners even if the rest of the network disappears. More nodes = no single point of failure. That's the whole point.</p>
+    </div>
+  </div>
+
+  <!-- =================== STEP 1 =================== -->
+  <div class="step">
+    <span class="step-num">1</span><span class="step-title">What you need</span>
+    <ul>
+      <li>Any Raspberry Pi (a <b>Pi Zero 2 W is plenty</b>) — or any Linux box, ARM or x86</li>
+      <li>~80 MB free RAM, &lt;1% CPU. No dependencies — pure Python 3 stdlib, nothing to pip-install</li>
+      <li>An SD card and power. That's the whole bill of materials</li>
+    </ul>
+  </div>
+
+  <!-- =================== STEP 2 =================== -->
+  <div class="step">
+    <span class="step-num">2</span><span class="step-title">Install</span>
+    <p>On the Pi (Raspberry Pi OS, DietPi, Ubuntu — anything with Python 3):</p>
+<pre><code>curl -LO https://quartz.preview.saasclaw.ai/downloads/quartz-pi-node.tar.gz
+tar xzf quartz-pi-node.tar.gz
+cd quartz-pi-node
+sudo bash install.sh</code></pre>
+    <p class="muted">The installer copies everything to <code>/opt/quartz-node</code>, enables + starts a
+    <code>quartz-node</code> systemd service (auto-restart, survives reboots), and opens port 21100
+    in ufw if present.</p>
+  </div>
+
+  <!-- =================== STEP 3 =================== -->
+  <div class="step">
+    <span class="step-num">3</span><span class="step-title">Verify it's syncing</span>
+    <p>Two commands:</p>
+<pre><code>curl -s localhost:21100/api/v1/info | python3 -m json.tool
+journalctl -u quartz-node -f</code></pre>
+    <p>You want a JSON response with the current <code>height</code>, and log lines like:</p>
+<pre><code>🔄 Synced +2 blocks: 40739 → 40741 from https://quartz.preview.saasclaw.ai</code></pre>
+    <p class="muted">That's incremental p2p sync — kilobytes per batch, not a giant snapshot re-pull.
+    The node keeps itself current from its peer list automatically; no cron, no babysitting.</p>
+  </div>
+
+  <!-- =================== STEP 4 =================== -->
+  <div class="step">
+    <span class="step-num">4</span><span class="step-title">Point your ESP32s at it</span>
+    <p>No firmware rebuild needed. In your miner's captive portal (first boot, or serial command
+    <code>wifi</code>), set the <b>Node</b> field to your Pi's LAN address:</p>
+<pre><code>192.168.1.142          ← your Pi's LAN IP (port 80 default)
+192.168.1.142:21100    ← explicit host:port form also works</code></pre>
+    <p class="muted">From then on your miner gets work from — and submits blocks through —
+    <b>your</b> node. See the <a href="/setup.html">Setup Guide</a> for flashing and the
+    <a href="/download.html">Download page</a> for firmware images.</p>
+  </div>
+
+  <!-- =================== STEP 5 =================== -->
+  <div class="step">
+    <span class="step-num">5</span><span class="step-title">Check your miner's receipts</span>
+    <p>Miner stats live on whichever node builds the blocks, but the receipts are on-chain — any
+    node can show them:</p>
+<pre><code># chain height + hardware miner count (network view)
+curl -s https://quartz.preview.saasclaw.ai/api/v1/info
+
+# your miner's wallet — every reward is a coinbase on-chain
+curl -s https://quartz.preview.saasclaw.ai/api/v1/address/&lt;DEVICE_ADDRESS&gt;</code></pre>
+    <p class="muted">The device address is shown on the miner's serial output / display QR.
+    The <a href="/wallet/">web wallet</a> renders the same history with real dates.</p>
+  </div>
+
+  <h2>How it actually works</h2>
+  <div class="note">
+    <b>Peer-to-peer sync.</b> The node holds a peer list (<code>QUARTZ_PEERS</code>, comma-separated)
+    and pulls incremental batches from whichever peer is furthest ahead — the seed, your friends'
+    Pis, anything running this software. Foreign blocks pass full consensus validation before
+    being applied. Add your node to other people's peer lists: any node can serve any other.
+  </div>
+  <div class="note">
+    <b>Relay-first block building.</b> While peers are reachable, your miners' submissions are
+    relayed and blocks are built at the strongest tip in the network. If the network is
+    unreachable, your node switches to building blocks <b>locally</b> on its own synced chain —
+    your miners keep mining straight through an outage. When connectivity returns, the mesh
+    reconverges on whichever branch grew furthest.
+  </div>
+  <div class="note">
+    <b>Rewards are carried by the block itself.</b> Mining payouts are encoded in the coinbase
+    transaction paying your miner's address — not a database entry on someone's server. Every
+    fully-synced node recognizes the balance. Fully seedless operation is one env var away
+    (<code>QUARTZ_LOCAL_MINE=1</code>).
+  </div>
+
+  <h2>Optional: make your node public</h2>
+  <ul>
+    <li><b>Cloudflare Tunnel</b> (recommended — no port-forwarding): <code>cloudflared tunnel</code> pointed at port 21100, and your Pi serves the chain at <code>quartz-pi.yourdomain</code></li>
+    <li><b>Port-forward 21100</b> on your router, or reverse-proxy 443 → 21100 with nginx/caddy</li>
+    <li><b>LAN-only is fine too</b> — your own miners and wallet use it directly on your network</li>
+  </ul>
+
+  <div class="danger">
+    ⚠️ <b>Never <code>erase_flash</code> a miner.</b> The ESP32's NVS holds its wallet private key —
+    erasing flash destroys the key and any QZ it earned. Re-flashing firmware at <code>0x0</code>
+    (merged image) preserves it. Bad WiFi? Serial terminal → type <code>wifi</code> → the captive
+    portal reopens. ESP32 is 2.4&nbsp;GHz only.
+  </div>
+
+  <p class="muted">Full internals, peer-list configuration, and failover details:
+  <a href="https://github.com/saasclawai-org/quartz/blob/main/reference-node/pi-bundle/README.md">node bundle README</a> on GitHub.</p>
+</div>
+
+<footer>
+  <p>🔮 Quartz — the solar-minable cryptocurrency. <a href="https://github.com/saasclawai-org/quartz">GitHub</a></p>
+</footer>
+
+</body>
+</html>
