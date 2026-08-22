@@ -1107,7 +1107,7 @@
         function drawQR(text) {
             if (typeof QRCode === 'undefined') {
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+                script.src = '/js/qrcode.min.js';   // self-hosted: CSP blocks CDNs
                 script.onload = () => QRCode.toCanvas(document.getElementById('qr-canvas'), text, { width: 200, margin: 1 }, () => {});
                 document.head.appendChild(script);
             } else {
