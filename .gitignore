@@ -18,3 +18,4 @@ firmware-ml-demo/build-*/
 firmware-ml-demo/sdkconfig
 firmware/build-s3/
 *.log
+reference-node/testnet-data/
