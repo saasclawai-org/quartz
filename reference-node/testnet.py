@@ -97,6 +97,75 @@ def _parse_msg_envelope(data: bytes):
     return ('', '', data.decode('utf-8', errors='replace'))
 
 
+def _block_from_disk_dict(bd: dict) -> Block:
+    """Reconstruct a Block from its chain.json/dict serialization.
+    Shared by load() and p2p incremental sync — one parser, two sources."""
+    header = BlockHeader(
+        version=bd['header']['version'],
+        prev_block_hash=bytes.fromhex(bd['header']['prev_block_hash']),
+        merkle_root=bytes.fromhex(bd['header']['merkle_root']),
+        timestamp=bd['header']['timestamp'],
+        difficulty_target=bd['header']['difficulty_target'],
+        nonce=bd['header']['nonce'],
+        miner_id=bytes.fromhex(bd['header']['miner_id']),
+    )
+    transactions = []
+    for td in bd.get('txs', []):
+        inputs = [
+            (
+                bytes.fromhex(ti['prev_hash']),
+                ti['idx'],
+                bytes.fromhex(ti['sig']),
+                bytes.fromhex(ti['pubkey']),
+            )
+            for ti in td.get('inputs', [])
+        ]
+        outputs = [
+            (to['amount'], bytes.fromhex(to['script']))
+            for to in td.get('outputs', [])
+        ]
+        transactions.append(Transaction(
+            version=td.get('version', 1),
+            inputs=inputs,
+            outputs=outputs,
+            locktime=td.get('locktime', 0),
+            data=bytes.fromhex(td.get('data', '')),
+        ))
+    return Block(header=header, transactions=transactions)
+
+
+def _block_to_disk_dict(block: Block) -> dict:
+    """Serialize a Block exactly like chain.json stores it (the inverse of
+    _block_from_disk_dict — used by /api/v1/blocks/since for p2p sync)."""
+    return {
+        "header": {
+            "version": block.header.version,
+            "prev_block_hash": block.header.prev_block_hash.hex(),
+            "merkle_root": block.header.merkle_root.hex(),
+            "timestamp": block.header.timestamp,
+            "difficulty_target": block.header.difficulty_target,
+            "nonce": block.header.nonce,
+            "miner_id": block.header.miner_id.hex(),
+        },
+        "txs": [
+            {
+                "version": tx.version,
+                "inputs": [
+                    {"prev_hash": ph.hex(), "idx": idx, "sig": sig.hex(), "pubkey": pk.hex()}
+                    for ph, idx, sig, pk in tx.inputs
+                ],
+                "outputs": [
+                    {"amount": amt, "script": script.hex()}
+                    for amt, script in tx.outputs
+                ],
+                "locktime": tx.locktime,
+                "data": tx.data.hex(),
+            }
+            for tx in block.transactions
+        ],
+    }
+
+
 class QuartzChain:
     """Simple in-memory blockchain with persistence."""
 
@@ -568,45 +637,53 @@ class QuartzChain:
             os.fsync(f.fileno())
         os.replace(tmp, PENDING_MSGS_FILE)
 
+    def apply_peer_blocks(self, disk_blocks: list, state: dict = None):
+        """Apply blocks fetched from a peer (incremental p2p sync).
+
+        Each block must extend our tip (prev-hash linked) and pass full
+        consensus validation (consensus.accept_block — same path the miner
+        uses). On success the legacy balances dict is REPLACED by the peer's
+        authoritative copy when provided (wallet payout attribution lives
+        in the producing node's balances, not in block data — known
+        limitation of the coinbase format).
+        Returns (applied_count, error_or_None).
+        """
+        applied = 0
+        for bd in disk_blocks:
+            block = _block_from_disk_dict(bd)
+            if block.header.prev_block_hash != self.blocks[-1].header.hash:
+                return applied, (f"prev-hash mismatch at height {len(self.blocks)} "
+                                 f"(peer block does not extend our tip)")
+            ok, reason = self.consensus.accept_block(block)
+            if not ok:
+                return applied, f"consensus rejected block at height {len(self.blocks)}: {reason}"
+            # accept_block appended to consensus.blocks and updated UTXO/
+            # balances/mempool/difficulty — mirror into legacy view
+            self.blocks = self.consensus.blocks
+            self.balances = self.consensus.balances
+            self.mempool = [t for t in self.mempool
+                            if t.txid not in {x.txid for x in block.transactions}]
+            applied += 1
+        if state:
+            if 'balances' in state:
+                self.balances = dict(state['balances'])
+            if 'known_miners' in state:
+                self.known_miners |= set(bytes.fromhex(m) for m in state['known_miners'])
+            if 'current_difficulty' in state:
+                self.current_difficulty = state['current_difficulty']
+            if 'synthetic_utxos' in state:
+                self.synthetic_utxos = state['synthetic_utxos']
+        if applied:
+            self.save()
+        return applied, None
+
     def load(self):
         """Load chain from disk."""
         with open(CHAIN_FILE) as f:
             data = json.load(f)
 
         for bd in data['blocks']:
-            header = BlockHeader(
-                version=bd['header']['version'],
-                prev_block_hash=bytes.fromhex(bd['header']['prev_block_hash']),
-                merkle_root=bytes.fromhex(bd['header']['merkle_root']),
-                timestamp=bd['header']['timestamp'],
-                difficulty_target=bd['header']['difficulty_target'],
-                nonce=bd['header']['nonce'],
-                miner_id=bytes.fromhex(bd['header']['miner_id']),
-            )
-            # Reconstruct transactions if they were persisted
-            transactions = []
-            for td in bd.get('txs', []):
-                inputs = [
-                    (
-                        bytes.fromhex(ti['prev_hash']),
-                        ti['idx'],
-                        bytes.fromhex(ti['sig']),
-                        bytes.fromhex(ti['pubkey']),
-                    )
-                    for ti in td.get('inputs', [])
-                ]
-                outputs = [
-                    (to['amount'], bytes.fromhex(to['script']))
-                    for to in td.get('outputs', [])
-                ]
-                transactions.append(Transaction(
-                    version=td.get('version', 1),
-                    inputs=inputs,
-                    outputs=outputs,
-                    locktime=td.get('locktime', 0),
-                    data=bytes.fromhex(td.get('data', '')),
-                ))
-            self.blocks.append(Block(header=header, transactions=transactions))
+            self.blocks.append(_block_from_disk_dict(bd))
 
         self.balances = data.get('balances', {})
         self.known_miners = set(bytes.fromhex(m) for m in data.get('known_miners', []))
@@ -752,6 +829,40 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
 
         elif path == '/api/v1/blocks/recent':
             self.json_response(self.chain.get_recent_blocks(20))
+
+        elif path.startswith('/api/v1/blocks/since/'):
+            # P2P incremental sync: full-fidelity blocks after <height>,
+            # batched. When the batch reaches the sender's tip, the small
+            # chain-state fields (balances, known_miners, difficulty,
+            # synthetic UTXOs, mempool) are included so the peer converges
+            # completely — a ~KB alternative to the 31 MB snapshot.
+            try:
+                start = int(path.rsplit('/', 1)[-1])
+            except ValueError:
+                self.json_error(400, "Invalid height")
+                return
+            if start < 0 or start > len(self.chain.blocks):
+                self.json_error(400, f"height out of range (0..{len(self.chain.blocks)})")
+                return
+            BATCH = 64
+            batch_blocks = self.chain.blocks[start:start + BATCH]
+            resp = {
+                "from_height": start,
+                "count": len(batch_blocks),
+                "tip_height": len(self.chain.blocks) - 1,
+                "blocks": [_block_to_disk_dict(b) for b in batch_blocks],
+            }
+            if start + len(batch_blocks) >= len(self.chain.blocks):
+                # Batch reaches our tip: attach authoritative small state
+                resp["state"] = {
+                    "balances": self.chain.balances,
+                    "known_miners": [m.hex() for m in self.chain.known_miners],
+                    "current_difficulty": self.chain.current_difficulty,
+                    "synthetic_utxos": getattr(self.chain, 'synthetic_utxos', []),
+                    "best_hash": (self.chain.blocks[-1].header.hash.hex()
+                                  if self.chain.blocks else None),
+                }
+            self.json_response(resp)
 
         elif path.startswith('/api/v1/block/'):
             try:
@@ -1666,67 +1777,121 @@ def _http_get(url, timeout=30):
         return raw
 
 
+def _resolve_peers():
+    """Peer list for sync: QUARTZ_PEERS (comma-separated, p2p) wins over the
+    legacy single QUARTZ_SYNC_URL."""
+    peers = os.environ.get('QUARTZ_PEERS', '')
+    if peers:
+        return [p.strip().rstrip('/') for p in peers.split(',') if p.strip()]
+    sync = os.environ.get('QUARTZ_SYNC_URL', '').rstrip('/')
+    return [sync] if sync else []
+
+
+def _snapshot_resync(peer, local_height):
+    """Full snapshot pull from peer (bootstrap / deep divergence).
+    Returns new height if swapped in, else None."""
+    raw = _http_get(peer + '/api/v1/snapshot', timeout=300)
+    data = json.loads(raw)  # validate fully before touching disk
+    blocks = data.get('blocks')
+    if not (isinstance(blocks, list) and len(blocks) > local_height):
+        return None
+    tmp = CHAIN_FILE + '.sync'
+    with open(tmp, 'wb') as f:
+        f.write(raw)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, CHAIN_FILE)  # atomic
+    new_chain = QuartzChain()  # rebuild state from disk
+    if len(new_chain.blocks) <= local_height:
+        return None
+    QuartzAPIHandler.chain = new_chain  # hot-swap
+    return len(new_chain.blocks)
+
+
+def _incremental_sync(peer, chain, interval):
+    """Catch up to peer via /blocks/since batches (KBs, not a 31 MB pull).
+    Applies foreign blocks through full consensus validation and adopts the
+    peer's authoritative small state at tip. Returns (start_h, end_h, err)."""
+    start_h = len(chain.blocks)
+    while True:
+        resp = json.loads(_http_get(
+            peer + f'/api/v1/blocks/since/{len(chain.blocks)}',
+            timeout=60).decode())
+        got = resp.get('blocks') or []
+        if not got:
+            return start_h, len(chain.blocks), None  # at tip, nothing to do
+        applied, err = chain.apply_peer_blocks(got, resp.get('state'))
+        if err:
+            return start_h, len(chain.blocks), err
+        if len(chain.blocks) >= resp.get('tip_height', 0) + 1:
+            return start_h, len(chain.blocks), None  # reached peer tip
+
+
 def standby_sync():
-    """Continuous chain sync for standby nodes (QUARTZ_NO_MINER=1).
+    """Continuous multi-peer chain sync for standby/gateway nodes.
 
-    Polls the seed node's /api/v1/info every QUARTZ_SYNC_INTERVAL seconds.
-    When the local chain falls behind, pulls a fresh snapshot, validates it,
-    atomically replaces chain.json, rebuilds state, and hot-swaps the serving
-    chain — no restart needed. The API never serves a partial state: the
-    handler's chain reference is swapped in a single assignment.
+    QUARTZ_PEERS (comma-separated) defines the peer set; every peer is
+    polled, and the node syncs incrementally (block batches + tiny state
+    payloads) from whichever peer is furthest ahead. The 31 MB snapshot is
+    only pulled for bootstrap (>200 blocks behind) or when incremental
+    application fails against an ahead peer (deep divergence).
 
-    Pull policy (bandwidth-friendly — snapshot is the full chain file):
-      - pull if lag >= QUARTZ_SYNC_MIN_LAG blocks (default 5), OR
-      - pull if lag >= 1 block and the last pull was > QUARTZ_SYNC_MAX_DELAY
-        seconds ago (default 300) so the node never goes fully stale.
+    Fork policy: peers at our height with a different tip hash are ignored
+    (first-seen stickiness; growth decides), and we only ever follow peers
+    strictly ahead — so a single strange peer cannot flip-flop our chain.
     """
-    seed = os.environ['QUARTZ_SYNC_URL'].rstrip('/')
+    peers = _resolve_peers()
     interval = int(os.environ.get('QUARTZ_SYNC_INTERVAL', '30'))
-    min_lag = int(os.environ.get('QUARTZ_SYNC_MIN_LAG', '5'))
-    max_delay = int(os.environ.get('QUARTZ_SYNC_MAX_LAG_SECONDS', '300'))
-    last_pull = 0.0
+    if not peers:
+        return
+    print(f"🤝 P2P sync peers: {', '.join(peers)}", flush=True)
 
     while True:
         try:
-            info = json.loads(_http_get(seed + '/api/v1/info').decode())
-            seed_height = int(info.get('height', 0))
-            seed_hash = info.get('best_hash', '')
-            local = QuartzAPIHandler.chain
-            local_height = len(local.blocks)
-            lag = seed_height - local_height
-            now = time.time()
+            best_peer, best_height, best_hash = None, -1, ''
+            for p in peers:
+                try:
+                    info = json.loads(_http_get(p + '/api/v1/info', timeout=15).decode())
+                    h = int(info.get('height', 0))
+                    if h > best_height:
+                        best_peer, best_height, best_hash = p, h, info.get('best_hash', '')
+                except Exception as e:
+                    print(f"⚠️ peer {p}: {type(e).__name__} (skipping this poll)",
+                          flush=True)
+            chain = QuartzAPIHandler.chain
+            local_height = len(chain.blocks)
 
-            # Height diverged backwards (shouldn't happen) → pull to resync.
-            # In-memory blocks are Block objects: hash = block.header.hash.hex()
-            diverged = (lag <= 0 and seed_hash and local.blocks
-                        and local.blocks[-1].header.hash.hex() != seed_hash)
+            if best_peer is None:
+                raise RuntimeError("no peer reachable")
 
-            if lag >= min_lag or diverged or (lag >= 1 and now - last_pull >= max_delay):
-                raw = _http_get(seed + '/api/v1/snapshot', timeout=300)
-                data = json.loads(raw)  # validate fully before touching disk
-                blocks = data.get('blocks')
-                if isinstance(blocks, list) and len(blocks) > local_height:
-                    tmp = CHAIN_FILE + '.sync'
-                    with open(tmp, 'wb') as f:
-                        f.write(raw)
-                        f.flush()
-                        os.fsync(f.fileno())
-                    os.replace(tmp, CHAIN_FILE)  # atomic
-                    new_chain = QuartzChain()  # rebuild state from disk
-                    if len(new_chain.blocks) > local_height:
-                        QuartzAPIHandler.chain = new_chain  # hot-swap
-                        last_pull = time.time()
-                        print(f"🔄 Synced: height {local_height} → "
-                              f"{len(new_chain.blocks)} from {seed}", flush=True)
-                    else:
-                        print("⚠️ sync: snapshot rebuild not ahead, keeping old chain",
-                              flush=True)
+            lag = best_height - local_height
+            if lag <= 0:
+                time.sleep(interval)
+                continue
+
+            if lag > 200:
+                end = _snapshot_resync(best_peer, local_height)
+                if end:
+                    print(f"🔄 Snapshot bootstrap: {local_height} → {end} "
+                          f"from {best_peer}", flush=True)
                 else:
-                    print(f"⚠️ sync: snapshot not ahead (seed={seed_height}, "
-                          f"local={local_height}), skipping", flush=True)
+                    print("⚠️ sync: snapshot not ahead, keeping local chain",
+                          flush=True)
+            else:
+                start, end, err = _incremental_sync(best_peer, chain, interval)
+                if err:
+                    print(f"⚠️ incremental sync failed: {err}", flush=True)
+                    if best_height > len(chain.blocks):
+                        end = _snapshot_resync(best_peer, len(chain.blocks))
+                        if end:
+                            print(f"🔄 Resynced via snapshot: {start} → {end} "
+                                  f"from {best_peer}", flush=True)
+                elif end > start:
+                    print(f"🔄 Synced +{end - start} blocks: {start} → {end} "
+                          f"from {best_peer}", flush=True)
         except Exception as e:
-            # Transient network/seed errors: log and retry next interval.
-            # Standby node keeps serving its last good snapshot meanwhile.
+            # Transient network errors: log and retry next interval.
+            # Standby node keeps serving its last good state meanwhile.
             print(f"⚠️ sync: {type(e).__name__}: {e} (retrying in {interval}s)",
                   flush=True)
         time.sleep(interval)
@@ -1756,11 +1921,11 @@ def main():
     # simulators mining separate snapshots = instant chain fork)
     if os.environ.get('QUARTZ_NO_MINER') == '1':
         print("\n🛑 Mining simulator DISABLED (QUARTZ_NO_MINER=1) — standby/read-only node")
-        sync_url = os.environ.get('QUARTZ_SYNC_URL')
-        if sync_url:
+        peers = _resolve_peers()
+        if peers:
             t = threading.Thread(target=standby_sync, daemon=True)
             t.start()
-            print(f"🔄 Continuous sync from {sync_url} "
+            print(f"🔄 Continuous p2p sync from {len(peers)} peer(s) "
                   f"(poll every {os.environ.get('QUARTZ_SYNC_INTERVAL', '30')}s)")
     if relay_url:
         print(f"⛏ Gateway mode: mining submits relay to {relay_url} — "

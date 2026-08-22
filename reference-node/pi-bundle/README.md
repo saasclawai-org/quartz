@@ -26,21 +26,26 @@ That's it. The installer:
 
 Verify: `curl http://<pi-ip>:21100/api/v1/info` → JSON with chain height.
 
-## Continuous chain sync
+## Continuous chain sync (p2p)
 
-The service runs with `QUARTZ_SYNC_URL=https://quartz.preview.saasclaw.ai`, so
-the node **syncs continuously** — no cron needed:
+The service syncs continuously via `QUARTZ_PEERS` — **no cron, no seed
+monopoly**. List any number of peers (comma-separated): the seed, your
+friends' Quartz Pis, anything running this node software:
 
-- polls the seed's `/api/v1/info` every 30 s (`QUARTZ_SYNC_INTERVAL`)
-- pulls a fresh snapshot when ≥5 blocks behind (`QUARTZ_SYNC_MIN_LAG`) or when
-  ≥1 block behind for >5 min (`QUARTZ_SYNC_MAX_LAG_SECONDS`)
-- validates, atomically replaces `chain.json`, rebuilds state, and hot-swaps
-  the serving chain — zero downtime, never serves partial state
-- if the seed is unreachable it keeps serving its last good snapshot and retries
+```
+Environment=QUARTZ_PEERS=https://quartz.preview.saasclaw.ai,http://192.168.1.42:21100
+```
 
-Tuning (optional, in the unit file): lower `QUARTZ_SYNC_MIN_LAG` to 1 for a
-tight 1-block-follow; raise the intervals if the Pi's bandwidth matters more
-than freshness.
+Every peer is polled; the node syncs **incrementally** (batched blocks + a
+tiny state payload — kilobytes, not the 31 MB snapshot) from whichever peer
+is furthest ahead. Foreign blocks pass full consensus validation
+(prev-hash linkage + PoW + UTXO rules) before being applied. The 31 MB
+snapshot is only pulled when bootstrapping (>200 blocks behind) or on deep
+divergence. If a peer is unreachable it is skipped for that poll; if all
+are, the node keeps serving its last good state.
+
+Add YOUR node to other people's peer lists — any node can serve the chain
+to any other. That's the mesh: N sources, no single point of failure.
 
 ## Mine through your own node
 

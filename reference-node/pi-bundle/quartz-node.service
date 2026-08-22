@@ -8,9 +8,11 @@ Type=simple
 ExecStart=/usr/bin/python3 /opt/quartz-node/testnet.py
 WorkingDirectory=/opt/quartz-node
 Environment=QUARTZ_NO_MINER=1
-# Continuous chain sync: poll seed every 30s, pull snapshot when >=5 blocks
-# behind (or >=1 block behind for >5 min). Hot-swaps — no restarts needed.
-Environment=QUARTZ_SYNC_URL=https://quartz.preview.saasclaw.ai
+# P2P chain sync: comma-separated peer list — add friends' nodes too,
+# e.g. QUARTZ_PEERS=https://quartz.preview.saasclaw.ai,http://192.168.1.42:21100
+# (block-level incremental sync from whichever peer is furthest ahead;
+# the 31MB snapshot is only pulled on first bootstrap / deep divergence)
+Environment=QUARTZ_PEERS=https://quartz.preview.saasclaw.ai
 # Gateway mode: ESP32s mine against THIS node on the LAN; submits are
 # relayed to the upstream seed (blocks are built at its tip, so no orphans)
 Environment=QUARTZ_RELAY_URL=https://quartz.preview.saasclaw.ai
