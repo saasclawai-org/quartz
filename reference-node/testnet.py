@@ -789,7 +789,8 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
         req = urllib.request.Request(
             url, data=data, method=method,
             headers={'Accept-Encoding': 'gzip',
-                     'Content-Type': 'application/json'})
+                     'Content-Type': 'application/json',
+                     'User-Agent': 'QuartzNode/1.0 (+https://quartzchain.net)'})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 raw = r.read()
@@ -1885,7 +1886,12 @@ def _http_get(url, timeout=30):
     """GET with transparent gzip support. Returns raw (decompressed) bytes."""
     import urllib.request
     import gzip as _gzip
-    req = urllib.request.Request(url, headers={'Accept-Encoding': 'gzip'})
+    req = urllib.request.Request(url, headers={
+        'Accept-Encoding': 'gzip',
+        # Identifiable UA — some CDNs (Cloudflare Bot Fight Mode) 403
+        # default python-urllib signatures with error 1010.
+        'User-Agent': 'QuartzNode/1.0 (+https://quartzchain.net)',
+    })
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read()
         if r.headers.get('Content-Encoding', '').lower() == 'gzip':
