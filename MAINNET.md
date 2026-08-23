@@ -121,7 +121,12 @@ The network is the long pole: D1/D2 require 15+ people we don't control yet.
 6. Post-launch: weekly published stats (blocks by owner-class, node count,
    founder share) — transparency as policy
 
-## 6. Explicitly NOT launch blockers
+## 6. Branding (decided 2026-08-23, applies at mainnet)
+
+- **Name:** stays **Quartz**. Collisions (QTZ token, TCS "Quartz™") are noted and survivable at testnet scale; reassess only if a real conflict emerges at mainnet. Renaming is docs/branding-only — never consensus-breaking.
+- **Ticker:** **SIO2** (silicon dioxide — quartz is crystalline SiO₂, and every mining board has an SiO₂ crystal clocking it). Namespace verified clear 2026-08-23 (one obscure DeFi "SiO2 Finance", nothing listed on CMC/Gecko). Display-layer change only: testnet continues showing **QZ**; swap wallet/site/docs display to SIO2 at mainnet. Internal API field names (`balance_qz`) unchanged.
+
+## 7. Explicitly NOT launch blockers
 
 - L2/payment channels (`docs/L2.md`) — post-launch
 - LoRa mesh mining — post-launch, mainnet-compatible if consensus unchanged
@@ -131,4 +136,4 @@ The network is the long pole: D1/D2 require 15+ people we don't control yet.
 ---
 
 *This document is updated as bars are met or scope changes. Last update:
-2026-08-22.*
+2026-08-23.*
