@@ -62,4 +62,4 @@ echo "   Test:     curl http://$(hostname -I 2>/dev/null | awk '{print $1}'):211
 echo "   Mine:     ESP32 captive portal → Node field = this Pi's LAN IP (no rebuild)"
 echo
 echo "Miners/stats live on whichever node builds the blocks — check:"
-echo "  curl -s https://quartz.preview.saasclaw.ai/api/v1/info   (hardware miners, hashrate)"
+echo "  curl -s https://quartzchain.net/api/v1/info   (hardware miners, hashrate)"

@@ -14,11 +14,11 @@ no disputed readings, no "lost" meter data.
 
 Usage:
   # Simulated (no hardware):
-  python3 water_meter_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 water_meter_demo.py --node https://quartzchain.net \\
       --device wm-001 --location residential-A --simulated --interval 60
 
   # Real flow sensor on Raspberry Pi (YF-S201 on GPIO pin):
-  python3 water_meter_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 water_meter_demo.py --node https://quartzchain.net \\
       --device wm-001 --sensor yfs201 --pin 18 --interval 3600
 
 License: MIT
@@ -141,7 +141,7 @@ Examples:
   # Real YF-S201 flow sensor (Raspberry Pi):
   python3 water_meter_demo.py --sensor yfs201 --pin 18 --interval 3600
         """)
-    parser.add_argument('--node', default='https://quartz.preview.saasclaw.ai')
+    parser.add_argument('--node', default='https://quartzchain.net')
     parser.add_argument('--device', default='wm-001')
     parser.add_argument('--location', default='')
     parser.add_argument('--interval', type=int, default=3600,

@@ -1,0 +1,28 @@
+{
+  "name": "Quartz Miner",
+  "version": "0.3.2-domain",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "improperWakeUp": true,
+      "parts": [
+        {
+          "path": "../quartz-miner.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "improperWakeUp": true,
+      "parts": [
+        {
+          "path": "../quartz-miner-t3.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ],
+  "notes": "v0.3.2: Default node switched to quartzchain.net (quartz.preview.saasclaw.ai still works). ESP32 SHA-256: 837cbb27da810a9b28085593e87ff4f080107fdce68310fe6bce965f5b44f381 | ESP32-S3 SHA-256: 0238f3ef55b4992247e47458f9f5650c34e777fe02a04fbc4fd4d4e295bb0a50"
+}

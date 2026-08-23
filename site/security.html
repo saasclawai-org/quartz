@@ -1,0 +1,365 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quartz — Security Model</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0a0a0f;
+    --fg: #e5e7eb;
+    --muted: #8892a8;
+    --line: #334155;
+    --accent: #00d4aa;
+    --puf: #00d4aa;
+    --nofb: #ef4444;
+    --econ: #3b82f6;
+    --proto: #a855f7;
+    --quantum: #f59e0b;
+    --supply: #ec4899;
+    --efuse: #64748b;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  h1 { color: var(--accent); }
+  h2 { color: var(--fg); margin-top: 48px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .layer-box { rx: 8; stroke-width: 2; }
+  .layer-title { font-size: 14px; font-weight: 700; }
+  .layer-detail { font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--accent); font-weight: 600; }
+  code { background: #1a1a2e; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .note { background: #1a1a2e; border-left: 4px solid var(--accent); padding: 16px; border-radius: 8px; margin: 16px 0; }
+  .warn { border-left-color: var(--nofb); }
+  a { color: var(--accent); }
+  .quartz-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid #2a2a3e;
+    padding: 0;
+  }
+  .quartz-nav-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+  }
+  .quartz-nav-logo {
+    color: #00d4aa;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .quartz-nav-links {
+    display: flex;
+    gap: 24px;
+  }
+  .quartz-nav-links a {
+    color: #8888a0;
+    text-decoration: none;
+    font-size: 15px;
+    transition: color 0.2s;
+  }
+  .quartz-nav-links a:hover {
+    color: #e4e4ef;
+  }
+  .quartz-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+  .quartz-nav-toggle span { display: block; width: 24px; height: 2px; background: #e4e4ef; border-radius: 2px; }
+  .quartz-nav-toggle span + span { margin-top: 5px; }
+  @media (max-width: 900px) {
+    .quartz-nav-toggle { display: block; }
+    .quartz-nav-links { display: none; flex-direction: column; position: absolute; top: 100%; left: 0; right: 0; background: rgba(10,10,15,0.98); border-bottom: 1px solid #2a2a3e; padding: 0; }
+    .quartz-nav-links.open { display: flex; }
+    .quartz-nav-links a { padding: 14px 20px; border-bottom: 1px solid #2a2a3e; }
+  }
+</style>
+<nav class="quartz-nav">
+  <div class="quartz-nav-inner">
+    <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+    <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+      <a href="/hardware.html">Hardware</a>
+      <a href="/mining.html">Mining</a>
+      <a href="/energy.html">Energy</a>
+      <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/agents.html">Agents</a>
+      <a href="/security.html">Security</a>
+      <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+      <a href="/wallet/">Wallet</a>
+      <a href="/download.html">Download</a>
+      <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+    </div>
+  </div>
+</nav>
+<main>
+<h1>🔮 Quartz Security Model</h1>
+<p style="color: var(--muted);">How a $5 ESP32 achieves what $10,000 GPUs can't break.</p>
+
+<svg viewBox="0 0 860 920" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Defs -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#00d4aa"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="430" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#00d4aa">Defense in Depth — 7 Layers</text>
+  <text x="430" y="50" text-anchor="middle" font-size="12" fill="#8892a8">Each layer blocks a different attack vector</text>
+
+  <!-- Layer 1: PUF -->
+  <rect x="80" y="70" width="700" height="100" rx="8" fill="none" stroke="#00d4aa" stroke-width="2"/>
+  <rect x="80" y="70" width="6" height="100" rx="3" fill="#00d4aa"/>
+  <text x="100" y="95" font-size="14" font-weight="700" fill="#00d4aa">LAYER 1: RTC SRAM PUF</text>
+  <text x="100" y="115" font-size="12" fill="#e5e7eb">• Cold boot reads genuine power-on silicon entropy from RTC NOINIT memory</text>
+  <text x="100" y="132" font-size="12" fill="#e5e7eb">• Unique per chip, unclonable, not stored in flash — exists only in powered SRAM</text>
+  <text x="100" y="149" font-size="12" fill="#e5e7eb">• Fuzzy extractor handles temperature/voltage drift with 1-bit error correction</text>
+  <text x="100" y="166" font-size="12" fill="#8892a8">Blocks: GPU mining without physical hardware</text>
+
+  <!-- Arrow -->
+  <line x1="430" y1="172" x2="430" y2="185" stroke="#00d4aa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 2: No Fallback -->
+  <rect x="80" y="190" width="700" height="90" rx="8" fill="none" stroke="#ef4444" stroke-width="2"/>
+  <rect x="80" y="190" width="6" height="90" rx="3" fill="#ef4444"/>
+  <text x="100" y="215" font-size="14" font-weight="700" fill="#ef4444">LAYER 2: NO FALLBACK (Coldcard Lesson)</text>
+  <text x="100" y="235" font-size="12" fill="#e5e7eb">• Warm boot → HALT. No fresh RTC SRAM = no mining.</text>
+  <text x="100" y="252" font-size="12" fill="#e5e7eb">• PUF reconstruction fails → HALT. No MAC-derived key fallback.</text>
+  <text x="100" y="269" font-size="12" fill="#8892a8">Blocks: Downgrade attacks, forced weak key derivation</text>
+
+  <!-- Arrow -->
+  <line x1="430" y1="282" x2="430" y2="295" stroke="#00d4aa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 3: Economic Moat -->
+  <rect x="80" y="300" width="700" height="110" rx="8" fill="none" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="80" y="300" width="6" height="110" rx="3" fill="#3b82f6"/>
+  <text x="100" y="325" font-size="14" font-weight="700" fill="#3b82f6">LAYER 3: ECONOMIC MOAT (hardware requirement)</text>
+  <text x="100" y="345" font-size="12" fill="#e5e7eb">• Attacker needs N physical ESP32 chips to match N honest miners</text>
+  <text x="100" y="362" font-size="12" fill="#e5e7eb">• GPU adds ZERO advantage — PUF attestation required in every block</text>
+  <text x="100" y="379" font-size="12" fill="#e5e7eb">• Decapping one chip ($10K lab equipment) = one miner's 28 H/s hashrate</text>
+  <text x="100" y="396" font-size="12" fill="#8892a8">Blocks: Economically rational GPU/ASIC attacks</text>
+
+  <!-- Arrow -->
+  <line x1="430" y1="412" x2="430" y2="425" stroke="#00d4aa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 4: Protocol Defenses -->
+  <rect x="80" y="430" width="700" height="100" rx="8" fill="none" stroke="#a855f7" stroke-width="2"/>
+  <rect x="80" y="430" width="6" height="100" rx="3" fill="#a855f7"/>
+  <text x="100" y="455" font-size="14" font-weight="700" fill="#a855f7">LAYER 4: PROTOCOL DEFENSES (consensus rules)</text>
+  <text x="100" y="475" font-size="12" fill="#e5e7eb">• Checkpoints prevent deep reorgs (51% attack defense)</text>
+  <text x="100" y="492" font-size="12" fill="#e5e7eb">• ±25% difficulty cap prevents manipulation</text>
+  <text x="100" y="509" font-size="12" fill="#e5e7eb">• Empty block penalty, slashing for double-signing, timing analysis</text>
+  <text x="100" y="525" font-size="12" fill="#8892a8">Blocks: Consensus manipulation, chain attacks</text>
+
+  <!-- Arrow -->
+  <line x1="430" y1="532" x2="430" y2="545" stroke="#00d4aa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 5: Quantum -->
+  <rect x="80" y="550" width="700" height="90" rx="8" fill="none" stroke="#f59e0b" stroke-width="2"/>
+  <rect x="80" y="550" width="6" height="90" rx="3" fill="#f59e0b"/>
+  <text x="100" y="575" font-size="14" font-weight="700" fill="#f59e0b">LAYER 5: QUANTUM RESISTANCE (WOTS+)</text>
+  <text x="100" y="595" font-size="12" fill="#e5e7eb">• Hash-based signatures (SHA-256 only) — immune to Shor's algorithm</text>
+  <text x="100" y="612" font-size="12" fill="#e5e7eb">• 2,404-byte signatures, 256 uses per address, key rotation at #240</text>
+  <text x="100" y="629" font-size="12" fill="#8892a8">Blocks: Future quantum computer attacks on signatures</text>
+
+  <!-- Arrow -->
+  <line x1="430" y1="642" x2="430" y2="655" stroke="#00d4aa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 6: Supply Chain -->
+  <rect x="80" y="660" width="700" height="90" rx="8" fill="none" stroke="#ec4899" stroke-width="2"/>
+  <rect x="80" y="660" width="6" height="90" rx="3" fill="#ec4899"/>
+  <text x="100" y="685" font-size="14" font-weight="700" fill="#ec4899">LAYER 6: SUPPLY CHAIN (birth certificates)</text>
+  <text x="100" y="705" font-size="12" fill="#e5e7eb">• Firmware hash recorded at first boot — buyer verifies on phone</text>
+  <text x="100" y="722" font-size="12" fill="#e5e7eb">• Reseller pre-flash attack detected via certificate mismatch</text>
+  <text x="100" y="739" font-size="12" fill="#8892a8">Blocks: Supply chain attacks, pre-flashed key theft</text>
+
+  <!-- Arrow -->
+  <line x1="430" y1="752" x2="430" y2="765" stroke="#00d4aa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Layer 7: Production eFuses -->
+  <rect x="80" y="770" width="700" height="90" rx="8" fill="none" stroke="#64748b" stroke-width="2"/>
+  <rect x="80" y="770" width="6" height="90" rx="3" fill="#64748b"/>
+  <text x="100" y="795" font-size="14" font-weight="700" fill="#64748b">LAYER 7: PRODUCTION HARDENING (eFuses)</text>
+  <text x="100" y="815" font-size="12" fill="#e5e7eb">• Flash encryption (AES-256) + Secure boot (signed firmware only)</text>
+  <text x="100" y="832" font-size="12" fill="#e5e7eb">• User self-provisioning — no central authority holds signing keys</text>
+  <text x="100" y="849" font-size="12" fill="#8892a8">Blocks: Firmware tampering, flash reading, key exfiltration</text>
+
+  <!-- Bottom: Attack cost table -->
+  <text x="430" y="890" text-anchor="middle" font-size="13" font-weight="700" fill="#00d4aa">
+    Attack cost = N × $5 ESP32s. No shortcut. No GPU hack. Just silicon.
+  </text>
+
+</svg>
+
+<h2>Threat Model Summary</h2>
+<table>
+  <tr>
+    <th>Attack</th>
+    <th>Cost</th>
+    <th>Blocked By</th>
+    <th>Rational?</th>
+  </tr>
+  <tr>
+    <td>GPU miner (no hardware)</td>
+    <td>$2,000 GPU</td>
+    <td>PUF attestation required</td>
+    <td style="color:#ef4444;">❌ Impossible</td>
+  </tr>
+  <tr>
+    <td>Decap one chip, extract PUF</td>
+    <td>$10,000 lab + 1 chip destroyed</td>
+    <td>Economic moat (28 H/s gain)</td>
+    <td style="color:#ef4444;">❌ Not worth it</td>
+  </tr>
+  <tr>
+    <td>Buy N ESP32s, mine honestly</td>
+    <td>N × $5</td>
+    <td>Not an attack — legitimate mining</td>
+    <td style="color:#00d4aa;">✅ Fine</td>
+  </tr>
+  <tr>
+    <td>Warm boot downgrade</td>
+    <td>$0</td>
+    <td>No fallback (Layer 2)</td>
+    <td style="color:#ef4444;">❌ Halts</td>
+  </tr>
+  <tr>
+    <td>Flash custom firmware</td>
+    <td>$0 (on dev device)</td>
+    <td>Secure boot (Layer 7, production)</td>
+    <td style="color:#f59e0b;">⚠️ Dev only</td>
+  </tr>
+  <tr>
+    <td>Read NVS helper data</td>
+    <td>$5 (JTAG)</td>
+    <td>Flash encryption (Layer 7, production)</td>
+    <td style="color:#f59e0b;">⚠️ Dev only</td>
+  </tr>
+  <tr>
+    <td>Pre-flash devices with key-stealing firmware</td>
+    <td>Bulk ESP32 purchase</td>
+    <td>Birth certificates (Layer 6)</td>
+    <td style="color:#ef4444;">❌ Detected</td>
+  </tr>
+  <tr>
+    <td>Quantum computer (future)</td>
+    <td>$1B+ quantum computer</td>
+    <td>WOTS+ signatures (Layer 5)</td>
+    <td style="color:#ef4444;">❌ Immune</td>
+  </tr>
+  <tr>
+    <td>51% attack (buy enough chips)</td>
+    <td>~12% of network value</td>
+    <td>Checkpoints, timing, slashing (Layer 4)</td>
+    <td style="color:#f59e0b;">⚠️ Scales with network</td>
+  </tr>
+</table>
+
+<h2>Security Economics: Attack Cost vs Network Value</h2>
+<p style="color: var(--muted);">The right question isn't "how much does an attack cost in absolute terms?" but "how much does it cost relative to what you'd gain?"</p>
+
+<table style="margin: 24px 0;">
+  <tr>
+    <th></th>
+    <th>Bitcoin (2009)</th>
+    <th>Bitcoin (2026)</th>
+    <th>Quartz (500K miners)</th>
+  </tr>
+  <tr>
+    <td><strong>51% attack cost</strong></td>
+    <td>~$5K (GPUs)</td>
+    <td>~$7B (ASICs + power)</td>
+    <td>~$3.75M (250K ESP32s)</td>
+  </tr>
+  <tr>
+    <td><strong>Network value</strong></td>
+    <td>~$0</td>
+    <td>~$1.2T</td>
+    <td>~$100M (projected)</td>
+  </tr>
+  <tr>
+    <td><strong>Attack cost / value</strong></td>
+    <td>∞</td>
+    <td>~0.6%</td>
+    <td style="color: var(--accent);"><strong>~3.75%</strong></td>
+  </tr>
+  <tr>
+    <td><strong>Centralization risk</strong></td>
+    <td>Low</td>
+    <td style="color: #ef4444;">High (10 pools >50%)</td>
+    <td style="color: var(--accent);">None (PUF-bound)</td>
+  </tr>
+  <tr>
+    <td><strong>Attack lead time</strong></td>
+    <td>Hours</td>
+    <td>Minutes (hashpower rental)</td>
+    <td style="color: var(--accent);">Months (physical PUF enrollment)</td>
+  </tr>
+</table>
+
+<div class="note">
+<strong style="color: var(--accent);">The key insight:</strong>
+<p>Quartz at 500K devices has a <strong>6x better attack-cost-to-value ratio than Bitcoin has today</strong> — 3.75% vs 0.6%. An attacker must spend more relative to what they'd gain. And unlike Bitcoin, where hashpower can be rented in minutes, a Quartz attack requires physically acquiring and enrolling hundreds of thousands of devices over months.</p>
+</div>
+
+<div class="note">
+<strong style="color: #3b82f6;">Why this scales:</strong>
+<p>Bitcoin wasn't born with $7B security. In 2009, a few thousand dollars in GPUs could have 51%-attacked it. Security grew with adoption. Quartz follows the same flywheel — more devices = higher attack cost = more valuable network = more incentive to stay honest. The difference is Quartz's flywheel runs on <strong>physical hardware</strong> ($15, 0.5W) instead of <strong>energy</strong> ($3,000, 3,000W).</p>
+</div>
+
+<h3>What Quartz Can Honestly Claim</h3>
+<table>
+  <tr><th>Security property</th><th>Bitcoin</th><th>Quartz</th></tr>
+  <tr><td>Wallet quantum resistance</td><td style="color:#ef4444;">❌ (ECDSA)</td><td style="color:var(--accent);">✅ (WOTS+)</td></tr>
+  <tr><td>Mining centralization resistance</td><td style="color:#ef4444;">❌ (ASIC pools)</td><td style="color:var(--accent);">✅ (PUF-bound)</td></tr>
+  <tr><td>Attack cost / network value (at scale)</td><td>0.6%</td><td style="color:var(--accent);">3.75%</td></tr>
+  <tr><td>Attack lead time</td><td>Minutes</td><td style="color:var(--accent);">Months</td></tr>
+  <tr><td>Nation-state resistance</td><td style="color:var(--accent);">✅</td><td style="color:#f59e0b;">⚠️ Not yet</td></tr>
+  <tr><td>Battle-tested</td><td style="color:var(--accent);">✅ (15+ years)</td><td style="color:#f59e0b;">⚠️ New</td></tr>
+  <tr><td>Energy per miner</td><td>3,000W</td><td style="color:var(--accent);">0.5W</td></tr>
+  <tr><td>Hardware cost per miner</td><td>$3,000+</td><td style="color:var(--accent);">$15</td></tr>
+</table>
+
+<h2>The Honest Assessment</h2>
+<div class="note">
+<strong style="color: var(--accent);">What's genuinely strong:</strong>
+<p>The PUF + no-fallback design means there is no software path to a mining key. Every valid block requires a physical ESP32 that performed a cold boot. An attacker cannot shortcut this with computation alone.</p>
+</div>
+
+<div class="note warn">
+<strong style="color: #ef4444;">What's not yet production-ready:</strong>
+<p>Development devices (including our M5Stack Core) do not have flash encryption or secure boot burned. An attacker with physical access can read NVS or replace firmware. Production devices must have eFuses burned at provisioning time. User self-provisioning (not factory) keeps the network decentralized — no single entity holds all signing keys.</p>
+</div>
+
+<div class="note">
+<strong style="color: #3b82f6;">The scaling reality:</strong>
+<p>Bitcoin wasn't born with $7B security — in 2009, a few thousand dollars in GPUs could have attacked it. Security grew with adoption. Quartz follows the same trajectory, but the flywheel runs on physical hardware ($15 per device, 0.5W power) instead of energy ($3,000 ASICs, 3,000W). At 500K miners, Quartz's attack-cost-to-value ratio (3.75%) is actually <em>better</em> than Bitcoin's today (0.6%).</p>
+</div>
+
+<p style="text-align: center; margin-top: 48px;">
+  <a href="/">← Back to Quartz</a> · <a href="/wiring.html">Wiring Guide</a>
+</p>
+
+</main>

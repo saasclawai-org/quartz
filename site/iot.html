@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT — Quartz (QZ)</title>
+    <meta name="description" content="Practical IoT applications for the Quartz network: on-chain sensor logging, pay-per-use hardware, and off-grid mesh deployments using ESP32 miners and Helium hotspot bridges.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        .reality-check {
+            background: var(--card);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 12px 12px 0;
+            padding: 20px 24px;
+            margin: 24px 0;
+            color: var(--muted);
+            font-size: 15px;
+        }
+        .reality-check strong { color: var(--text); }
+
+        .usecase-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            transition: border-color 0.2s;
+            margin: 16px 0;
+        }
+        .usecase-card:hover { border-color: var(--accent); }
+        .usecase-card .uc-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+        .usecase-card .uc-icon { font-size: 32px; flex-shrink: 0; }
+        .usecase-card h3 { font-size: 18px; margin-bottom: 4px; }
+        .usecase-card .uc-status {
+            font-size: 12px;
+            color: var(--accent);
+            background: var(--accent-dim);
+            padding: 3px 10px;
+            border-radius: 99px;
+            display: inline-block;
+            margin-top: 4px;
+        }
+        .usecase-card .uc-status.dev { color: var(--orange); background: rgba(255,107,53,0.15); }
+        .usecase-card .uc-status.future { color: var(--muted); background: var(--surface); }
+        .usecase-card p { color: var(--muted); font-size: 15px; margin: 8px 0; }
+        .usecase-card .uc-flow {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--accent);
+            margin: 12px 0;
+            line-height: 1.8;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        .usecase-card .uc-parts {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 12px;
+        }
+        .usecase-card .uc-parts strong { color: var(--text); }
+
+        .data-flow-diagram {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 24px;
+            margin: 24px 0;
+            font-family: var(--mono);
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--muted);
+            overflow-x: auto;
+        }
+        .data-flow-diagram .label { color: var(--accent2); font-weight: 600; }
+        .data-flow-diagram .data { color: var(--accent); }
+        .data-flow-diagram .note { color: var(--orange); }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 24px 0;
+        }
+        @media (max-width: 768px) { .comparison-grid { grid-template-columns: 1fr; } }
+        .comparison-grid .col {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .comparison-grid .col h3 { font-size: 16px; margin-bottom: 12px; }
+        .comparison-grid .col.helium { border-color: var(--orange); }
+        .comparison-grid .col.quartz { border-color: var(--accent); }
+        .comparison-grid .col ul { list-style: none; padding: 0; }
+        .comparison-grid .col ul li {
+            padding: 6px 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .comparison-grid .col ul li::before { content: '▸ '; }
+        .comparison-grid .col.helium ul li::before { color: var(--orange); }
+        .comparison-grid .col.quartz ul li::before { color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/setup.html">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="hero" style="padding: 80px 24px 60px;">
+        <h1>IoT Applications</h1>
+        <p class="tagline">The ESP32 is already the most deployed IoT platform on Earth. Quartz gives it a wallet and a reason to be in the field.</p>
+    </div>
+
+    <div class="container">
+
+        <!-- Honest framing -->
+        <section style="padding: 20px 0 40px;">
+            <div class="reality-check">
+                <strong>Let's be honest about what Quartz is and isn't.</strong><br>
+                Quartz is a cryptocurrency that runs on ESP32 hardware. The network moves block headers and transactions, not sensor telemetry. The ESP32 miners hash — they don't measure things by default.<br><br>
+                But the ESP32 is a full microcontroller. It has GPIO, I2C, SPI, ADC, DAC, and (on some boards) LoRa. It sits in physical environments. The Quartz firmware already has on-chain messaging (256-byte data field) and GPIO relay control. These are the building blocks for practical IoT applications — not promises, just hardware capabilities plus a blockchain that runs on the same chip.
+            </div>
+        </section>
+
+        <!-- What the hardware actually does today -->
+        <section style="padding: 20px 0;">
+            <h2>What the ESP32 Does Today</h2>
+            <p class="section-subtitle">This is already in the firmware. Not a roadmap — shipping code.</p>
+
+            <div class="grid grid-2" style="margin-top: 24px;">
+                <div class="card">
+                    <div class="icon">⛏️</div>
+                    <h3>Mines Quartz</h3>
+                    <p>CrystalHash PoW with PUF attestation. 28 H/s on M5Stack Core, ~1.2W power draw. Earns 42 QZ per block (Era 1, PUF-attested).</p>
+                </div>
+                <div class="card">
+                    <div class="icon">💬</div>
+                    <h3>On-Chain Messaging</h3>
+                    <p>Transactions carry an optional 256-byte data field. Send a message that's permanently recorded on the blockchain. Works today via the wallet API.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📡</div>
+                    <h3>LoRa Mesh</h3>
+                    <p>SX1276 driver for point-to-point LoRa (2-15km). Block headers, transactions, and beacons relay over mesh. Firmware compiles and runs on Heltec boards.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚡</div>
+                    <h3>GPIO Relay Control</h3>
+                    <p>QR payment system triggers a GPIO pin when payment is received. Pay in QZ → relay opens. Already implemented in the firmware.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Use Case 1: Sensor Logging -->
+        <section style="padding: 40px 0;">
+            <h2>Use Case: On-Chain Sensor Logging</h2>
+            <p class="section-subtitle">An ESP32 with a sensor logs readings to the blockchain. The chain IS the database.</p>
+
+            <div class="usecase-card">
+                <div class="uc-header">
+                    <div class="uc-icon">🌡️</div>
+                    <div>
+                        <h3>Cold Chain Monitoring</h3>
+                        <span class="uc-status">Works today (on-chain messaging)</span>
+                    </div>
+                </div>
+                <p>An ESP32 with a DS18B20 temperature sensor ($2) sits inside a refrigerated truck or shipping container. Every 5 minutes, it takes a reading and submits a Quartz transaction with a 256-byte data payload containing the temperature, timestamp, and device ID.</p>
+                <p>The blockchain becomes an immutable audit trail. No server to hack, no database to alter, no cloud subscription. Anyone with the device's address can verify the temperature history on the <a href="/explorer/" style="color: var(--accent);">block explorer</a>.</p>
+                <div class="uc-flow">ESP32 + DS18B20
+  │  reads temperature every 5 min
+  │  packs: {temp: 3.2°C, ts: 1723976400, dev: "cold-001"}
+  │  submits Quartz tx with 256-byte data field
+  ▼
+Quartz blockchain (immutable)
+  │  visible on block explorer
+  │  queryable via /api/v1/address/&lt;addr&gt;
+  ▼
+Auditor checks: "Was this truck ever above 4°C?"
+  → reads on-chain messages from device address
+  → sees complete temperature history, timestamped by blocks</div>
+                <p class="uc-parts"><strong>Parts needed:</strong> ESP32 ($5) + DS18B20 sensor ($2) + solar panel ($3) = $10 total. No subscription, no cloud, no API key.</p>
+                <p class="uc-parts"><strong>Bandwidth:</strong> One 256-byte transaction every 5 minutes = ~7KB/day. Fits easily over LoRa mesh via a bridge.</p>
+            </div>
+
+            <div class="usecase-card">
+                <div class="uc-header">
+                    <div class="uc-icon">🌾</div>
+                    <div>
+                        <h3>Agricultural Sensor Array</h3>
+                        <span class="uc-status dev">Requires sensor firmware (not yet written)</span>
+                    </div>
+                </div>
+                <p>A cluster of ESP32s with soil moisture, temperature, and humidity sensors spread across a field. Each logs readings on-chain. The data is visible to the farmer, the crop insurer, and the supply chain — all from the same immutable record.</p>
+                <p>The ESP32s mine Quartz between readings, earning QZ to offset their own cost. A <a href="/bridge.html" style="color: var(--accent);">Helium hotspot bridge</a> on the farm provides the LoRa → internet link. No WiFi needed in the field.</p>
+                <div class="uc-flow">Field sensors (ESP32 + soil probe)
+  │── LoRa (2-15km) ──→ Bridge (Helium hotspot on barn)
+  │                        │── WiFi ──→ Quartz gateway
+  │                        ▼
+  │                  Blockchain records:
+  │                  block 42,051: {soil: 31%, temp: 22°C, dev: "field-A-01"}
+  │                  block 42,052: {soil: 28%, temp: 23°C, dev: "field-A-02"}
+  │
+  └── Also mining Quartz between readings</div>
+                <p class="uc-parts"><strong>Parts needed:</strong> ESP32 + soil moisture sensor per node (~$8 each). One Helium hotspot as bridge. Solar panels for off-grid nodes.</p>
+                <p class="uc-parts"><strong>What's ready:</strong> LoRa mesh, on-chain messaging, bridge relay. <strong>What's not:</strong> Sensor reading firmware (I2C driver + tx formatting). Straightforward — days of work, not weeks.</p>
+            </div>
+        </section>
+
+        <!-- Use Case 2: Pay-Per-Use Hardware -->
+        <section style="padding: 40px 0;">
+            <h2>Use Case: Pay-Per-Use Hardware</h2>
+            <p class="section-subtitle">The GPIO relay control is already in the firmware. Pay in QZ, hardware activates.</p>
+
+            <div class="usecase-card">
+                <div class="uc-header">
+                    <div class="uc-icon">🔌</div>
+                    <div>
+                        <h3>Solar Charging Station</h3>
+                        <span class="uc-status">Works today (GPIO relay + QR payment)</span>
+                    </div>
+                </div>
+                <p>An ESP32 controls a relay connected to a USB port. A solar panel charges a battery. When someone sends QZ to the device's address, the relay closes for 30 minutes — phone charging.</p>
+                <p>The QR code on the device encodes a payment request. User scans with the <a href="/wallet/" style="color: var(--accent);">Quartz wallet</a>, sends QZ, device activates. No payment processor, no monthly fee, no internet required if on LoRa mesh.</p>
+                <div class="uc-flow">User scans QR code on device
+  │  QR contains: quartz:&lt;device-address&gt;?amount=5
+  ▼
+Quartz wallet sends 5 QZ to device address
+  ▼
+Device sees transaction on-chain (via WiFi or LoRa mesh)
+  │  closes GPIO relay for 30 minutes
+  ▼
+USB port powered → user charges phone
+
+Meanwhile: device mines Quartz between customers
+  → earns QZ from mining + QZ from charging fees
+  → self-sustaining</div>
+                <p class="uc-parts"><strong>Parts needed:</strong> ESP32 ($5) + relay module ($2) + solar panel + battery + USB port. Total ~$20.</p>
+                <p class="uc-parts"><strong>Deployment:</strong> Hiking trails, rural areas, festivals. Anywhere with sun and a phone that needs charging.</p>
+            </div>
+
+            <div class="usecase-card">
+                <div class="uc-header">
+                    <div class="uc-icon">🚰</div>
+                    <div>
+                        <h3>Pay-Per-Water Irrigation Valve</h3>
+                        <span class="uc-status dev">Requires solenoid driver (trivial GPIO)</span>
+                    </div>
+                </div>
+                <p>An ESP32 controls a solenoid valve on an irrigation line. A farmer pays QZ to open the valve for a set duration. The device logs each activation on-chain — creating a verifiable record of water usage.</p>
+                <p>For tenant farmers or shared irrigation systems, this solves the "who paid for water" problem without a middleman. The blockchain is the receipt.</p>
+                <p class="uc-parts"><strong>Parts needed:</strong> ESP32 + relay + 12V solenoid valve. ~$15. <strong>What's ready:</strong> Payment trigger, GPIO control, on-chain logging. <strong>What's not:</strong> Valve-specific wiring (an afternoon).</p>
+            </div>
+        </section>
+
+        <!-- Use Case 3: Off-Grid Mesh -->
+        <section style="padding: 40px 0;">
+            <h2>More Use Cases — All Live on Testnet</h2>
+            <p class="section-subtitle">Working demos with real data on the Quartz testnet blockchain.</p>
+
+            <div class="grid grid-3" style="margin-top: 24px;">
+                <a href="/cold-chain.html" class="card" style="text-decoration:none;color:inherit;border-color:var(--accent);">
+                    <div class="icon">🌡️</div>
+                    <h3>Cold Chain Monitor</h3>
+                    <p>Temperature logging for refrigerated transport. 18 readings on-chain. Live dashboard with chart and alerts.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Live dashboard →</p>
+                </a>
+                <a href="/water-meter.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">💧</div>
+                    <h3>Water Meter Logger</h3>
+                    <p>Municipal water consumption logged on-chain. Tamper-proof billing records. Cumulative volume tracking.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Live dashboard →</p>
+                </a>
+                <a href="/parking.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">🅿️</div>
+                    <h3>Parking Monitor</h3>
+                    <p>Pay-per-park with QZ + occupancy logging. Spot availability on-chain. Gate control via GPIO relay.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Live dashboard →</p>
+                </a>
+                <a href="/ev-charging.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">⚡</div>
+                    <h3>EV Charging Station</h3>
+                    <p>Pay-per-charge with QZ. No payment processor needed. Charging sessions logged on-chain as receipts.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Live dashboard →</p>
+                </a>
+            </div>
+        </section>
+
+            <div class="data-flow-diagram">
+<span class="label">Field layer (off-grid, solar-powered):</span>
+  ESP32 #1 (temp sensor) ──┐
+  ESP32 #2 (soil sensor)  ──┼── LoRa mesh (2-15km) ──→ Bridge
+  ESP32 #3 (mining only)  ──┘                          │
+                                                       ▼
+<span class="label">Bridge layer (has internet):</span>
+  Helium hotspot (Bobcat/RAK) running Quartz Bridge
+  ├── receives LoRa packets from ESP32s
+  ├── submits sensor data as on-chain transactions
+  ├── relays block templates to ESP32s
+  └── submits found blocks to gateway
+                                                       │
+                                                       ▼
+<span class="label">Network layer (online):</span>
+  Quartz Gateway (VPS)
+  ├── validates blocks, serves chain
+  ├── block explorer + wallet UI
+  └── API for querying sensor data
+            </div>
+
+            <p style="color: var(--muted); margin-top: 16px; font-size: 15px;">
+                The ESP32s in the field don't need WiFi. They communicate over LoRa to the bridge (a repurposed Helium hotspot with internet access). The bridge handles the online/offline boundary. If the bridge's internet goes down, the ESP32s keep mining and logging data locally — they sync when connectivity returns.
+            </p>
+        </section>
+
+        <!-- What Quartz is NOT -->
+        <section style="padding: 40px 0;">
+            <h2>What Quartz Is NOT</h2>
+            <p class="section-subtitle">Honest boundaries. We'd rather under-promise.</p>
+
+            <div class="grid grid-2" style="margin-top: 24px;">
+                <div class="card" style="border-color: var(--orange);">
+                    <div class="icon">❌</div>
+                    <h3>Not a LoRaWAN replacement</h3>
+                    <p>Quartz doesn't relay LoRaWAN packets or talk to LoRaWAN sensors. The LoRa mesh uses its own packet format for Quartz blockchain data. If you have existing LoRaWAN sensors, they won't automatically work with Quartz.</p>
+                </div>
+                <div class="card" style="border-color: var(--orange);">
+                    <div class="icon">❌</div>
+                    <h3>Not a sensor data marketplace</h3>
+                    <p>Helium tried to build a marketplace where sensor data buyers pay for telemetry. That model failed. Quartz doesn't attempt it. Sensor data goes on-chain as a transaction, but there's no built-in marketplace to sell it. The value comes from mining, not data sales.</p>
+                </div>
+                <div class="card" style="border-color: var(--orange);">
+                    <div class="icon">❌</div>
+                    <h3>Not real-time IoT</h3>
+                    <p>Block time is ~120 seconds. LoRa bandwidth is ~250 bytes per packet. If you need millisecond latency or streaming telemetry, use WiFi or cellular. Quartz is for low-frequency, high-value data where immutability matters more than speed.</p>
+                </div>
+                <div class="card" style="border-color: var(--orange);">
+                    <div class="icon">❌</div>
+                    <h3>Not enterprise IoT</h3>
+                    <p>No device management dashboard, no fleet OTA updates, no LDAP integration. Quartz is a cryptocurrency that happens to run on IoT hardware. If you need enterprise IoT features, use AWS IoT or Azure IoT Hub.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- How it differs from Helium -->
+        <section style="padding: 40px 0;">
+            <h2>Quartz vs Helium for IoT</h2>
+            <p class="section-subtitle">Different model, same hardware.</p>
+
+            <div class="comparison-grid">
+                <div class="col helium">
+                    <h3 style="color: var(--orange);">Helium (IoT Network)</h3>
+                    <ul>
+                        <li>Hotspots relay LoRaWAN sensor data</li>
+                        <li>Revenue from data credits (sensor packets)</li>
+                        <li>Requires sensor deployments to generate demand</li>
+                        <li>Hotspot owners earn based on network usage</li>
+                        <li>Centralized company (Nova Labs) controls roadmap</li>
+                        <li>Token value tied to sensor data volume</li>
+                        <li>Result: not enough sensor data, tokens crashed</li>
+                    </ul>
+                </div>
+                <div class="col quartz">
+                    <h3 style="color: var(--accent);">Quartz (Cryptocurrency on IoT)</h3>
+                    <ul>
+                        <li>ESP32s mine a cryptocurrency (PUF-bound)</li>
+                        <li>Revenue from mining rewards (block emission)</li>
+                        <li>Mining is the demand — doesn't need sensor buyers</li>
+                        <li>Miners earn from securing the network</li>
+                        <li>Open source, MIT licensed, no company</li>
+                        <li>Token value tied to network security + adoption</li>
+                        <li>Sensor logging is a free feature, not the business model</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="reality-check" style="margin-top: 24px;">
+                <strong>The key difference:</strong> Helium needed sensor data buyers to exist before the network had value. Quartz needs miners to exist — and mining works from day one. IoT applications (sensor logging, pay-per-use hardware) layer on top of a network that's already economically viable, rather than being the reason the network exists.
+            </div>
+        </section>
+
+        <!-- Live Demo -->
+        <section style="padding: 40px 0;">
+            <h2>Live Demo: Sensor Logging on Testnet</h2>
+            <p class="section-subtitle">This is running right now on the Quartz testnet. Try it yourself.</p>
+
+            <div class="usecase-card" style="border-color: var(--accent); text-align: center; padding: 32px 28px;">
+                <h3 style="margin-bottom: 8px;">📊 Cold Chain Monitor — Live</h3>
+                <p style="color: var(--muted); font-size: 15px; margin-bottom: 20px;">Real sensor data logged on the Quartz blockchain, queryable in real-time. Temperature chart, alert stats, and full reading history — all sourced from on-chain transactions.</p>
+                <a href="/cold-chain.html" class="btn btn-primary" style="font-size: 17px; padding: 16px 32px;">Open Live Dashboard →</a>
+            </div>
+
+            <div class="usecase-card" style="border-color: var(--accent);">
+                <div class="uc-header">
+                    <div class="uc-icon">🟢</div>
+                    <div>
+                        <h3>Sensor Logger — Running Now</h3>
+                        <span class="uc-status">Live on testnet</span>
+                    </div>
+                </div>
+                <p>Sensor readings are being logged to the Quartz testnet blockchain right now. Each reading is a transaction with a 256-byte data payload — temperature, device ID, timestamp, humidity, and location.</p>
+                <div class="uc-flow"># Run the sensor logger (simulated, no hardware needed):
+python3 sensor_logger.py \
+  --node https://quartzchain.net \
+  --device cold-chain-001 \
+  --location truck-A \
+  --simulated \
+  --interval 60
+
+# Real DS18B20 on Raspberry Pi:
+python3 sensor_logger.py \
+  --node https://quartzchain.net \
+  --device cold-001 \
+  --sensor ds18b20 \
+  --interval 300
+
+# View logged readings:
+curl -s https://quartzchain.net/api/v1/messages | python3 -m json.tool</div>
+                <p class="uc-parts"><strong>Download:</strong> <a href="/sensor_logger.py" style="color: var(--accent);">sensor_logger.py</a> (9KB, pure Python, no dependencies)</p>
+                <p class="uc-parts"><strong>What it does:</strong> Reads temperature (real or simulated), formats as a compact pipe-delimited string, submits as an on-chain message via the Quartz API. Reading appears on the <a href="/explorer/" style="color: var(--accent);">block explorer</a> and is queryable via the API.</p>
+            </div>
+
+            <div class="usecase-card" style="border-color: var(--accent);">
+                <div class="uc-header">
+                    <div class="uc-icon">💳</div>
+                    <div>
+                        <h3>Pay-Per-Use Demo — Terminal Mode</h3>
+                        <span class="uc-status">Works with testnet wallet</span>
+                    </div>
+                </div>
+                <p>Displays a QR payment request, polls for incoming QZ, and triggers a relay on payment. Same flow as the ESP32 firmware's <code style="font-family: var(--mono); color: var(--accent);">quartz_pay.c</code>, but runs on a computer or Raspberry Pi.</p>
+                <div class="uc-flow"># Terminal demo (no hardware):
+python3 pay_demo.py \
+  --node https://quartzchain.net \
+  --address Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U \
+  --amount 0.5 \
+  --label "USB Charge 30min" \
+  --terminal
+
+# Real relay on Raspberry Pi GPIO26:
+python3 pay_demo.py \
+  --node https://quartzchain.net \
+  --address Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U \
+  --amount 1.0 \
+  --label "Water Valve" \
+  --relay-pin 26 \
+  --duration 10000</div>
+                <p class="uc-parts"><strong>Download:</strong> <a href="/pay_demo.py" style="color: var(--accent);">pay_demo.py</a> (9KB, pure Python, no dependencies for terminal mode)</p>
+                <p class="uc-parts"><strong>What it does:</strong> Shows a payment QR → waits for QZ payment → triggers GPIO relay (or prints "RELAY ACTIVATED" in terminal mode). Same payment URI format (<code style="font-family: var(--mono); color: var(--accent);">quartz:&lt;addr&gt;?amount=&lt;QZ&gt;</code>) as the ESP32 firmware.</p>
+            </div>
+        </section>
+
+        <!-- What's ready vs what's not -->
+        <section style="padding: 40px 0 60px;">
+            <h2>What's Ready vs What's Not</h2>
+            <p class="section-subtitle">No promises. Just the current state of the code.</p>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 24px;">
+                <thead>
+                    <tr>
+                        <th style="background: var(--surface); color: var(--accent); padding: 12px 16px; text-align: left; border-bottom: 2px solid var(--border); font-size: 14px;">Capability</th>
+                        <th style="background: var(--surface); color: var(--accent); padding: 12px 16px; text-align: left; border-bottom: 2px solid var(--border); font-size: 14px;">Status</th>
+                        <th style="background: var(--surface); color: var(--accent); padding: 12px 16px; text-align: left; border-bottom: 2px solid var(--border); font-size: 14px;">What's needed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">On-chain messaging (256-byte data field)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Works today</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">Already in firmware + wallet</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">GPIO relay control (pay → activate)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Works today</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">Already in firmware</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">LoRa mesh (block headers, tx relay)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Compiles + runs</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">SX1276 driver works, needs real-world mesh testing</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Helium hotspot bridge</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Code written</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">Needs testing on real Bobcat/RAK hardware</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">On-chain sensor logging (simulated)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Live on testnet</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);"><a href="/sensor_logger.py" style="color: var(--accent);">sensor_logger.py</a> — download and run</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Pay-per-use relay demo (terminal)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Working</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);"><a href="/pay_demo.py" style="color: var(--accent);">pay_demo.py</a> — download and run</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Temperature sensor logging (real DS18B20)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Code ready</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">DS18B20 driver in sensor_logger.py — needs Raspberry Pi + sensor</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Pay-per-use relay (real GPIO)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent);">✅ Code ready</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">RPi.GPIO support in pay_demo.py — needs Raspberry Pi + relay</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Soil moisture / multi-sensor logging</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--orange);">🔧 Days of work</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">Same pattern as temp — read sensor, pack data, submit tx</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Pay-per-use irrigation valve</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--orange);">🔧 Afternoon</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">GPIO relay already works — just wire a solenoid</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Sensor data query API</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--orange);">🔧 Days of work</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">Parse on-chain messages by device address, filter by data format</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border);">Autonomous device agent (rule engine)</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">📋 In development</td>
+                        <td style="padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted);">See <a href="/agents.html" style="color: var(--accent);">Agents page</a></td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 16px;">Mainnet launch</td>
+                        <td style="padding: 12px 16px; color: var(--muted);">📋 Not yet</td>
+                        <td style="padding: 12px 16px; color: var(--muted);">See <a href="/setup.html" style="color: var(--accent);">TODO</a> — security audit, difficulty floor, launch ceremony</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer style="border-top: 1px solid var(--border); padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px;">
+        <p>🔮 Quartz (QZ) — The answer to everything, mined by everyone.</p>
+        <p style="margin-top: 8px;">
+            <a href="/" style="color: var(--accent); text-decoration: none;">Home</a> ·
+            <a href="/hardware.html" style="color: var(--muted); text-decoration: none;">Hardware</a> ·
+            <a href="/iot.html" style="color: var(--muted); text-decoration: none;">IoT</a> ·
+            <a href="/bridge.html" style="color: var(--muted); text-decoration: none;">Bridge</a> ·
+            <a href="/download.html" style="color: var(--muted); text-decoration: none;">Download</a> ·
+            <a href="/setup.html" style="color: var(--muted); text-decoration: none;">Setup</a>
+        </p>
+        <p style="margin-top: 12px; font-size: 12px;">MIT Licensed · No premine · No ICO · No VC</p>
+    </footer>
+
+</body>
+</html>

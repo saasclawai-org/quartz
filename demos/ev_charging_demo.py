@@ -14,12 +14,12 @@ On-chain message format:
 
 Usage:
   # Terminal demo (no hardware):
-  python3 ev_charging_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 ev_charging_demo.py --node https://quartzchain.net \\
       --address Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U \\
       --rate 0.10 --minutes 30 --terminal
 
   # Real relay on Raspberry Pi:
-  python3 ev_charging_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 ev_charging_demo.py --node https://quartzchain.net \\
       --address Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U \\
       --rate 0.10 --minutes 30 --relay-pin 26
 
@@ -314,7 +314,7 @@ Examples:
       --rate 0.10 --relay-pin 26
         """,
     )
-    parser.add_argument('--node', default='https://quartz.preview.saasclaw.ai')
+    parser.add_argument('--node', default='https://quartzchain.net')
     parser.add_argument('--address', required=True)
     parser.add_argument('--station', default='ev-001')
     parser.add_argument('--rate', type=float, default=0.10,

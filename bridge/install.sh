@@ -229,7 +229,7 @@ esac
 # ---------------------------------------------------------------------------
 # 7. Create systemd service
 # ---------------------------------------------------------------------------
-GATEWAY_HOST=${GATEWAY_HOST:-quartz.preview.saasclaw.ai}
+GATEWAY_HOST=${GATEWAY_HOST:-quartzchain.net}
 
 info "Creating systemd service..."
 cat > /etc/systemd/system/quartz-bridge.service << EOF
@@ -333,7 +333,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Verify bridge is connected: journalctl -u quartz-bridge -f"
 echo "  2. Check LoRa radio: journalctl -u quartz-lora-fwd -f"
-echo "  3. Flash an ESP32 with Quartz firmware: https://quartz.preview.saasclaw.ai/download.html"
+echo "  3. Flash an ESP32 with Quartz firmware: https://quartzchain.net/download.html"
 echo "  4. Power on ESP32 near the hotspot — it should pick up the LoRa mesh"
 echo ""
 echo "To change gateway or LoRa settings:"

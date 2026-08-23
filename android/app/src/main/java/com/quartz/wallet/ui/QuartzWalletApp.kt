@@ -964,7 +964,7 @@ fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
         Spacer(Modifier.height(24.dp))
 
         OutlinedTextField(
-            value = "https://quartz.preview.saasclaw.ai",
+            value = "https://quartzchain.net",
             onValueChange = {},
             label = { Text("Node URL") },
             modifier = Modifier.fillMaxWidth(),

@@ -15,7 +15,7 @@ MetaMask-style browser wallet for Quartz — MV3, ~250 lines of core logic, zero
 4. Click the 🔮 icon → create or import a wallet
 
 ## Try it
-https://quartz.preview.saasclaw.ai/demos/login.html — the "🧩 Sign in with the Quartz extension" button appears automatically when the extension is installed.
+https://quartzchain.net/demos/login.html — the "🧩 Sign in with the Quartz extension" button appears automatically when the extension is installed.
 
 ## Site API
 ```js

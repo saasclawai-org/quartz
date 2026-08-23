@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware — Quartz (QZ)</title>
+    <meta name="description" content="Three tiers of Quartz mining hardware: $5 ESP32-WROOM entry miner, $15 Heltec LoRa mesh miner, $35 M5Stack Core hardware wallet. One firmware. Pick your entry point.">
+    <link rel="stylesheet" href="/css/quartz.css">
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="hero" style="padding: 80px 24px 60px;">
+        <h1>Hardware</h1>
+        <p class="tagline">Three tiers. One firmware. Pick your entry point.</p>
+    </div>
+
+    <div class="container">
+
+        <!-- Three Tier Cards -->
+        <section style="padding: 40px 0 80px;">
+            <div class="grid grid-3" style="gap: 28px;">
+                <!-- ESP32-WROOM -->
+                <div class="card" style="border-color: var(--accent); text-align: center; padding: 40px 28px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">🔌</div>
+                    <div style="font-size: 36px; font-weight: 800; color: var(--accent); margin-bottom: 4px;">$5</div>
+                    <h3 style="font-size: 22px; margin-bottom: 6px;">ESP32-WROOM</h3>
+                    <p style="font-size: 14px; color: var(--accent); font-weight: 600; margin-bottom: 16px;">Entry Miner</p>
+                    <p style="color: var(--muted); font-size: 15px; text-align: left;">Bare board, no display. Flash and mine. Seed via serial QR or BLE. The cheapest crypto mining hardware on Earth.</p>
+                    <a href="/download.html" class="btn btn-primary" style="margin-top: 24px; width: 100%; justify-content: center;">Flash Now →</a>
+                </div>
+
+                <!-- Heltec WiFi LoRa 32 V3 -->
+                <div class="card" style="border-color: var(--orange); text-align: center; padding: 40px 28px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📡</div>
+                    <div style="font-size: 36px; font-weight: 800; color: var(--orange); margin-bottom: 4px;">$15</div>
+                    <h3 style="font-size: 22px; margin-bottom: 6px;">Heltec WiFi LoRa 32 V3</h3>
+                    <p style="font-size: 14px; color: var(--orange); font-weight: 600; margin-bottom: 16px;">Mesh Miner</p>
+                    <p style="color: var(--muted); font-size: 15px; text-align: left;">All three radios: WiFi + BLE + LoRa. 0.96" OLED shows mining stats. Solar-deployable for off-grid LoRa mesh mining.</p>
+                    <a href="/setup.html" class="btn btn-secondary" style="margin-top: 24px; width: 100%; justify-content: center;">Setup Guide →</a>
+                </div>
+
+                <!-- M5Stack Core -->
+                <div class="card" style="border-color: var(--purple); text-align: center; padding: 40px 28px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📱</div>
+                    <div style="font-size: 36px; font-weight: 800; color: var(--purple); margin-bottom: 4px;">$35</div>
+                    <h3 style="font-size: 22px; margin-bottom: 6px;">M5Stack Core</h3>
+                    <p style="font-size: 14px; color: var(--purple); font-weight: 600; margin-bottom: 16px;">Hardware Wallet</p>
+                    <p style="color: var(--muted); font-size: 15px; text-align: left;">3.2" TFT display (320×240) for QR seed provisioning and transaction signing. Three buttons. The full Quartz experience.</p>
+                    <a href="/setup.html" class="btn btn-secondary" style="margin-top: 24px; width: 100%; justify-content: center;">Setup Guide →</a>
+                </div>
+            </div>
+
+            <div style="margin-top: 32px; padding: 16px 20px; background: var(--surface); border-radius: 12px; border-left: 4px solid var(--accent); text-align: center;">
+                <p style="color: var(--muted); font-size: 14px; margin: 0;">Same firmware. Same blockchain. Same coins. Start with a $5 board and upgrade later — your seed phrase moves with you.</p>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Hardware Wallet -->
+    <section id="hardware-wallet" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+        <div class="container">
+            <h2>Hardware Wallet 🔐</h2>
+            <p class="section-subtitle">Your ESP32 miner IS your hardware wallet. No separate device to buy.</p>
+
+            <div class="grid grid-4">
+                <div class="card">
+                    <div class="icon">🔑</div>
+                    <h3>Keys Generated On-Chip</h3>
+                    <p>Ed25519 keys generated using the ESP32's hardware RNG. Private key stored in encrypted flash. Never leaves the device — not for the phone, not for the browser, not for any server.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📺</div>
+                    <h3>On-Device Display</h3>
+                    <p>Seed phrase shown on the ESP32 screen itself — not your phone. M5Stack Core's 3.2" TFT (320×240) displays QR codes for seed provisioning and signing confirmation.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">✍️</div>
+                    <h3>Physical Confirmation</h3>
+                    <p>To send coins, your phone builds the transaction and sends it over BLE. The ESP32 shows the amount and recipient on screen. You press the physical button to approve. Then it signs.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">♻️</div>
+                    <h3>Recoverable</h3>
+                    <p>Lose or break your ESP32? Enter your 12-word seed phrase in any Quartz wallet (PWA, Android, or new ESP32). Same keys, same coins. BIP39 checksum catches typos.</p>
+                </div>
+            </div>
+
+            <div style="margin-top: 32px; padding: 20px; background: var(--card); border-radius: 12px; border-left: 4px solid var(--purple);">
+                <p style="color: var(--muted); font-size: 14px; margin: 0;"><strong style="color: var(--text);">No separate hardware wallet to buy.</strong> A Ledger Nano S costs $79. A Trezor One costs $59. An M5Stack Core costs $35 — and it mines QZ while securing your keys. One device. Two jobs. Half the price.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Storage Architecture -->
+    <section id="storage" style="background: var(--bg);">
+        <div class="container">
+            <h2>Storage Architecture 💾</h2>
+            <p class="section-subtitle">Three tiers. Zero corruption. Survives power loss.</p>
+
+            <div class="grid grid-3" style="margin-bottom: 32px;">
+                <div class="card">
+                    <div class="icon">🔒</div>
+                    <h3>Tier 0: On-chip Flash</h3>
+                    <p><strong>4-16 MB</strong> — Firmware, encrypted keys (NVS). Soldered, encrypted, secure.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚡</div>
+                    <h3>Tier 1: FRAM (SPI)</h3>
+                    <p><strong>256 KB, $3</strong> — Chain tip, UTXO root, recent headers. Infinite writes, atomic commits, instant non-volatile. The anchor.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📀</div>
+                    <h3>Tier 2: USB Flash (OTG)</h3>
+                    <p><strong>8-128 GB, $8</strong> — Full block history via ESP32-S3 USB host. Soldered traces, no SD socket failure.</p>
+                </div>
+            </div>
+
+            <div style="padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px;">Why not SD cards?</h3>
+                <p style="color: var(--muted);">SD cards fail from <strong>physical socket issues</strong> (vibration, corrosion), <strong>power-loss corruption</strong> (cheap controllers cache writes in volatile RAM), and <strong>controller crashes</strong> under sustained writes. The flash itself is fine — the packaging is the problem. FRAM solves the reliability gap with atomic byte-level writes. USB flash solves the capacity gap with soldered connections.</p>
+            </div>
+
+            <div class="grid grid-3">
+                <div style="padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
+                    <div style="color: var(--accent); font-size: 16px; font-weight: 700; margin-bottom: 8px;">SPV Node</div>
+                    <p style="color: var(--muted); font-size: 14px; margin: 0;">Headers only · ~21 MB/yr<br>No USB needed<br>Validates PoW chain</p>
+                </div>
+                <div style="padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
+                    <div style="color: var(--orange); font-size: 16px; font-weight: 700; margin-bottom: 8px;">Pruned Node</div>
+                    <p style="color: var(--muted); font-size: 14px; margin: 0;">Last 2016 blocks + all headers<br>FRAM + small USB<br>Full recent validation</p>
+                </div>
+                <div style="padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
+                    <div style="color: #8888ff; font-size: 16px; font-weight: 700; margin-bottom: 8px;">Full Node</div>
+                    <p style="color: var(--muted); font-size: 14px; margin: 0;">All blocks since genesis<br>~530 MB/yr (10 txs/blk)<br>Pi or mini PC + SSD</p>
+                </div>
+            </div>
+
+            <p style="color: var(--muted); font-size: 14px; margin-top: 24px;">Full spec in the <a href="#" style="color: var(--accent);">whitepaper</a> — FRAM layout, atomic commit protocol, and recovery procedure.</p>
+        </div>
+    </section>
+
+    <!-- Flash Your ESP32 -->
+    <section id="flash" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+        <div class="container">
+            <h2>⚡ Flash Your ESP32</h2>
+            <p class="section-subtitle">Connect your ESP32 via USB and flash the Quartz miner firmware. Works with Chrome/Edge. The chip is auto-detected — just click connect.</p>
+
+            <div style="background: var(--card); border: 2px dashed var(--border); border-radius: 20px; padding: 48px; text-align: center; transition: border-color 0.3s;">
+                <div style="font-size: 64px; margin-bottom: 16px;">🔌</div>
+                <h3 style="font-size: 24px; margin-bottom: 8px;">Ready to flash</h3>
+                <p style="color: var(--muted); margin-bottom: 24px;">Plug in your ESP32 board, then click connect. The correct firmware is auto-selected based on your chip.</p>
+                <div class="cta-group">
+                    <esp-web-install-button manifest="/firmware/esp32/manifest.json" id="web-install-btn">
+                    </esp-web-install-button>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; max-width: 800px; margin-left: auto; margin-right: auto;">
+                <div style="padding: 16px; background: var(--card); border-radius: 8px; border: 1px solid var(--border);">
+                    <h4 style="margin: 0 0 8px;">📡 ESP32 Firmware</h4>
+                    <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px;">M5Stack Core, WROOM, NodeMCU</p>
+                    <a href="/firmware/quartz-app-v048.bin" style="font-size: 13px; color: var(--accent);">⬇ Download quartz-app-v048.bin (1.4 MB)</a>
+                </div>
+                <div style="padding: 16px; background: var(--card); border-radius: 8px; border: 1px solid var(--border);">
+                    <h4 style="margin: 0 0 8px;">📱 Android Wallet</h4>
+                    <p style="font-size: 13px; color: var(--muted); margin: 0 0 8px;">Quartz wallet app for Android</p>
+                    <a href="/firmware/quartz-wallet-v004.apk" style="font-size: 13px; color: var(--accent);">⬇ Download quartz-wallet-v004.apk (19 MB)</a>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px; text-align: center;">
+                <p style="color: var(--muted); font-size: 14px;">No browser flash? Use esptool: <code style="background: var(--card); padding: 2px 8px; border-radius: 4px; font-size: 13px;">pip install esptool && esptool.py --chip esp32 --port COM3 --baud 460800 write_flash 0x1000 quartz-app-v048.bin</code></p>
+                <div style="margin-top: 12px; padding: 10px 14px; background: var(--card); border-radius: 8px; font-size: 12px; color: var(--muted); font-family: monospace; display: inline-block;">
+                    <strong>ESP32 (4MB) SHA-256:</strong> 41ac690397b265485897c11ae7762c085399be4d6ce8bf668c79e8ffb1ea86db<br>
+                    <strong>ESP32-S3 (8MB) SHA-256:</strong> 28f58de9e6b35df716ac954a7c6449e47d35d92e96e4f1e3f77bd1805e0d2775
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No dev fund · <a href="/terms.html" style="color: var(--muted);">Terms & Disclaimers</a></p>
+            <p style="margin-top: 8px; font-size: 12px;">Quantum-safe wallets. Hardware-bound mining. $15 entry cost.</p>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--muted); max-width: 600px;">Quartz is a decentralized, open-source protocol. No entity controls, issues, or redeems QZ. This website provides information and non-custodial tools only. Nothing here is financial advice. QZ has no guaranteed value.</p>
+        </div>
+    </footer>
+
+    <script type="module" src="https://cdn.jsdelivr.net/npm/esp-web-tools@9.4.3/dist/web/install-button.js"></script>
+</body>
+</html>

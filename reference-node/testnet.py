@@ -2016,7 +2016,7 @@ def standby_sync():
 def main():
     print("=" * 60)
     print("  Quartz Testnet Seed Node v0.1.0")
-    print("  https://quartz.preview.saasclaw.ai")
+    print("  https://quartzchain.net")
     print("=" * 60)
 
     chain = QuartzChain()

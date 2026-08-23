@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔮 Quartz Setup Guide</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --card: #1a1a2e;
+  --accent: #9933ff;
+  --accent2: #00d4aa;
+  --text: #e4e4ef;
+  --muted: #8888a0;
+  --warn: #ff6b35;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.quartz-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10,10,15,0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #2a2a3e;
+}
+.quartz-nav-inner {
+  max-width: 900px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px;
+}
+.quartz-nav-logo { color: var(--accent); text-decoration: none; font-weight: 700; font-size: 18px; }
+.quartz-nav-links { display: flex; gap: 24px; }
+.quartz-nav-links a { color: var(--muted); text-decoration: none; font-size: 15px; transition: color 0.2s; }
+.quartz-nav-links a:hover { color: var(--text); }
+.quartz-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+.quartz-nav-toggle span { display: block; width: 24px; height: 2px; background: var(--text, #e4e4ef); border-radius: 2px; }
+.quartz-nav-toggle span + span { margin-top: 5px; }
+@media (max-width: 900px) {
+  .quartz-nav-toggle { display: block; }
+  .quartz-nav-links { display: none; flex-direction: column; position: absolute; top: 100%; left: 0; right: 0; background: rgba(10,10,15,0.98); border-bottom: 1px solid var(--border, #2a2a3e); padding: 0; }
+  .quartz-nav-links.open { display: flex; }
+  .quartz-nav-links a { padding: 14px 20px; border-bottom: 1px solid var(--border, #2a2a3e); }
+}
+.container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); margin-bottom: 8px; font-size: 32px; }
+h2 { color: var(--accent2); margin: 32px 0 12px; font-size: 22px; }
+h3 { color: var(--text); margin: 20px 0 8px; font-size: 18px; }
+p { margin-bottom: 12px; }
+.muted { color: var(--muted); }
+.warn { color: var(--warn); font-weight: 600; }
+.step {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 16px 0;
+  border-left: 3px solid var(--accent);
+}
+.step-num {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  text-align: center; line-height: 32px;
+  font-weight: 700; font-size: 16px;
+  margin-right: 8px;
+}
+.step-title {
+  font-size: 20px; font-weight: 600;
+  vertical-align: middle;
+}
+.flow {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 20px 0; padding: 16px; background: #12121f; border-radius: 8px;
+  border: 1px solid #2a2a3e;
+}
+.flow-step {
+  background: var(--card);
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  font-size: 14px;
+}
+.flow-arrow { color: var(--accent); font-size: 18px; }
+.tabs { display: flex; gap: 4px; margin: 16px 0 0; }
+.tab {
+  padding: 8px 16px; background: #12121f;
+  border: 1px solid #2a2a3e; border-radius: 8px 8px 0 0;
+  cursor: pointer; color: var(--muted); font-size: 14px;
+}
+.tab.active { background: var(--card); color: var(--accent); border-bottom-color: var(--card); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+code {
+  background: #12121f; padding: 2px 6px; border-radius: 4px;
+  font-family: 'SF Mono', Consolas, monospace; font-size: 14px; color: var(--accent2);
+}
+pre {
+  background: #12121f; padding: 16px; border-radius: 8px;
+  overflow-x: auto; margin: 12px 0; border: 1px solid #2a2a3e;
+}
+pre code { background: none; padding: 0; color: var(--text); }
+.note {
+  background: rgba(0,212,170,0.08);
+  border-left: 3px solid var(--accent2);
+  padding: 12px 16px; border-radius: 0 8px 8px 0;
+  margin: 12px 0;
+}
+.danger {
+  background: rgba(255,107,53,0.08);
+  border-left: 3px solid var(--warn);
+  padding: 12px 16px; border-radius: 0 8px 8px 0;
+  margin: 12px 0;
+}
+ul, ol { padding-left: 20px; margin: 8px 0; }
+li { margin-bottom: 4px; }
+a { color: var(--accent); }
+sup { color: var(--accent2); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<nav class="quartz-nav">
+  <div class="quartz-nav-inner">
+    <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+    <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+      <a href="/hardware.html">Hardware</a>
+      <a href="/mining.html">Mining</a>
+      <a href="/energy.html">Energy</a>
+      <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/agents.html">Agents</a>
+      <a href="/security.html">Security</a>
+      <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+      <a href="/wallet/">Wallet</a>
+      <a href="/download.html">Download</a>
+      <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <h1>🔮 Quartz Setup Guide</h1>
+  <p class="muted">Flash → Connect WiFi → Write down seed → Mine. About 5 minutes.</p>
+
+  <div class="flow">
+    <span class="flow-step">1. Flash firmware</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">2. Connect WiFi</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">3. Write down seed</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">4. Set PIN (optional)</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">⛏️ Mining</span>
+  </div>
+
+  <!-- =================== STEP 1 =================== -->
+  <div class="step">
+    <span class="step-num">1</span><span class="step-title">Flash the Firmware</span>
+
+    <p>Download the firmware binaries from the <a href="/download.html">download page</a>. You need three files:</p>
+    <ul>
+      <li><code>bootloader-v063.bin</code></li>
+      <li><code>partition-table-v063.bin</code></li>
+      <li><code>quartz-app-v063.bin</code></li>
+    </ul>
+
+    <div class="tabs">
+      <div class="tab active" onclick="showTab(event,'win')">Windows</div>
+      <div class="tab" onclick="showTab(event,'mac')">macOS</div>
+      <div class="tab" onclick="showTab(event,'linux')">Linux</div>
+    </div>
+
+    <div id="win" class="tab-content active">
+      <ol>
+        <li>Install <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers" target="_blank">CP210x USB driver</a> (or <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html" target="_blank">CH340 driver</a> for some boards)</li>
+        <li>Install Python: <a href="https://www.python.org/downloads/" target="_blank">python.org</a> (check "Add to PATH")</li>
+        <li>Open Command Prompt, install esptool: <code>pip install esptool</code></li>
+        <li>Plug ESP32 into USB. Open Device Manager → Ports (COM & LPT) → find your COM port (e.g. <code>COM6</code>)</li>
+        <li>Flash all three partitions:</li>
+      </ol>
+      <pre><code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash ^
+  0x1000 bootloader-v063.bin ^
+  0x10000 partition-table-v063.bin ^
+  0x20000 quartz-app-v063.bin</code></pre>
+      <p class="muted">Use <code>^</code> for line continuation on Windows (or put it all on one line).</p>
+    </div>
+
+    <div id="mac" class="tab-content">
+      <ol>
+        <li>Install <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers" target="_blank">CP210x driver</a> if needed</li>
+        <li>Install Python and esptool: <code>pip install esptool</code></li>
+        <li>Plug ESP32 into USB. Find device: <code>ls /dev/cu.*</code></li>
+        <li>Look for <code>/dev/cu.SLAB_USBtoUART</code> or <code>/dev/cu.wchusbserial*</code></li>
+        <li>Flash:</li>
+      </ol>
+      <pre><code>python -m esptool --chip esp32 --port /dev/cu.SLAB_USBtoUART --baud 460800 write_flash \
+  0x1000 bootloader-v063.bin \
+  0x10000 partition-table-v063.bin \
+  0x20000 quartz-app-v063.bin</code></pre>
+    </div>
+
+    <div id="linux" class="tab-content">
+      <ol>
+        <li>Install esptool: <code>pip install esptool</code></li>
+        <li>Plug ESP32 into USB. Find device: <code>ls /dev/ttyUSB*</code></li>
+        <li>If permission denied: <code>sudo usermod -aG dialout $USER</code> (log out/in)</li>
+        <li>Flash:</li>
+      </ol>
+      <pre><code>python -m esptool --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \
+  0x1000 bootloader-v063.bin \
+  0x10000 partition-table-v063.bin \
+  0x20000 quartz-app-v063.bin</code></pre>
+    </div>
+
+    <div class="note">
+      <strong>First-time setup vs updates:</strong>
+      <ul>
+        <li><strong>First flash (new device):</strong> Use the three-part command above. This writes the bootloader, partition table, and app — fresh install.</li>
+        <li><strong>Update (keep wallet):</strong> Flash only the app at <code>0x20000</code> — your wallet and seed phrase survive the update:
+          <pre><code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x20000 quartz-app-v063.bin</code></pre>
+        </li>
+        <li><strong>Full reset (wipe wallet):</strong> Erase everything first, then flash all three:
+          <pre><code>python -m esptool --chip esp32 --port COM6 erase_flash
+python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash ^
+  0x1000 bootloader-v063.bin ^
+  0x10000 partition-table-v063.bin ^
+  0x20000 quartz-app-v063.bin</code></pre>
+        </li>
+      </ul>
+    </div>
+
+    <p>Wait for <code>Hash of data verified.</code> for each segment. When done, press the <strong>RESET</strong> button on the ESP32 (or unplug/replug).</p>
+  </div>
+
+  <!-- =================== STEP 2 =================== -->
+  <div class="step">
+    <span class="step-num">2</span><span class="step-title">Connect to WiFi</span>
+    <p>The ESP32 needs WiFi to reach the mining node. On first boot (or after a full erase), it creates a setup hotspot:</p>
+    <ol>
+      <li>On your phone or computer, go to WiFi settings</li>
+      <li>Connect to <code>Quartz-XXXX</code> (no password) — the last 4 characters are from the device's MAC address</li>
+      <li>A setup page should pop up automatically (captive portal)</li>
+      <li>If not, open a browser → go to <code>192.168.4.1</code></li>
+      <li>Enter your home WiFi name and password</li>
+      <li>Click <strong>"Start Mining ⚡"</strong></li>
+    </ol>
+    <p>The device reboots, connects to your WiFi, and generates a new wallet. You'll see the connection status on the display (M5Stack) or in the serial log.</p>
+
+    <div class="note">
+      <strong>WiFi is for mining only.</strong> Your seed phrase is never transmitted over WiFi — it's shown via serial console or BLE only.
+    </div>
+
+    <p class="muted">If WiFi credentials are already saved in the device, it skips the hotspot and connects automatically on boot.</p>
+  </div>
+
+  <!-- =================== STEP 3 =================== -->
+  <div class="step">
+    <span class="step-num">3</span><span class="step-title">Write Down Your Seed Phrase</span>
+    <p>On first boot with a new wallet, the device generates a 12-word BIP39 seed phrase. This is your wallet's master key — <strong>anyone with these words controls your wallet</strong>.</p>
+
+    <p>The seed is shown on the serial console. Open a serial terminal to see it:</p>
+
+    <div class="tabs">
+      <div class="tab active" onclick="showTab(event,'putty')">Windows (PuTTY)</div>
+      <div class="tab" onclick="showTab(event,'screen-mac')">macOS</div>
+      <div class="tab" onclick="showTab(event,'screen-linux')">Linux</div>
+    </div>
+
+    <div id="putty" class="tab-content active">
+      <ol>
+        <li>Download <a href="https://www.putty.org/" target="_blank">PuTTY</a></li>
+        <li>Connection type: <strong>Serial</strong></li>
+        <li>Serial line: your COM port (e.g. <code>COM6</code>)</li>
+        <li>Speed: <strong>115200</strong></li>
+        <li>Click <strong>Open</strong></li>
+        <li>Press <strong>RESET</strong> on the ESP32</li>
+      </ol>
+      <pre><code># PuTTY settings:
+# Connection type: Serial
+# Serial line: COM6
+# Speed: 115200
+# Flow control: None
+# → Click Open
+# → Press RESET on ESP32</code></pre>
+    </div>
+
+    <div id="screen-mac" class="tab-content">
+      <pre><code>screen /dev/cu.SLAB_USBtoUART 115200
+# Press RESET on ESP32
+# Exit: Ctrl+A then Ctrl+\</code></pre>
+    </div>
+
+    <div id="screen-linux" class="tab-content">
+      <pre><code>screen /dev/ttyUSB0 115200
+# Press RESET on ESP32
+# Exit: Ctrl+A then k then y</code></pre>
+    </div>
+
+    <p>The serial output will show a table with your 12 words:</p>
+    <pre><code>╔════════════════════════════════════════════╗
+║   🔮 QUARTZ WALLET — SEED PHRASE           ║
+║   WRITE DOWN THESE 12 WORDS                ║
+╚════════════════════════════════════════════╝
+
+Address: QkYhsYVeBLb2rE16MPZBCwnDPDRTDahxt8
+
+  ┌─────────┬─────────────┐
+  │  Word   │   Value     │
+  ├─────────┼─────────────┤
+  │   1     │  capable    │
+  │   2     │  news       │
+  │   3     │  pyramid    │
+  │   4     │  suspect    │
+  │   5     │  pumpkin    │
+  │   6     │  improve    │
+  │   7     │  share      │
+  │   8     │  kiwi       │
+  │   9     │  praise     │
+  │  10     │  eight      │
+  │  11     │  food       │
+  │  12     │  knee       │
+  └─────────┴─────────────┘
+
+Type 'confirm' + Enter after writing down your seed.</code></pre>
+
+    <p>Type <code>confirm</code> and press Enter. The device sets a backup flag so it won't show the seed again on every boot.</p>
+
+    <div class="danger">
+      <strong>⚠️ Write them on paper. Not a screenshot. Not a text file.</strong>
+      <ul>
+        <li>Order matters — word 1 is word 1</li>
+        <li>Keep the paper somewhere safe and offline</li>
+        <li>Anyone with these 12 words can spend your coins</li>
+        <li>If you lose the paper, your coins are gone if the device breaks</li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>Lost your paper?</strong> Type <code>seed</code> in the serial console to re-display the 12 words (PIN-gated if a PIN is set — see step 4).
+    </div>
+  </div>
+
+  <!-- =================== STEP 4 =================== -->
+  <div class="step">
+    <span class="step-num">4</span><span class="step-title">Set a PIN (Recommended)</span>
+    <p>A PIN protects the <code>seed</code> command — without a PIN, anyone with USB access can re-display your 12 words. With a PIN, they get 10 wrong guesses before the wallet is wiped.</p>
+
+    <p>In the serial console, type:</p>
+    <pre><code>setpin 1234</code></pre>
+    <p class="muted">Replace <code>1234</code> with your own 4-8 digit PIN.</p>
+
+    <p>You should see: <code>✅ PIN set</code></p>
+
+    <p>From now on, <code>seed</code> requires you to unlock first:</p>
+    <pre><code>pin 1234       ← unlock (resets after power cycle)
+seed           ← now shows your 12 words</code></pre>
+
+    <div class="danger">
+      <strong>⚠️ 10 wrong PINs = wallet wiped.</strong> The counter persists across reboots — power-cycling does NOT reset it. If you forget your PIN, the only way to recover is your 12-word seed phrase (flash a new device, import words).
+    </div>
+  </div>
+
+  <!-- =================== DONE =================== -->
+  <div class="step" style="border-left-color: var(--accent2);">
+    <span class="step-num" style="background: var(--accent2);">✓</span><span class="step-title">That's it. You're mining.</span>
+    <p>Your ESP32 is now mining Quartz. Check your balance at the <a href="/wallet/">web wallet</a> — import your 12 words to see your address and balance.</p>
+    <ul>
+      <li>📊 <strong>M5Stack (with screen):</strong> Stats on display — hash rate, blocks, uptime, device ID</li>
+      <li>📱 <strong>Android app:</strong> Connect via Bluetooth to see live stats and send transactions</li>
+      <li>💻 <strong>Serial console:</strong> Mining log (once per minute), block finds, commands</li>
+    </ul>
+  </div>
+
+  <!-- =================== SERIAL COMMANDS =================== -->
+  <h2>Serial Commands</h2>
+  <p>Available anytime while mining (type in the serial console, characters echo back):</p>
+  <pre><code>help                  Show available commands
+setpin &lt;digits&gt;       Set a 4-8 digit PIN (first time) or change PIN (unlock first)
+pin &lt;digits&gt;          Unlock the serial session (required for 'seed' if PIN is set)
+seed                  Re-display your 12-word seed phrase (PIN-gated)
+pinstatus             Show PIN status, failed attempts, and lock state
+confirm               Acknowledge seed display on first boot</code></pre>
+
+  <!-- =================== FAQ =================== -->
+  <h2>FAQ</h2>
+
+  <h3>What's the difference between app-only flash and full flash?</h3>
+  <p><strong>App-only</strong> (<code>0x20000</code>): Updates firmware, keeps your wallet, seed, PIN, and WiFi settings. Use for updates.</p>
+  <p><strong>Full flash</strong> (all three partitions): Writes bootloader + partition table + app. Use for first install or if the partition table changed.</p>
+  <p><strong>Erase + flash</strong>: Wipes everything including NVS (wallet, seed, PIN, WiFi). Device generates a fresh wallet on next boot. Use to reset to factory state.</p>
+
+  <h3>I can't type in the serial console — nothing appears</h3>
+  <p>The firmware echoes characters back to the terminal. If you see nothing while typing:</p>
+  <ul>
+    <li>Make sure PuTTY flow control is set to <strong>None</strong> (not XON/XOFF)</li>
+    <li>Check you're on the right COM port and baud rate (115200)</li>
+    <li>Press <strong>RESET</strong> on the ESP32 — you should see boot messages</li>
+    <li>Type <code>help</code> + Enter — you should see the command list</li>
+  </ul>
+
+  <h3>The mining log is too noisy — I can't see what I type</h3>
+  <p>The mining log prints once per minute. If you're seeing more frequent output, you may be on an older firmware. Update to the latest version.</p>
+
+  <h3>I missed the seed display — can I see it again?</h3>
+  <p>Yes. Type <code>seed</code> in the serial console. If a PIN is set, unlock first with <code>pin &lt;digits&gt;</code>.</p>
+  <p>If you haven't confirmed yet, power-cycle the device — the seed shows again on every boot until you type <code>confirm</code>.</p>
+
+  <h3>What if I lose the paper with my seed phrase?</h3>
+  <p class="warn">Your funds are at risk. If you still have the device and know your PIN, type <code>seed</code> to re-display the words and write them down again. If the device is lost or the PIN is forgotten, the coins are gone.</p>
+
+  <h3>Can I use the same seed on multiple devices?</h3>
+  <p>Not recommended — each device should have its own wallet and mine to its own address. But for recovery: flash a new device, erase NVS, and the new device generates its own wallet. To restore a lost wallet, use the web wallet's Import feature with your 12 words.</p>
+
+  <h3>Are the 12 words compatible with other wallets?</h3>
+  <p>Yes. The firmware uses standard BIP39 + BIP44 (derivation path <code>m/44'/789'/0'/0'/0'</code>) with Ed25519 keys. Import the same 12 words in the <a href="/wallet/">web wallet</a> and you'll get the same address and key.</p>
+
+  <h3>Do I need to keep the ESP32 plugged in?</h3>
+  <p>For mining: yes (needs power + WiFi). For wallet recovery: no — import your 12 words in the web wallet to access your funds from any browser.</p>
+
+  <h3>What baud rate?</h3>
+  <p><code>115200</code> — 8 data bits, no parity, 1 stop bit (8N1). Flow control: None.</p>
+
+  <h3>What boards are supported?</h3>
+  <p>Any classic ESP32 with 4MB+ flash: M5Stack Core, Heltec V3, ESP32 DevKit, NodeMCU-32S, LOLIN D32, TTGO T-Display. ESP32-S3 and ESP32-C3 need separate builds (see <a href="/download.html">download page</a>).</p>
+
+</div>
+
+<script>
+function showTab(evt, id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  evt.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

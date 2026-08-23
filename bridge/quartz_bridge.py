@@ -1080,7 +1080,7 @@ Before starting:
   3. Ensure the Quartz gateway is reachable at the specified host:port.
 
 Example:
-  python3 quartz_bridge.py --gateway quartz.preview.saasclaw.ai \\
+  python3 quartz_bridge.py --gateway quartzchain.net \\
       --region US915 --lora-port 1738
         """,
     )

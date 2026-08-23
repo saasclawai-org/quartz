@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agents — Quartz (QZ)</title>
+    <meta name="description" content="Autonomous ESP32 device agents that mine, spend, and act independently. Silicon with a wallet and sensors. No server, no cloud — the chip IS the backend.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        /* Page-specific styles */
+        .callout {
+            background: linear-gradient(135deg, var(--card) 0%, var(--surface) 100%);
+            border: 1px solid var(--accent);
+            border-radius: 20px; padding: 48px 40px; text-align: center;
+            margin: 40px 0;
+        }
+        .callout h2 {
+            font-size: clamp(24px, 3.5vw, 36px);
+            background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        .callout p { color: var(--muted); font-size: 18px; max-width: 600px; margin: 0 auto; }
+
+        .arch-diagram {
+            display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px;
+            align-items: center; margin-top: 40px;
+        }
+        @media (max-width: 768px) { .arch-diagram { grid-template-columns: 1fr; } }
+        .arch-core {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 16px; padding: 32px; text-align: center;
+        }
+        .arch-core.core0 { border-color: var(--purple); }
+        .arch-core.core1 { border-color: var(--accent); }
+        .arch-core .core-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+        .arch-core h3 { font-size: 22px; margin-bottom: 16px; }
+        .arch-core ul { list-style: none; text-align: left; padding: 0; }
+        .arch-core ul li { padding: 6px 0; color: var(--muted); font-size: 14px; }
+        .arch-core ul li::before { content: '▸ '; color: var(--accent); }
+        .arch-core.core0 ul li::before { color: var(--purple); }
+        .arch-divider {
+            font-size: 32px; color: var(--muted); text-align: center;
+        }
+        @media (max-width: 768px) { .arch-divider { transform: rotate(90deg); } }
+
+        .usecase-icon { font-size: 36px; margin-bottom: 12px; }
+        .usecase-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; transition: border-color 0.2s; }
+        .usecase-card:hover { border-color: var(--accent); }
+        .usecase-card h3 { font-size: 18px; margin-bottom: 8px; }
+        .usecase-card p { color: var(--muted); font-size: 14px; }
+        .usecase-card .tag { display: inline-block; margin-top: 12px; font-size: 12px; color: var(--accent); background: var(--accent-dim); padding: 4px 10px; border-radius: 99px; }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="hero" style="padding: 80px 24px 60px;">
+        <div class="hero-badge"><div class="dot"></div>ESP32 agent firmware · In development</div>
+        <h1>Autonomous Device Agents</h1>
+        <p class="tagline">Silicon that earns, spends, and acts. No server. No cloud. The chip IS the backend.</p>
+    </div>
+
+    <div class="container">
+
+        <!-- Stats Row -->
+        <div class="stats">
+            <div class="stat"><div class="value">600M+</div><div class="label">ESP32 Chips Shipped</div></div>
+            <div class="stat"><div class="value">$0/mo</div><div class="label">Operating Cost</div></div>
+            <div class="stat"><div class="value">0.5W</div><div class="label">Power Draw (Agent Mode)</div></div>
+            <div class="stat"><div class="value">~0.01¢</div><div class="label">Per Transaction</div></div>
+        </div>
+
+        <!-- How It Works -->
+        <section style="padding: 40px 0;">
+            <h2>How It Works</h2>
+            <p class="section-subtitle">Three layers turn a $5 chip into an autonomous economic agent.</p>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="icon">📋</div>
+                    <h3>Rule Engine</h3>
+                    <p>Define triggers and actions in firmware. "If solar output &gt; 5W, pay relay node 0.001 QZ for bandwidth." Rules are deterministic, auditable, and run on-device — no external API calls.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🧠</div>
+                    <h3>TinyML</h3>
+                    <p>On-chip machine learning with TensorFlow Lite Micro. Sensors feed a lightweight model that predicts conditions (weather, demand, prices) and adjusts behavior — all within 4MB of flash.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚡</div>
+                    <h3>Actuation</h3>
+                    <p>GPIO pins trigger real-world actions: flip a relay, open a valve, send a LoRa packet, display a QR code. The agent observes, decides, and acts — all without phoning home.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Callout -->
+        <div class="callout">
+            <h2>Not AGI. A thermostat with a wallet.</h2>
+            <p>Quartz agents aren't trying to be smart. They're trying to be <em>useful</em>. A simple rule — "pay 0.001 QZ when the soil is dry" — doesn't need a language model. It needs a sensor, a wallet, and a relay. That's what a $5 ESP32 provides.</p>
+        </div>
+
+        <!-- Use Cases -->
+        <section style="padding: 40px 0;">
+            <h2>Use Cases</h2>
+            <p class="section-subtitle">Real-world agents running on $5 hardware. No cloud. No subscription.</p>
+            <div class="grid grid-3">
+                <div class="usecase-card">
+                    <div class="usecase-icon">📱</div>
+                    <h3>QR Code Payments</h3>
+                    <p>ESP32 with e-paper display shows a dynamic QR code. Customer scans, pays QZ. Agent verifies on-chain and dispenses product or unlocks access. Full point-of-sale for under $10.</p>
+                    <span class="tag">Retail</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">☀️</div>
+                    <h3>Solar Weather Station</h3>
+                    <p>BME280 sensor logs temperature, humidity, pressure. Publishes data to LoRa mesh. Earns QZ from data subscriptions. Runs indefinitely on a 1W solar panel — no battery swaps.</p>
+                    <span class="tag">Sensing</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">🔌</div>
+                    <h3>Pay-to-Trigger Relay</h3>
+                    <p>GPIO relay controls a load (pump, light, gate). Send QZ to the agent's address → relay closes for N seconds. Vending machine, EV charger, access control — same firmware, different config.</p>
+                    <span class="tag">Actuation</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">🌱</div>
+                    <h3>Smart Irrigation</h3>
+                    <p>Soil moisture sensor triggers watering when dry. Agent pays for water usage in QZ, logs every event to the chain. Farm-scale: deploy 100 agents, monitor from the explorer, zero cloud fees.</p>
+                    <span class="tag">Agriculture</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">📡</div>
+                    <h3>LoRa Mesh Repeater</h3>
+                    <p>Agent relays blocks and transactions for other Quartz nodes. Earns micro-fees per packet relayed. Solar-powered repeaters extend mesh coverage to 15km — no monthly ISP bill.</p>
+                    <span class="tag">Infrastructure</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">🔋</div>
+                    <h3>EV Charger</h3>
+                    <p>Agent detects vehicle via NFC or BLE. Negotiates price per kWh in QZ. Handles billing, metering, and access control autonomously. Owner sets rates in firmware — no payment processor skimming 3%.</p>
+                    <span class="tag">Energy</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">🤖</div>
+                    <h3>Machine-to-Machine Economy</h3>
+                    <p>Solar panel agent sells excess energy to battery agent. Battery agent sells stored power to mining agent. Mining agent pays relay agent for bandwidth. A closed-loop economy with zero human intervention.</p>
+                    <span class="tag">M2M</span>
+                </div>
+                <div class="usecase-card">
+                    <div class="usecase-icon">🗺️</div>
+                    <h3>Off-Grid Payments</h3>
+                    <p>No internet? No problem. Agents transact over LoRa mesh, sync to the chain when connectivity returns. Rural markets, disaster zones, remote outposts — QZ works where Visa doesn't.</p>
+                    <span class="tag">Resilience</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dual-Use Architecture -->
+        <section style="padding: 40px 0 80px; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+            <div class="container">
+                <h2>Dual-Use Architecture</h2>
+                <p class="section-subtitle">The ESP32's two cores split the work. Your app runs on one, Quartz runs on the other.</p>
+                <div class="arch-diagram">
+                    <div class="arch-core core0">
+                        <div class="core-label">Core 0 · 240 MHz</div>
+                        <h3>🟣 Your Application</h3>
+                        <ul>
+                            <li>Sensor reads (I2C, SPI, ADC)</li>
+                            <li>Display & UI (e-paper, OLED)</li>
+                            <li>GPIO actuation (relays, valves)</li>
+                            <li>TinyML inference</li>
+                            <li>Business logic & rules engine</li>
+                            <li>LoRa / WiFi transport</li>
+                        </ul>
+                    </div>
+                    <div class="arch-divider">⇌</div>
+                    <div class="arch-core core1">
+                        <div class="core-label">Core 1 · 240 MHz</div>
+                        <h3>🟢 Quartz Engine</h3>
+                        <ul>
+                            <li>Wallet & key management (PUF-seeded)</li>
+                            <li>Transaction signing (WOTS+)</li>
+                            <li>Block validation & chain sync</li>
+                            <li>Mining (CrystalHash + PUF)</li>
+                            <li>Balance & UTXO tracking</li>
+                            <li>Mesh gossip protocol</li>
+                        </ul>
+                    </div>
+                </div>
+                <p style="text-align: center; color: var(--muted); font-size: 15px; margin-top: 32px; max-width: 700px; margin-left: auto; margin-right: auto;">
+                    Both cores share 520KB SRAM and 4MB+ flash. FreeRTOS schedules tasks on each core independently. Your app never blocks the blockchain — the blockchain never blocks your app.
+                </p>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No dev fund · <a href="/terms.html" style="color: var(--muted);">Terms & Disclaimers</a></p>
+            <p style="margin-top: 8px; font-size: 12px;">Autonomous device agents. Silicon with a wallet. $5 entry cost.</p>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--muted); max-width: 600px;">Quartz is a decentralized, open-source protocol. No entity controls, issues, or redeems QZ. This website provides information and non-custodial tools only. Nothing here is financial advice. QZ has no guaranteed value.</p>
+        </div>
+    </footer>
+</body>
+</html>

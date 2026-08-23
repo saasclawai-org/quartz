@@ -16,11 +16,11 @@ import java.util.concurrent.TimeUnit
  * Software wallet — keys on the phone (EncryptedSharedPreferences, Android Keystore),
  * fully standalone: works with or without an ESP32.
  *
- * Node API: https://quartz.preview.saasclaw.ai (testnet)
+ * Node API: https://quartzchain.net (testnet)
  */
 object SoftwareWallet {
 
-    const val NODE_URL = "https://quartz.preview.saasclaw.ai"
+    const val NODE_URL = "https://quartzchain.net"
     const val FEE_SATS = 1_000L // node-enforced fee on /api/v1/send
 
     private val json = "application/json; charset=utf-8".toMediaType()

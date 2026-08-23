@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/opt/quartz-bridge/quartz_bridge.py \
-    --gateway quartz.preview.saasclaw.ai \
+    --gateway quartzchain.net \
     --region US915 \
     --lora-port 1738 \
     --log-level info

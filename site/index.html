@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz (QZ) — Off-Grid Crypto Mining</title>
+    <meta name="description" content="Quartz is a quantum-safe, hardware-bound cryptocurrency with better security economics than Bitcoin at 1/6,000th the energy cost. Mine on $5 ESP32 devices. WOTS+ wallets. PUF mining. ESP-NOW + LoRa mesh. Tor node.">
+    <link rel="stylesheet" href="/css/quartz.css">
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/architecture.html">Architecture</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <div class="hero">
+        <div class="hero-badge"><div class="dot"></div>Testnet live · Mining on real ESP32 hardware</div>
+        <div class="crystal">🔮</div>
+        <h1>Crypto mined on<br>sunlight</h1>
+        <p class="tagline">The quantum-safe, hardware-bound cryptocurrency. Better security economics than Bitcoin at 1/6,000th the energy cost.</p>
+        <div class="cta-group">
+            <a href="/hardware.html" class="btn btn-primary">⚙️ Explore Hardware</a>
+            <a href="/download.html" class="btn btn-secondary">⬇ Download Firmware</a>
+            <a href="/node.html" class="btn btn-secondary">🥧 Run a Node</a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="container">
+        <div class="stats">
+            <div class="stat"><div class="value">1.2W</div><div class="label">Mining Power Per Device</div></div>
+            <div class="stat"><div class="value">$5</div><div class="label">Entry Cost (ESP32)</div></div>
+            <div class="stat"><div class="value">0</div><div class="label">Grid Power Required</div></div>
+            <div class="stat"><div class="value">42M</div><div class="label">Total Supply (QZ)</div></div>
+        </div>
+    </div>
+
+    <!-- How Quartz Mining Works -->
+    <section id="how-it-works">
+        <div class="container">
+            <h2>How Quartz Mining Works</h2>
+            <p class="section-subtitle">Every block requires proof from a physical ESP32 chip. No hardware = no mining. From block 1.</p>
+            <div class="grid grid-3">
+                <div class="card"><div class="icon">🔐</div><h3>PUF Hardware Binding</h3><p>SRAM PUF reads genuine silicon entropy on cold boot. Unique per chip, unclonable, not stored anywhere. No PUF = no valid block.</p></div>
+                <div class="card"><div class="icon">🚫</div><h3>GPU-Proof</h3><p>Every block needs a PUF attestation response that only a physical ESP32 can produce. A GPU farm with zero chips produces zero blocks.</p></div>
+                <div class="card"><div class="icon">💚</div><h3>Ultra Low Power</h3><p>ESP32 draws 1.2W while mining. That's less than a phone charger. Solar, wind, USB — if it produces 1.2W, it can mine Quartz.</p></div>
+                <div class="card"><div class="icon">🛡️</div><h3>Quantum-Safe Wallets</h3><p>WOTS+ hash-based signatures. Immune to Shor's algorithm. No elliptic curves to break when quantum computers arrive.</p></div>
+                <div class="card"><div class="icon">📡</div><h3>ESP-NOW + LoRa Mesh</h3><p>ESP-NOW for LAN clusters (~200m, ~15 TPS ceiling, zero extra hardware). LoRa for WAN backbone (2–15km, off-grid). Mine with no internet at all.</p></div>
+                <div class="card"><div class="icon">🧅</div><h3>Tor Hidden Service</h3><p>Node reachable via Tor onion address. Privacy at the network layer — the strongest opsec for IoT money.</p></div>
+                <div class="card"><div class="icon">🔧</div><h3>Open Source</h3><p>Firmware, protocol spec, reference node — all MIT licensed. No closed-source consensus, no proprietary tooling.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Teaser: Sub-page links -->
+    <section style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+        <div class="container">
+            <h2>Explore Quartz</h2>
+            <p class="section-subtitle">Dive deeper into each part of the protocol.</p>
+            <div class="grid grid-3">
+                <a href="/hardware.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">🔧</div>
+                    <h3>Hardware</h3>
+                    <p>ESP32 boards, hardware wallets, storage tiers, and pricing from $5 to $35.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/mining.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">⛏️</div>
+                    <h3>Mining</h3>
+                    <p>CrystalHash algorithm, PUF attestation, mesh mining pools, and quarantine economics.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/energy.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">⚡</div>
+                    <h3>Energy</h3>
+                    <p>Solar, wind, and LiFePO4 storage. How 1.2W makes off-grid mining practical at any scale.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/tokenomics.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">💰</div>
+                    <h3>Tokenomics</h3>
+                    <p>Fair launch, no premine, no dev fund. Block rewards, halving eras, and supply curve.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/iot.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">🌡️</div>
+                    <h3>IoT Applications</h3>
+                    <p>Sensor logging on-chain, pay-per-use hardware, and off-grid mesh deployments using ESP32s and Helium bridges.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/agents.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">🤖</div>
+                    <h3>Agents</h3>
+                    <p>Autonomous ESP32 agents that mine, spend, and act. Silicon with a wallet and sensors.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/security.html" class="card" style="text-decoration:none;color:inherit;">
+                    <div class="icon">🛡️</div>
+                    <h3>Security</h3>
+                    <p>Quantum-safe WOTS+ wallets, hardware attestation, slashing, and anti-emulator defenses.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+                <a href="/bridge.html" class="card" style="text-decoration:none;color:inherit;border-color: var(--orange);">
+                    <div class="icon">📡</div>
+                    <h3>Bridge <span style="font-size:12px;color:var(--orange);">NEW</span></h3>
+                    <p>Turn your idle Helium hotspot into a Quartz mesh relay. Bobcat, RAK, SenseCAP — no new hardware needed.</p>
+                    <p style="color:var(--orange);font-size:14px;font-weight:600;margin-top:12px;">Learn more →</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section id="roadmap" style="background: var(--surface); border-top: 1px solid var(--border);">
+        <div class="container">
+            <h2>Roadmap 🗺️</h2>
+            <p class="section-subtitle">Building Quartz one crystal at a time.</p>
+            <div>
+                <div class="roadmap-item done"><div class="roadmap-check done">✓</div><div><h4>Protocol Design & Whitepaper</h4><p>CrystalHash spec, block/tx structures, tokenomics — all defined.</p></div></div>
+                <div class="roadmap-item done"><div class="roadmap-check done">✓</div><div><h4>Reference Implementation</h4><p>Python reference node, ESP32 firmware, 382+ passing tests.</p></div></div>
+                <div class="roadmap-item done"><div class="roadmap-check done">✓</div><div><h4>Browser Flasher & Website</h4><p>Web-based ESP32 flashing, documentation, community portal.</p></div></div>
+                <div class="roadmap-item done"><div class="roadmap-check done">✓</div><div><h4>Testnet Launch</h4><p>Public testnet live — block height 23,300+, real ESP32-C3 hardware mining at 28–32 H/s, block explorer, wallet PWA.</p></div></div>
+                <div class="roadmap-item active"><div class="roadmap-check active">●</div><div><h4>Radio Mesh Networking</h4><p>ESP-NOW cluster layer (LAN, ~15 TPS ceiling) + LoRa backbone (WAN, 2–15km). Radio bench firmware built and published; awaiting two-board hardware test.</p></div></div>
+                <div class="roadmap-item active"><div class="roadmap-check active">●</div><div><h4>Node Infrastructure</h4><p>Tor hidden service live. Raspberry Pi standby node bundle published. Multi-node sync hardening next.</p></div></div>
+                <div class="roadmap-item"><div class="roadmap-check"></div><div><h4>Mainnet Launch</h4><p>Genesis block, wallet app, exchange integration.</p></div></div>
+                <div class="roadmap-item"><div class="roadmap-check"></div><div><h4>Ecosystem</h4><p>Solar mining kits, ESP32 mesh expanders, mobile wallet, hardware wallet support.</p></div></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No dev fund · <a href="/terms.html" style="color: var(--muted);">Terms & Disclaimers</a></p>
+            <p style="margin-top: 8px; font-size: 12px;">Quantum-safe wallets. Hardware-bound mining. $15 entry cost.</p>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--muted); max-width: 600px;">Quartz is a decentralized, open-source protocol. No entity controls, issues, or redeems QZ. This website provides information and non-custodial tools only. Nothing here is financial advice. QZ has no guaranteed value.</p>
+        </div>
+    </footer>
+</body>
+</html>

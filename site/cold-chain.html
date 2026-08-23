@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cold Chain Monitor — Quartz (QZ)</title>
+    <meta name="description" content="Live sensor data logged on the Quartz blockchain. Temperature readings from cold-chain monitoring demo, queryable in real-time.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        .live-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--surface); border: 1px solid var(--accent);
+            border-radius: 100px; padding: 6px 14px;
+            font-size: 13px; color: var(--accent); font-weight: 600;
+        }
+        .live-badge .pulse {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0,212,170,0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0,212,170,0); }
+            100% { box-shadow: 0 0 0 0 rgba(0,212,170,0); }
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+            margin: 24px 0;
+        }
+        @media (max-width: 768px) { .sensor-grid { grid-template-columns: 1fr; } }
+
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .stat-value {
+            font-size: 36px;
+            font-weight: 800;
+            color: var(--accent);
+            margin: 8px 0;
+        }
+        .stat-card .stat-label {
+            font-size: 13px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .stat-card.alert .stat-value { color: var(--orange); }
+
+        .chart-container {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px 20px;
+            min-height: 300px;
+            position: relative;
+        }
+        .chart-container canvas {
+            width: 100% !important;
+            height: 280px !important;
+        }
+        .chart-container .chart-empty {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--muted); font-size: 15px;
+        }
+
+        .readings-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            margin-top: 16px;
+        }
+        .readings-table th {
+            background: var(--surface);
+            color: var(--accent);
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 2px solid var(--border);
+            font-size: 13px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        .readings-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 13px;
+        }
+        .readings-table tr:hover td { background: var(--surface); }
+        .readings-table .temp-ok { color: var(--accent); font-weight: 600; }
+        .readings-table .temp-warm { color: var(--orange); font-weight: 600; }
+        .readings-table .temp-bad { color: #ff4444; font-weight: 600; }
+        .readings-table .txid { color: var(--muted); font-size: 12px; }
+        .readings-table .device { color: var(--purple); }
+
+        .data-raw {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 16px;
+            overflow-x: auto;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .refresh-info {
+            color: var(--muted);
+            font-size: 13px;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .refresh-info button {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 12px;
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .refresh-info button:hover { border-color: var(--accent); }
+
+        .query-bar {
+            display: flex;
+            gap: 12px;
+            margin: 16px 0;
+            flex-wrap: wrap;
+        }
+        .query-bar select, .query-bar input {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: var(--font);
+        }
+        .query-bar select:focus, .query-bar input:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/setup.html">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero" style="padding: 60px 24px 30px;">
+        <div class="live-badge"><div class="pulse"></div>Live · Querying Quartz testnet</div>
+        <h1 style="font-size: 28px; margin-top: 16px;">Cold Chain Monitor</h1>
+        <p class="tagline" style="font-size: 16px;">Sensor readings logged on the Quartz blockchain. Every data point is an immutable on-chain transaction.</p>
+    </div>
+
+    <div class="container" style="padding-bottom: 60px;">
+
+        <!-- Query bar -->
+        <div class="query-bar">
+            <select id="deviceFilter">
+                <option value="">All devices</option>
+            </select>
+            <select id="limitFilter">
+                <option value="50">Last 50 readings</option>
+                <option value="100" selected>Last 100 readings</option>
+                <option value="200">Last 200 readings</option>
+                <option value="500">All readings</option>
+            </select>
+            <button id="refreshBtn" style="background: var(--accent); color: var(--bg); border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer;">⟳ Refresh</button>
+        </div>
+
+        <!-- Stats + Chart -->
+        <div class="sensor-grid">
+            <!-- Stats column -->
+            <div>
+                <div class="stat-card" id="statCurrent">
+                    <div class="stat-label">Latest Reading</div>
+                    <div class="stat-value" id="currentTemp">—</div>
+                </div>
+                <div class="stat-card" id="statAvg" style="margin-top: 12px;">
+                    <div class="stat-label">Average Temp</div>
+                    <div class="stat-value" id="avgTemp">—</div>
+                </div>
+                <div class="stat-card" id="statReadings" style="margin-top: 12px;">
+                    <div class="stat-label">Total Readings</div>
+                    <div class="stat-value" id="totalReadings" style="font-size: 28px;">—</div>
+                </div>
+                <div class="stat-card" id="statAlerts" style="margin-top: 12px;">
+                    <div class="stat-label">Above 4°C (alerts)</div>
+                    <div class="stat-value" id="alertCount" style="font-size: 28px;">—</div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="chart-container">
+                <canvas id="tempChart"></canvas>
+                <div class="chart-empty" id="chartEmpty">Loading data from testnet...</div>
+            </div>
+        </div>
+
+        <!-- Readings table -->
+        <div class="refresh-info">
+            <span id="lastUpdate">Last updated: never</span>
+            <span><span id="autoRefreshLabel">Auto-refresh: every 30s</span></span>
+        </div>
+
+        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; max-height: 400px; overflow-y: auto;">
+            <table class="readings-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Device</th>
+                        <th>Temp</th>
+                        <th>Humidity</th>
+                        <th>Location</th>
+                        <th>TXID</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="readingsBody">
+                    <tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 30px;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Raw data -->
+        <h3 style="color: var(--accent2); margin-top: 32px; font-size: 16px;">Raw API Response</h3>
+        <p style="color: var(--muted); font-size: 14px; margin-bottom: 8px;">
+            GET <code style="font-family: var(--mono); color: var(--accent);">https://quartzchain.net/api/v1/messages</code>
+        </p>
+        <div class="data-raw" id="rawData">Loading...</div>
+
+        <!-- How to contribute -->
+        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-top: 32px;">
+            <h3 style="color: var(--accent2); font-size: 18px; margin-bottom: 12px;">Add your own sensor data</h3>
+            <p style="color: var(--muted); font-size: 15px; margin-bottom: 12px;">
+                Run the sensor logger to add your own readings to this dashboard. It takes 10 seconds:
+            </p>
+            <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: var(--mono); font-size: 13px; color: var(--accent); overflow-x: auto;">
+# Download and run (no hardware needed):
+curl -sO https://quartzchain.net/sensor_logger.py
+python3 sensor_logger.py --device my-sensor-01 --location my-location --simulated --interval 60
+
+# Then refresh this page — your readings will appear.
+            </div>
+            <p style="color: var(--muted); font-size: 14px; margin-top: 12px;">
+                <a href="/iot.html" style="color: var(--accent);">← Back to IoT page</a> ·
+                <a href="/sensor_logger.py" style="color: var(--accent);">Download sensor_logger.py</a>
+            </p>
+        </div>
+    </div>
+
+    <footer style="border-top: 1px solid var(--border); padding: 30px 20px; text-align: center; color: var(--muted); font-size: 14px;">
+        <p>🔮 Quartz (QZ) — Sensor data on the blockchain, not in the cloud.</p>
+        <p style="margin-top: 8px;">
+            <a href="/" style="color: var(--accent); text-decoration: none;">Home</a> ·
+            <a href="/iot.html" style="color: var(--muted); text-decoration: none;">IoT</a> ·
+            <a href="/explorer/" style="color: var(--muted); text-decoration: none;">Explorer</a> ·
+            <a href="/download.html" style="color: var(--muted); text-decoration: none;">Download</a>
+        </p>
+    </footer>
+
+    <script>
+        const API_URL = 'https://quartzchain.net/api/v1/messages';
+        let allReadings = [];
+        let chart = null;
+        let autoRefreshTimer = null;
+
+        // Parse a sensor message: "TEMP:3.3C|DEV:cold-chain-001|TS:1787054873|HUM:56.5%|LOC:truck-A"
+        function parseReading(msg) {
+            const text = msg.data_text || '';
+            const parts = {};
+            text.split('|').forEach(p => {
+                const [key, ...rest] = p.split(':');
+                parts[key.trim()] = rest.join(':').trim();
+            });
+
+            if (!parts.TEMP) return null;
+
+            return {
+                temp: parseFloat(parts.TEMP.replace('C', '')),
+                device: parts.DEV || 'unknown',
+                humidity: parts.HUM ? parseFloat(parts.HUM.replace('%', '')) : null,
+                location: parts.LOC || '',
+                timestamp: msg.timestamp || (parts.TS ? parseInt(parts.TS) : 0),
+                txid: msg.txid || '',
+                from: msg.from || '',
+            };
+        }
+
+        function tempClass(temp) {
+            if (temp > 6) return 'temp-bad';
+            if (temp > 4) return 'temp-warm';
+            return 'temp-ok';
+        }
+
+        function tempStatus(temp) {
+            if (temp > 6) return '⚠️ ALERT';
+            if (temp > 4) return '⚡ Warning';
+            return '✅ OK';
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '—';
+            const d = new Date(ts * 1000);
+            return d.toLocaleString('en-US', {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+        }
+
+        async function fetchData() {
+            try {
+                const resp = await fetch(API_URL);
+                const data = await resp.json();
+
+                // Parse all sensor readings
+                const readings = (data.messages || [])
+                    .map(parseReading)
+                    .filter(r => r !== null)
+                    .sort((a, b) => b.timestamp - a.timestamp);
+
+                allReadings = readings;
+                renderData(readings);
+
+                // Also show raw API response
+                document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
+
+                document.getElementById('lastUpdate').textContent =
+                    'Last updated: ' + new Date().toLocaleTimeString();
+
+                // Hide chart empty state
+                if (readings.length > 0) {
+                    document.getElementById('chartEmpty').style.display = 'none';
+                }
+
+            } catch (err) {
+                console.error('Fetch error:', err);
+                document.getElementById('readingsBody').innerHTML =
+                    '<tr><td colspan="7" style="text-align:center;color:var(--orange);padding:30px;">Failed to load data. Is the testnet reachable?</td></tr>';
+            }
+        }
+
+        function renderData(readings) {
+            // Apply filters
+            const deviceFilter = document.getElementById('deviceFilter').value;
+            const limit = parseInt(document.getElementById('limitFilter').value);
+
+            let filtered = readings;
+            if (deviceFilter) {
+                filtered = filtered.filter(r => r.device === deviceFilter);
+            }
+            filtered = filtered.slice(0, limit);
+
+            // Update stats
+            if (filtered.length > 0) {
+                const temps = filtered.map(r => r.temp);
+                const current = temps[0];
+                const avg = temps.reduce((a, b) => a + b, 0) / temps.length;
+                const alerts = temps.filter(t => t > 4).length;
+
+                document.getElementById('currentTemp').textContent = current.toFixed(1) + '°C';
+                document.getElementById('avgTemp').textContent = avg.toFixed(1) + '°C';
+                document.getElementById('totalReadings').textContent = filtered.length;
+                document.getElementById('alertCount').textContent = alerts;
+
+                // Color the stat cards
+                const statCurrent = document.getElementById('statCurrent');
+                statCurrent.classList.toggle('alert', current > 4);
+                const statAlerts = document.getElementById('statAlerts');
+                statAlerts.classList.toggle('alert', alerts > 0);
+            } else {
+                document.getElementById('currentTemp').textContent = '—';
+                document.getElementById('avgTemp').textContent = '—';
+                document.getElementById('totalReadings').textContent = '0';
+                document.getElementById('alertCount').textContent = '0';
+            }
+
+            // Update device filter dropdown
+            const devices = [...new Set(readings.map(r => r.device))];
+            const dropdown = document.getElementById('deviceFilter');
+            const currentVal = dropdown.value;
+            dropdown.innerHTML = '<option value="">All devices</option>' +
+                devices.map(d => `<option value="${d}" ${d === currentVal ? 'selected' : ''}>${d}</option>`).join('');
+
+            // Render table
+            const tbody = document.getElementById('readingsBody');
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px;">No sensor readings found.<br>Run sensor_logger.py to add data.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(r => `
+                <tr>
+                    <td>${formatTime(r.timestamp)}</td>
+                    <td class="device">${r.device}</td>
+                    <td class="${tempClass(r.temp)}">${r.temp.toFixed(1)}°C</td>
+                    <td>${r.humidity !== null ? r.humidity.toFixed(1) + '%' : '—'}</td>
+                    <td>${r.location || '—'}</td>
+                    <td class="txid">${r.txid.substring(0, 12)}...</td>
+                    <td>${tempStatus(r.temp)}</td>
+                </tr>
+            `).join('');
+
+            // Draw chart
+            drawChart(filtered);
+        }
+
+        function drawChart(readings) {
+            const canvas = document.getElementById('tempChart');
+            const ctx = canvas.getContext('2d');
+
+            // Sort chronologically for chart
+            const sorted = [...readings].sort((a, b) => a.timestamp - b.timestamp);
+
+            if (sorted.length === 0) return;
+
+            // Set canvas resolution
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = 280 * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            const w = rect.width;
+            const h = 280;
+            const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+
+            // Find data range
+            const temps = sorted.map(r => r.temp);
+            let minTemp = Math.min(...temps, 0) - 1;
+            let maxTemp = Math.max(...temps, 8) + 1;
+            const tempRange = maxTemp - minTemp || 1;
+
+            const minTs = sorted[0].timestamp;
+            const maxTs = sorted[sorted.length - 1].timestamp;
+            const tsRange = (maxTs - minTs) || 1;
+
+            // Clear
+            ctx.clearRect(0, 0, w, h);
+
+            // Draw grid lines
+            ctx.strokeStyle = 'rgba(42, 42, 62, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.font = '11px monospace';
+            ctx.fillStyle = '#8888a0';
+
+            // Horizontal grid (temperature)
+            const tempSteps = 5;
+            for (let i = 0; i <= tempSteps; i++) {
+                const y = padding.top + (chartH / tempSteps) * i;
+                const temp = maxTemp - (tempRange / tempSteps) * i;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(w - padding.right, y);
+                ctx.stroke();
+                ctx.textAlign = 'right';
+                ctx.fillText(temp.toFixed(1) + '°', padding.left - 8, y + 4);
+            }
+
+            // Draw 4°C threshold line (cold chain limit)
+            const thresholdY = padding.top + chartH * (1 - (4 - minTemp) / tempRange);
+            ctx.strokeStyle = 'rgba(255, 107, 53, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, thresholdY);
+            ctx.lineTo(w - padding.right, thresholdY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(255, 107, 53, 0.7)';
+            ctx.textAlign = 'left';
+            ctx.fillText('4°C threshold', padding.left + 4, thresholdY - 4);
+
+            // Draw data line
+            ctx.strokeStyle = '#00d4aa';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            sorted.forEach((r, i) => {
+                const x = padding.left + (chartW / (sorted.length - 1 || 1)) * i;
+                const y = padding.top + chartH * (1 - (r.temp - minTemp) / tempRange);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Draw data points
+            sorted.forEach((r, i) => {
+                const x = padding.left + (chartW / (sorted.length - 1 || 1)) * i;
+                const y = padding.top + chartH * (1 - (r.temp - minTemp) / tempRange);
+                ctx.fillStyle = r.temp > 4 ? '#ff6b35' : '#00d4aa';
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // X-axis labels (time)
+            ctx.fillStyle = '#8888a0';
+            ctx.textAlign = 'center';
+            const labelSteps = Math.min(6, sorted.length);
+            for (let i = 0; i < labelSteps; i++) {
+                const idx = Math.floor((sorted.length - 1) * i / (labelSteps - 1 || 1));
+                const x = padding.left + (chartW / (sorted.length - 1 || 1)) * idx;
+                const d = new Date(sorted[idx].timestamp * 1000);
+                const label = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                ctx.fillText(label, x, h - padding.bottom + 18);
+            }
+        }
+
+        // Event handlers
+        document.getElementById('refreshBtn').addEventListener('click', fetchData);
+        document.getElementById('deviceFilter').addEventListener('change', () => renderData(allReadings));
+        document.getElementById('limitFilter').addEventListener('change', () => renderData(allReadings));
+
+        // Initial load
+        fetchData();
+
+        // Auto-refresh every 30 seconds
+        autoRefreshTimer = setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz — Mining & Protocol</title>
+    <meta name="description" content="CrystalHash proof-of-work, PUF-attested mining, ESP32-only hardware binding, mesh mining pools, and quarry release schedules.">
+    <link rel="stylesheet" href="/css/quartz.css">
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero">
+        <div class="hero-badge"><div class="dot"></div>PUF-attested · GPU-proof · Mesh-pooled</div>
+        <div class="crystal">⛏️</div>
+        <h1>Mining &amp; Protocol</h1>
+        <p class="tagline">PUF-attested, GPU-proof, mesh-pooled.</p>
+    </div>
+
+    <div class="container">
+
+        <!-- CrystalHash -->
+        <section id="crystalhash">
+            <h2>CrystalHash 🔬</h2>
+            <p class="section-subtitle">The proof-of-work algorithm that makes ESP32 the only viable mining hardware.</p>
+            <div class="grid grid-2">
+                <div>
+                    <h3 style="margin-bottom: 16px;">How it works</h3>
+<pre><span style="color: var(--muted);"># Phase 1: AES-256 fills 256KB scratchpad</span>
+<span style="color: var(--muted);"># Uses ESP32 hardware crypto accelerator</span>
+scratchpad = <span style="color: var(--accent);">aes_256_ctr</span>(block_header, nonce)
+
+<span style="color: var(--muted);"># Phase 2: 64 rounds of memory-hard mixing</span>
+<span style="color: var(--purple);">for</span> round <span style="color: var(--purple);">in</span> <span style="color: var(--accent);">range</span>(64):
+    idx = <span style="color: var(--accent);">hash</span>(state) % (256KB / 32)
+    state ^= scratchpad[idx]
+    state = <span style="color: var(--accent);">sha256</span>(state)
+
+<span style="color: var(--muted);"># Phase 3: Physical Unclonable Function</span>
+<span style="color: var(--muted);"># Flash cache timing — unique per chip</span>
+puf = <span style="color: var(--accent);">measure_flash_timing</span>()
+state ^= puf
+
+<span style="color: var(--muted);"># Phase 4: Final hash</span>
+<span style="color: var(--purple);">return</span> <span style="color: var(--accent);">sha256</span>(state + nonce)</pre>
+                </div>
+                <div>
+                    <h3 style="margin-bottom: 16px;">Why you can't cheat</h3>
+                    <div class="card" style="margin-bottom: 16px;"><div class="icon">🚫</div><h3>Anti-ASIC</h3><p>256KB scratchpad is too small to justify custom silicon, and the PUF requires physical ESP32 chips.</p></div>
+                    <div class="card" style="margin-bottom: 16px;"><div class="icon">🖥️</div><h3>Anti-GPU</h3><p>Memory access pattern doesn't map to GPU parallelism. Per-thread 256KB is wasteful on VRAM architecture.</p></div>
+                    <div class="card"><div class="icon">💡</div><h3>Anti-CPU</h3><p>Software AES/SHA on desktop CPUs is slower than ESP32's dedicated hardware for this chained pattern.</p></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quantum-Safe & Hardware-Bound -->
+        <section id="quantum" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+            <h2>Quantum-Safe &amp; Hardware-Bound 🛡️</h2>
+            <p class="section-subtitle">Two technologies no other cryptocurrency combines at this price point.</p>
+
+            <div class="grid grid-2" style="margin-bottom: 32px;">
+                <div class="card" style="border-color: var(--accent);">
+                    <div class="icon">🔬</div>
+                    <h3>PUF Mining</h3>
+                    <p style="margin-bottom: 12px;">Every ESP32 chip has a unique silicon fingerprint from manufacturing variations in SRAM cells. This Physical Unclonable Function (PUF) generates a device-specific key that is:</p>
+                    <ul style="color: var(--muted); font-size: 14px; padding-left: 20px; line-height: 1.8;">
+                        <li><strong style="color: var(--text);">Impossible to clone</strong> — unique per chip</li>
+                        <li><strong style="color: var(--text);">Impossible to simulate</strong> — requires physical silicon</li>
+                        <li><strong style="color: var(--text);">Stable</strong> — fuzzy extractor corrects bit drift</li>
+                        <li><strong style="color: var(--text);">Mixed into every block hash</strong> — GPU can't compete</li>
+                    </ul>
+                    <p style="margin-top: 12px; font-size: 13px; color: var(--accent);">→ Mining is physically impossible without a real ESP32</p>
+                </div>
+                <div class="card" style="border-color: var(--purple);">
+                    <div class="icon">⚛️</div>
+                    <h3>WOTS+ Quantum Wallets</h3>
+                    <p style="margin-bottom: 12px;">Quartz uses hash-based signatures instead of elliptic curves. WOTS+ (Winternitz One-Time Signatures) with Merkle trees provide:</p>
+                    <ul style="color: var(--muted); font-size: 14px; padding-left: 20px; line-height: 1.8;">
+                        <li><strong style="color: var(--text);">Immune to Shor's algorithm</strong> — the quantum attack that breaks RSA, ECC, and Ed25519</li>
+                        <li><strong style="color: var(--text);">Only needs SHA-256</strong> — no exotic math, battle-tested</li>
+                        <li><strong style="color: var(--text);">256 signatures per address</strong> — Merkle tree aggregation</li>
+                        <li><strong style="color: var(--text);">~128-bit classical security</strong> — 64-bit post-Grover (still infeasible)</li>
+                    </ul>
+                    <p style="margin-top: 12px; font-size: 13px; color: var(--purple);">→ Your wallet survives the quantum computing era</p>
+                </div>
+            </div>
+
+            <div style="padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
+                <h3 style="margin-bottom: 16px;">Why this combination matters</h3>
+                <p style="color: var(--muted); margin-bottom: 12px;">Bitcoin's wallets will be broken by quantum computers. Helium's can be too. No project combines <strong style="color: var(--accent);">hardware-bound mining</strong> (prevents GPU farms) with <strong style="color: var(--purple);">quantum-safe wallets</strong> (prevents future key theft) at a <strong style="color: var(--text);">$15 price point</strong>.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px;">
+                    <div style="padding: 12px; background: var(--bg); border-radius: 8px; text-align: center;">
+                        <div style="color: var(--accent); font-size: 14px; font-weight: 700;">PUF Key</div>
+                        <div style="color: var(--muted); font-size: 12px;">256-bit, per-chip unique<br>Fuzzy extractor + NVS</div>
+                    </div>
+                    <div style="padding: 12px; background: var(--bg); border-radius: 8px; text-align: center;">
+                        <div style="color: var(--purple); font-size: 14px; font-weight: 700;">WOTS+ Sig</div>
+                        <div style="color: var(--muted); font-size: 12px;">2,404 bytes<br>67 SHA-256 chains</div>
+                    </div>
+                    <div style="padding: 12px; background: var(--bg); border-radius: 8px; text-align: center;">
+                        <div style="color: var(--orange); font-size: 14px; font-weight: 700;">Merkle Tree</div>
+                        <div style="color: var(--muted); font-size: 12px;">Height 8<br>256 one-time keys</div>
+                    </div>
+                    <div style="padding: 12px; background: var(--bg); border-radius: 8px; text-align: center;">
+                        <div style="color: #8888ff; font-size: 14px; font-weight: 700;">Attestation</div>
+                        <div style="color: var(--muted); font-size: 12px;">SHA256(header + PUF + nonce + salt)<br>Per-block</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ESP32-Only Mining -->
+        <section id="esp32-only">
+            <h2>ESP32-Only Mining 🔒</h2>
+            <p class="section-subtitle">Hardware attestation prevents PC/emulator mining. Only real ESP32 silicon earns rewards.</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-top: 32px;">
+                <div class="card">
+                    <div class="icon">🔑</div>
+                    <h3>eFuse Key</h3>
+                    <p>Each ESP32-S3 has a factory-burned key in silicon. Cannot be read by software, JTAG, or firmware. Only the hardware HMAC engine can use it.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">✍️</div>
+                    <h3>Block Co-Signing</h3>
+                    <p>Every mined block needs an Ed25519 signature from the device's private key (encrypted NVS). A PC can find nonces fast but can't sign blocks.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚖️</div>
+                    <h3>Slashing</h3>
+                    <p>Double-signing at the same height produces verifiable evidence → permanent ban + forfeited rewards. Makes cheating irrational.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⏱️</div>
+                    <h3>Timing Protection</h3>
+                    <p>Blocks arriving faster than ESP32 hardware can compute = auto-ban. Even with a PC doing PoW, the ESP32 can only sign so fast.</p>
+                </div>
+            </div>
+
+            <div style="margin-top: 32px; padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
+                <h3 style="margin-bottom: 12px;">Can a PC emulator mine Quartz?</h3>
+                <p style="color: var(--text); margin-bottom: 8px;"><strong style="color: #ef4444;">Without attestation:</strong> Yes — a PC with AES-NI is ~100x faster than ESP32. It would dominate.</p>
+                <p style="color: var(--text); margin-bottom: 8px;"><strong style="color: var(--accent);">With attestation:</strong> No. The PC can find nonces, but can't produce the eFuse-backed signature. The ESP32 must physically sign each block.</p>
+                <p style="color: var(--muted); font-size: 14px; margin-top: 12px;">Extracting the eFuse key requires decapping the chip and electron microscopy (~$10K+ per chip). Not economically viable.</p>
+            </div>
+        </section>
+
+        <!-- Mesh Mining Pools -->
+        <section id="pools" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+            <h2>Mesh Mining Pools 🌐</h2>
+            <p class="section-subtitle">No Slush Pool. No AntPool. No 2% fees. Just your LoRa neighbors.</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 32px;">
+                <div class="card">
+                    <div class="icon">🗳️</div>
+                    <h3>Rotating Coordinator</h3>
+                    <p>Every 16 blocks, the pool elects a new coordinator via deterministic hash election. Lowest SHA-256(pubkey || epoch) wins. No voting, no campaigning — pure math.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">💰</div>
+                    <h3>Same-Block Payout</h3>
+                    <p>When the pool finds a block, reward splits across all members in the coinbase TX. No payout thresholds, no waiting days for your share. 5% finder's bonus.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🚫</div>
+                    <h3>Zero Fees</h3>
+                    <p>No pool operator to pay. The coordinator is just a mesh neighbor doing a temporary job. No server, no subscription, no minimum payout.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🔒</div>
+                    <h3>Can't Be Censored</h3>
+                    <p>No single operator controls which transactions get mined. Quartz pools are decentralized by design. No chokepoints.</p>
+                </div>
+            </div>
+
+            <div style="margin-top: 32px; padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
+                <h3 style="margin-bottom: 16px;">Bitcoin vs Quartz Pools</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">
+                    <div style="color: var(--muted);">Centralized pool operator</div>
+                    <div style="color: var(--accent);">Rotating elected coordinator</div>
+                    <div style="color: var(--muted);">1–2.5% fee</div>
+                    <div style="color: var(--accent);">0% fee</div>
+                    <div style="color: var(--muted);">Requires internet</div>
+                    <div style="color: var(--accent);">LoRa mesh (offline)</div>
+                    <div style="color: var(--muted);">Daily payout threshold</div>
+                    <div style="color: var(--accent);">Same-block payout</div>
+                    <div style="color: var(--muted);">Pool knows your IP + hashrate</div>
+                    <div style="color: var(--accent);">Pseudonymous over radio</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quarries -->
+        <section id="quarries">
+            <h2>⛏️ Quarries — Slow Release Rewards</h2>
+            <p class="section-subtitle">Mined QZ enters circulation gradually. No instant dumping, no buried wallets. Just a rate limit that keeps 90% of mined supply off the market at any given time.</p>
+
+            <div class="grid grid-2" style="margin-bottom: 32px;">
+                <div class="card">
+                    <div class="icon">⏱️</div>
+                    <h3>15% Per Week</h3>
+                    <p>Quarries withdraw up to 15% of their balance per 7-day window. A quarry with 1,000 QZ can pull 150 QZ/week. ~7-week ramp to equilibrium, then withdraw weekly earnings every week. No staking, no lockup — just a slow faucet.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🚲</div>
+                    <h3>Works for One or 10,000</h3>
+                    <p>Single miner with one ESP32? You're a quarry of one — mine to your address, withdraw weekly. Road operator with 500 embedded nodes? Same model, same rate limit, no digging up asphalt.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🛡️</div>
+                    <h3>Theft-Proof</h3>
+                    <p>Stealing a device doesn't give you the owner key. The quarry address is controlled by the owner alone. Devices are just workers — they don't hold spendable keys.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📈</div>
+                    <h3>Natural Scarcity</h3>
+                    <p>90% of mined QZ is always illiquid. Infrastructure operators withdraw monthly, leaving QZ sitting for weeks. No artificial lockups — just economic physics.</p>
+                </div>
+            </div>
+
+            <div style="padding: 24px; background: var(--card); border-radius: 16px; border: 1px solid var(--border);">
+                <h3 style="color: var(--accent); margin-bottom: 16px;">Example: Highway Operator</h3>
+                <p style="color: var(--muted); font-size: 14px; margin-bottom: 16px;">500 solar nodes × 28 H/s = 14,000 H/s. At current difficulty, ~42 QZ/block, ~120 QZ/day.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div><p style="color: var(--muted); font-size: 13px;">Daily mining</p><p style="color: var(--text); font-size: 24px; font-weight: 700;">~120 QZ</p></div>
+                    <div><p style="color: var(--muted); font-size: 13px;">Weekly mining</p><p style="color: var(--text); font-size: 24px; font-weight: 700;">~840 QZ</p></div>
+                    <div><p style="color: var(--muted); font-size: 13px;">Withdrawal limit</p><p style="color: var(--text); font-size: 24px; font-weight: 700;">840 QZ/wk</p></div>
+                    <div><p style="color: var(--muted); font-size: 13px;">Balance after 1 year</p><p style="color: var(--text); font-size: 24px; font-weight: 700;">~9,100 QZ</p></div>
+                </div>
+                <p style="color: var(--muted); font-size: 13px; margin-top: 16px;">Operator withdraws weekly for road maintenance costs. Remainder accumulates — sunk supply backing the network.</p>
+            </div>
+        </section>
+
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No dev fund · <a href="/terms.html" style="color: var(--muted);">Terms & Disclaimers</a></p>
+            <p style="margin-top: 8px; font-size: 12px;">Quantum-safe wallets. Hardware-bound mining. $15 entry cost.</p>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--muted); max-width: 600px;">Quartz is a decentralized, open-source protocol. No entity controls, issues, or redeems QZ. This website provides information and non-custodial tools only. Nothing here is financial advice. QZ has no guaranteed value.</p>
+        </div>
+    </footer>
+</body>
+</html>

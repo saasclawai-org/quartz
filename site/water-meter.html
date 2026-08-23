@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Meter Monitor — Quartz (QZ)</title>
+    <meta name="description" content="Live water meter data logged on the Quartz blockchain. Cumulative consumption, flow rates, and billing records — all immutable on-chain.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        .live-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--surface); border: 1px solid var(--accent);
+            border-radius: 100px; padding: 6px 14px;
+            font-size: 13px; color: var(--accent); font-weight: 600;
+        }
+        .live-badge .pulse {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent); animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0,212,170,0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0,212,170,0); }
+            100% { box-shadow: 0 0 0 0 rgba(0,212,170,0); }
+        }
+        .stat-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; text-align: center;
+        }
+        .stat-card .stat-value {
+            font-size: 32px; font-weight: 800; color: var(--accent); margin: 8px 0;
+        }
+        .stat-card .stat-label {
+            font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .readings-table {
+            width: 100%; border-collapse: collapse; font-size: 14px;
+        }
+        .readings-table th {
+            background: var(--surface); color: var(--accent); padding: 10px 14px;
+            text-align: left; border-bottom: 2px solid var(--border); font-size: 13px;
+            position: sticky; top: 0;
+        }
+        .readings-table td {
+            padding: 10px 14px; border-bottom: 1px solid var(--border);
+            color: var(--text); font-family: var(--mono); font-size: 13px;
+        }
+        .readings-table tr:hover td { background: var(--surface); }
+        .data-raw {
+            background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+            padding: 14px 16px; font-family: var(--mono); font-size: 12px;
+            color: var(--muted); margin-top: 16px; overflow-x: auto; max-height: 200px; overflow-y: auto;
+        }
+        .chart-container {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 24px 20px; min-height: 300px; position: relative;
+        }
+        .chart-container canvas { width: 100% !important; height: 280px !important; }
+        .chart-container .chart-empty {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: var(--muted); font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a><a href="/mining.html">Mining</a><a href="/energy.html">Energy</a><a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a><a href="/tokenomics.html">Tokenomics</a><a href="/agents.html">Agents</a><a href="/security.html">Security</a><a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a><a href="/explorer/">Explorer</a><a href="/names.html">Names</a><a href="/wallet/">Wallet</a><a href="/download.html">Download</a><a href="/setup.html">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero" style="padding: 60px 24px 30px;">
+        <div class="live-badge"><div class="pulse"></div>Live · Querying Quartz testnet</div>
+        <h1 style="font-size: 28px; margin-top: 16px;">💧 Water Meter Monitor</h1>
+        <p class="tagline" style="font-size: 16px;">Municipal water consumption logged on the Quartz blockchain. Tamper-proof billing records — no database to dispute.</p>
+    </div>
+
+    <div class="container" style="padding-bottom: 60px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin:24px 0;">
+            <div class="stat-card"><div class="stat-label">Total Volume</div><div class="stat-value" id="totalVol">—</div></div>
+            <div class="stat-card"><div class="stat-label">Current Flow</div><div class="stat-value" id="curFlow">—</div></div>
+            <div class="stat-card"><div class="stat-label">Readings</div><div class="stat-value" id="totalReadings" style="font-size:28px">—</div></div>
+            <div class="stat-card"><div class="stat-label">Est. Daily Cost</div><div class="stat-value" id="dailyCost" style="font-size:28px">—</div></div>
+        </div>
+
+        <div class="chart-container" style="margin-bottom:20px;">
+            <canvas id="volChart"></canvas>
+            <div class="chart-empty" id="chartEmpty">Loading...</div>
+        </div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;max-height:400px;overflow-y:auto;">
+            <table class="readings-table">
+                <thead><tr><th>Time</th><th>Device</th><th>Volume (L)</th><th>Flow (L/min)</th><th>Location</th><th>TXID</th></tr></thead>
+                <tbody id="readingsBody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px;">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:24px;">
+            <h3 style="color:var(--accent2);font-size:18px;margin-bottom:12px;">Run your own water meter</h3>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:13px;color:var(--accent);overflow-x:auto;">
+curl -sO https://quartzchain.net/water_meter_demo.py
+python3 water_meter_demo.py --device wm-002 --location my-home --simulated --interval 60
+            </div>
+            <p style="color:var(--muted);font-size:14px;margin-top:12px;">
+                <a href="/water_meter_demo.py" style="color:var(--accent);">Download water_meter_demo.py</a> ·
+                <a href="/iot.html" style="color:var(--accent);">← IoT page</a>
+            </p>
+        </div>
+    </div>
+
+    <footer style="border-top:1px solid var(--border);padding:30px 20px;text-align:center;color:var(--muted);font-size:14px;">
+        <p>🔮 Quartz (QZ) — Water billing on the blockchain, not in a database.</p>
+    </footer>
+
+    <script>
+        const API = 'https://quartzchain.net/api/v1/messages';
+        let autoTimer = null;
+
+        function parseMeter(msg) {
+            const text = msg.data_text || '';
+            if (!text.startsWith('METER:')) return null;
+            const parts = {};
+            text.split('|').forEach(p => { const [k,...r] = p.split(':'); parts[k.trim()] = r.join(':').trim(); });
+            if (!parts.VOL) return null;
+            return {
+                volume: parseFloat(parts.VOL), flow: parseFloat(parts.FLOW || '0'),
+                device: parts.DEV || 'unknown', location: parts.LOC || '',
+                timestamp: msg.timestamp || (parts.TS ? parseInt(parts.TS) : 0),
+                txid: msg.txid || '',
+            };
+        }
+
+        function fmtTime(ts) {
+            if (!ts) return '—';
+            return new Date(ts * 1000).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }
+
+        async function fetchData() {
+            try {
+                const resp = await fetch(API);
+                const data = await resp.json();
+                const readings = (data.messages || []).map(parseMeter).filter(r => r).sort((a,b) => b.timestamp - a.timestamp);
+
+                if (readings.length === 0) {
+                    document.getElementById('readingsBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px;">No water meter data yet. Run water_meter_demo.py to add data.</td></tr>';
+                    return;
+                }
+
+                document.getElementById('totalVol').textContent = readings[0].volume.toFixed(1) + 'L';
+                document.getElementById('curFlow').textContent = readings[0].flow.toFixed(1) + ' L/min';
+                document.getElementById('totalReadings').textContent = readings.length;
+                const dailyEst = readings[0].flow * 60 * 24 / 1000;
+                const cost = dailyEst * 0.002; // $0.002/L example rate
+                document.getElementById('dailyCost').textContent = '$' + cost.toFixed(2);
+
+                document.getElementById('readingsBody').innerHTML = readings.map(r => `
+                    <tr><td>${fmtTime(r.timestamp)}</td><td>${r.device}</td>
+                    <td style="color:var(--accent);font-weight:600">${r.volume.toFixed(1)}</td>
+                    <td>${r.flow.toFixed(1)}</td><td>${r.location || '—'}</td>
+                    <td style="color:var(--muted);font-size:12px">${r.txid.substring(0,12)}...</td></tr>`).join('');
+
+                document.getElementById('chartEmpty').style.display = 'none';
+                drawChart(readings);
+            } catch(e) { console.error(e); }
+        }
+
+        function drawChart(readings) {
+            const canvas = document.getElementById('volChart');
+            const ctx = canvas.getContext('2d');
+            const sorted = [...readings].sort((a,b) => a.timestamp - b.timestamp);
+            if (sorted.length === 0) return;
+
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * devicePixelRatio;
+            canvas.height = 280 * devicePixelRatio;
+            ctx.scale(devicePixelRatio, devicePixelRatio);
+
+            const w = rect.width, h = 280, pad = {t:20,r:20,b:40,l:50};
+            const cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+
+            const vols = sorted.map(r => r.volume);
+            const flows = sorted.map(r => r.flow);
+            let maxVol = Math.max(...vols) * 1.1 || 1;
+            let maxFlow = Math.max(...flows) * 1.3 || 1;
+
+            ctx.clearRect(0,0,w,h);
+
+            // Grid
+            ctx.strokeStyle = 'rgba(42,42,62,0.5)'; ctx.lineWidth = 1;
+            ctx.font = '11px monospace'; ctx.fillStyle = '#8888a0';
+            for (let i = 0; i <= 5; i++) {
+                const y = pad.t + (ch/5)*i;
+                ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+                ctx.textAlign = 'right';
+                ctx.fillText((maxVol*(1-i/5)).toFixed(1)+'L', pad.l-8, y+4);
+            }
+
+            // Volume line (green)
+            ctx.strokeStyle = '#00d4aa'; ctx.lineWidth = 2; ctx.beginPath();
+            sorted.forEach((r,i) => {
+                const x = pad.l + (cw/(sorted.length-1||1))*i;
+                const y = pad.t + ch*(1 - r.volume/maxVol);
+                if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+            });
+            ctx.stroke();
+
+            // Flow bars (blue)
+            ctx.fillStyle = 'rgba(0,119,200,0.4)';
+            sorted.forEach((r,i) => {
+                const x = pad.l + (cw/(sorted.length-1||1))*i;
+                const barH = ch * (r.flow/maxFlow) * 0.3;
+                ctx.fillRect(x-3, h-pad.b-barH, 6, barH);
+            });
+
+            // Points
+            sorted.forEach((r,i) => {
+                const x = pad.l + (cw/(sorted.length-1||1))*i;
+                const y = pad.t + ch*(1 - r.volume/maxVol);
+                ctx.fillStyle = '#00d4aa'; ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+            });
+
+            // Labels
+            ctx.fillStyle = '#8888a0'; ctx.textAlign = 'center';
+            const steps = Math.min(6, sorted.length);
+            for (let i = 0; i < steps; i++) {
+                const idx = Math.floor((sorted.length-1)*i/(steps-1||1));
+                const x = pad.l + (cw/(sorted.length-1||1))*idx;
+                const d = new Date(sorted[idx].timestamp*1000);
+                ctx.fillText(d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}), x, h-pad.b+18);
+            }
+        }
+
+        fetchData();
+        autoTimer = setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>

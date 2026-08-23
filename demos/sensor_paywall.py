@@ -212,7 +212,7 @@ Examples:
       --price 0.1 --device-id cold-01 --sensor ds18b20
         """,
     )
-    parser.add_argument('--node', default='https://quartz.preview.saasclaw.ai',
+    parser.add_argument('--node', default='https://quartzchain.net',
                         help='Quartz node URL')
     parser.add_argument('--address', required=True,
                         help='Device wallet address (receives payments)')

@@ -36,7 +36,7 @@ import sys
 import urllib.request
 import urllib.error
 
-DEFAULT_NODE = "https://quartz.preview.saasclaw.ai"
+DEFAULT_NODE = "https://quartzchain.net"
 REGISTRY_TO = "name:registry"
 KINDS = ("miner", "sensor", "station", "wallet", "dev", "exchange", "other")
 

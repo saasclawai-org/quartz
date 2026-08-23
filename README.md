@@ -2,7 +2,7 @@
 
 **The solar-minable cryptocurrency. Mine with a $5 ESP32 and a solar panel.**
 
-[Website](https://quartz.preview.saasclaw.ai) · [Block Explorer](https://quartz.preview.saasclaw.ai/explorer/) · [Wallet](https://quartz.preview.saasclaw.ai/wallet/) · [Whitepaper](docs/WHITEPAPER.md) · [Mainnet readiness](MAINNET.md)
+[Website](https://quartzchain.net) · [Block Explorer](https://quartzchain.net/explorer/) · [Wallet](https://quartzchain.net/wallet/) · [Whitepaper](docs/WHITEPAPER.md) · [Mainnet readiness](MAINNET.md)
 
 ---
 
@@ -178,7 +178,7 @@ idf.py -DSDKCONFIG=sdkconfig.heltec_lora32 build
 
 ### Full Setup Guide
 
-See **[setup guide](https://quartz.preview.saasclaw.ai/setup.html)** for the complete walkthrough.
+See **[setup guide](https://quartzchain.net/setup.html)** for the complete walkthrough.
 
 ### The Short Version
 
@@ -194,12 +194,12 @@ See **[setup guide](https://quartz.preview.saasclaw.ai/setup.html)** for the com
 
 ### Flash an ESP32
 
-Browser flasher (Chrome/Edge): <https://quartz.preview.saasclaw.ai/download.html>
+Browser flasher (Chrome/Edge): <https://quartzchain.net/download.html>
 
 Single merged image (easiest — flashes at 0x0, no toolchain needed; pick your board, wallet/settings in NVS survive a re-flash — do NOT `erase_flash`):
 
-- Classic ESP32 (WROOM/D0WD, e.g. DevKitC): [`quartz-esp32-merged.bin`](https://quartz.preview.saasclaw.ai/downloads/quartz-esp32-merged.bin)
-- ESP32-S3: [`quartz-s3-merged.bin`](https://quartz.preview.saasclaw.ai/downloads/quartz-s3-merged.bin)
+- Classic ESP32 (WROOM/D0WD, e.g. DevKitC): [`quartz-esp32-merged.bin`](https://quartzchain.net/downloads/quartz-esp32-merged.bin)
+- ESP32-S3: [`quartz-s3-merged.bin`](https://quartzchain.net/downloads/quartz-s3-merged.bin)
 
 ```bash
 pip install esptool
@@ -230,7 +230,7 @@ install — continuously p2p-synced chain, mining gateway for your ESP32s,
 and autonomous block-building if the rest of the network is unreachable.
 
 ```bash
-curl -LO https://quartz.preview.saasclaw.ai/downloads/quartz-pi-node.tar.gz
+curl -LO https://quartzchain.net/downloads/quartz-pi-node.tar.gz
 tar xzf quartz-pi-node.tar.gz && cd quartz-pi-node && sudo bash install.sh
 ```
 
@@ -336,9 +336,9 @@ MIT — see [LICENSE](LICENSE).
 
 ## Links
 
-- Website: https://quartz.preview.saasclaw.ai
-- Block Explorer: https://quartz.preview.saasclaw.ai/explorer/
-- Wallet: https://quartz.preview.saasclaw.ai/wallet/
+- Website: https://quartzchain.net
+- Block Explorer: https://quartzchain.net/explorer/
+- Wallet: https://quartzchain.net/wallet/
 - Whitepaper: [docs/WHITEPAPER.md](docs/WHITEPAPER.md)
 
 ---

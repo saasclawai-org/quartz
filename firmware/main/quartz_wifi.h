@@ -19,7 +19,7 @@
  * -DNODE_HOST=\"192.168.1.50\" (e.g. your own Raspberry Pi gateway)
  * or edit the default here and rebuild. */
 #ifndef NODE_HOST
-#define NODE_HOST   "quartz.preview.saasclaw.ai"
+#define NODE_HOST   "quartzchain.net"
 #endif
 
 #ifdef __cplusplus

@@ -1,0 +1,372 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quartz — M5Stack Core Wiring Diagram</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f8fafc;
+    --fg: #172033;
+    --muted: #5b6475;
+    --line: #64748b;
+    --neutral: #e2e8f0;
+    --input: #bfdbfe;
+    --process: #c7d2fe;
+    --storage: #99f6e4;
+    --external: #fde68a;
+    --risk: #fecaca;
+    --accent: #00d4aa;
+    --relay: #ff6b35;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --fg: #e5e7eb;
+      --muted: #a3adbd;
+      --line: #94a3b8;
+      --neutral: #334155;
+      --input: #1d4ed8;
+      --process: #4338ca;
+      --storage: #0f766e;
+      --external: #92400e;
+      --risk: #991b1b;
+      --accent: #00d4aa;
+      --relay: #ff6b35;
+    }
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main {
+    max-width: 980px;
+    margin: 32px auto;
+    padding: 0 20px;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .title { font-size: 22px; font-weight: 700; fill: var(--fg); }
+  .label { font-size: 14px; font-weight: 600; fill: var(--fg); }
+  .small { font-size: 12px; fill: var(--muted); }
+  .pin-label { font-size: 11px; font-weight: 600; fill: var(--muted); font-family: monospace; }
+  .wire-label { font-size: 11px; font-weight: 700; fill: var(--fg); font-family: monospace; }
+  .node { stroke: var(--line); stroke-width: 1.5; }
+  .board { fill: var(--neutral); stroke: var(--line); stroke-width: 2; }
+  .relay-box { fill: var(--relay); stroke: var(--line); stroke-width: 2; }
+  .power { fill: var(--external); stroke: var(--line); stroke-width: 1.5; }
+  .load { fill: var(--storage); stroke: var(--line); stroke-width: 1.5; }
+  .screen { fill: #1a1a2e; stroke: var(--line); stroke-width: 1.5; }
+  .edge { stroke: var(--line); stroke-width: 2; fill: none; }
+  .wire-red { stroke: #e74c3c; stroke-width: 2.5; fill: none; }
+  .wire-black { stroke: #2c3e50; stroke-width: 2.5; fill: none; }
+  .wire-green { stroke: #27ae60; stroke-width: 2.5; fill: none; }
+  .wire-yellow { stroke: #f39c12; stroke-width: 2.5; fill: none; }
+  .wire-blue { stroke: #3498db; stroke-width: 2.5; fill: none; }
+  .zone { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 5; opacity: 0.5; }
+  .section-header { font-size: 16px; font-weight: 700; fill: var(--accent); }
+  .note-box { fill: var(--neutral); stroke: var(--line); stroke-width: 1; rx: 8; }
+  .quartz-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid #2a2a3e;
+    padding: 0;
+  }
+  .quartz-nav-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+  }
+  .quartz-nav-logo {
+    color: #00d4aa;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .quartz-nav-links {
+    display: flex;
+    gap: 24px;
+  }
+  .quartz-nav-links a {
+    color: #8888a0;
+    text-decoration: none;
+    font-size: 15px;
+    transition: color 0.2s;
+  }
+  .quartz-nav-links a:hover {
+    color: #e4e4ef;
+  }
+  .quartz-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+  .quartz-nav-toggle span { display: block; width: 24px; height: 2px; background: #e4e4ef; border-radius: 2px; }
+  .quartz-nav-toggle span + span { margin-top: 5px; }
+  @media (max-width: 900px) {
+    .quartz-nav-toggle { display: block; }
+    .quartz-nav-links { display: none; flex-direction: column; position: absolute; top: 100%; left: 0; right: 0; background: rgba(10,10,15,0.98); border-bottom: 1px solid #2a2a3e; padding: 0; }
+    .quartz-nav-links.open { display: flex; }
+    .quartz-nav-links a { padding: 14px 20px; border-bottom: 1px solid #2a2a3e; }
+  }
+</style>
+<nav class="quartz-nav">
+  <div class="quartz-nav-inner">
+    <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+    <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+      <a href="/hardware.html">Hardware</a>
+      <a href="/mining.html">Mining</a>
+      <a href="/energy.html">Energy</a>
+      <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/agents.html">Agents</a>
+      <a href="/security.html">Security</a>
+      <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+      <a href="/wallet/">Wallet</a>
+      <a href="/download.html">Download</a>
+      <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+    </div>
+  </div>
+</nav>
+<main>
+<h1 style="text-align:center; margin-bottom: 8px;">🔮 Quartz — M5Stack Core Wiring Guide</h1>
+<p style="text-align:center; color: var(--muted); margin-bottom: 32px;">Connect a relay module for QR-paymented physical control. $15 ESP32 + $2 relay = crypto vending machine.</p>
+
+<svg viewBox="0 0 900 700" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- === MARKERS === -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <marker id="dot" markerWidth="8" markerHeight="8" refX="4" refY="4">
+      <circle cx="4" cy="4" r="3" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- === M5STACK CORE BOARD === -->
+  <rect x="200" y="100" width="320" height="480" rx="12" class="board"/>
+  <text x="360" y="130" text-anchor="middle" class="title">M5Stack Core</text>
+  <text x="360" y="148" text-anchor="middle" class="small">ESP32-D0WDQ6 · 4MB Flash · ILI9341</text>
+
+  <!-- Screen representation -->
+  <rect x="230" y="165" width="260" height="180" rx="6" class="screen"/>
+  <text x="360" y="255" text-anchor="middle" fill="#00d4aa" font-size="16" font-weight="700">🔮 QUARTZ MINER</text>
+  <text x="360" y="275" text-anchor="middle" fill="#8888a0" font-size="12">28 H/s · Block #1581</text>
+  <text x="360" y="295" text-anchor="middle" fill="#8888a0" font-size="12">R82bmosEG3m2...TdY9q</text>
+  <text x="360" y="320" text-anchor="middle" fill="#ff6b35" font-size="11">⚡ QR PAYMENT READY</text>
+
+  <!-- Buttons -->
+  <circle cx="280" cy="540" r="18" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+  <text x="280" y="545" text-anchor="middle" class="small">A</text>
+  <circle cx="360" cy="540" r="18" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+  <text x="360" y="545" text-anchor="middle" class="small">B</text>
+  <circle cx="440" cy="540" r="18" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+  <text x="440" y="545" text-anchor="middle" class="small">C</text>
+  <text x="360" y="580" text-anchor="middle" class="small">[A] Wallet  [B] Mail  [C] Seed</text>
+
+  <!-- Side port labels (M5Stack Core has ports on the side) -->
+  <!-- Left side: PORT A (Grove) -->
+  <text x="195" y="370" text-anchor="end" class="pin-label">PORT A</text>
+  <text x="195" y="385" text-anchor="end" class="pin-label">(Grove)</text>
+  <!-- Right side: PORT B -->
+  <text x="545" y="370" class="pin-label">PORT B</text>
+  <text x="545" y="385" class="pin-label">(Grove)</text>
+  <!-- Bottom: USB-C -->
+  <text x="360" y="600" text-anchor="middle" class="pin-label">USB-C (Power + Serial)</text>
+
+  <!-- Internal pin breakout labels (shown on right side of board) -->
+  <line x1="520" y1="200" x2="560" y2="200" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="565" y="204" class="pin-label">GPIO23 (MOSI/SPI)</text>
+
+  <line x1="520" y1="225" x2="560" y2="225" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="565" y="229" class="pin-label">GPIO18 (CLK/SPI)</text>
+
+  <line x1="520" y1="250" x2="560" y2="250" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="565" y="254" class="pin-label">GPIO5 (CS/SPI)</text>
+
+  <line x1="520" y1="400" x2="560" y2="400" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="565" y="404" class="pin-label">GPIO26 → Relay Signal</text>
+
+  <line x1="520" y1="430" x2="560" y2="430" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="565" y="434" class="pin-label">3.3V → Relay VCC</text>
+
+  <line x1="520" y1="460" x2="560" y2="460" stroke="#64748b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="565" y="464" class="pin-label">GND → Relay GND</text>
+
+  <!-- === RELAY MODULE === -->
+  <rect x="640" y="360" width="160" height="140" rx="8" class="relay-box"/>
+  <text x="720" y="385" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">RELAY MODULE</text>
+  <text x="720" y="402" text-anchor="middle" fill="#fff" font-size="11">SRD-05VDC-SL-C or similar</text>
+
+  <!-- Relay pins -->
+  <circle cx="660" cy="425" r="4" fill="#2c3e50"/>
+  <text x="668" y="429" fill="#fff" font-size="10" font-family="monospace">SIG</text>
+
+  <circle cx="660" cy="445" r="4" fill="#e74c3c"/>
+  <text x="668" y="449" fill="#fff" font-size="10" font-family="monospace">VCC</text>
+
+  <circle cx="660" cy="465" r="4" fill="#2c3e50"/>
+  <text x="668" y="469" fill="#fff" font-size="10" font-family="monospace">GND</text>
+
+  <!-- Relay output terminals -->
+  <circle cx="780" cy="425" r="4" fill="#f39c12"/>
+  <text x="788" y="429" class="small">NO</text>
+
+  <circle cx="780" cy="445" r="4" fill="#f39c12"/>
+  <text x="788" y="449" class="small">COM</text>
+
+  <circle cx="780" cy="465" r="4" fill="#f39c12"/>
+  <text x="788" y="469" class="small">NC</text>
+
+  <!-- === WIRING: M5Stack → Relay === -->
+  <!-- GPIO26 → SIG (green wire) -->
+  <path d="M 520 400 L 590 400 L 590 425 L 660 425" class="wire-green"/>
+  <text x="595" y="395" class="wire-label" fill="#27ae60">GPIO26</text>
+
+  <!-- 3.3V → VCC (red wire) -->
+  <path d="M 520 430 L 600 430 L 600 445 L 660 445" class="wire-red"/>
+  <text x="605" y="425" class="wire-label" fill="#e74c3c">3.3V</text>
+
+  <!-- GND → GND (black wire) -->
+  <path d="M 520 460 L 590 460 L 590 465 L 660 465" class="wire-black"/>
+  <text x="595" y="475" class="wire-label" fill="#2c3e50">GND</text>
+
+  <!-- === EXTERNAL LOAD (Door/Lock/Vending) === -->
+  <rect x="660" y="540" width="160" height="80" rx="8" class="load"/>
+  <text x="740" y="565" text-anchor="middle" class="label">EXTERNAL LOAD</text>
+  <text x="740" y="582" text-anchor="middle" class="small">Door lock · Vending motor</text>
+  <text x="740" y="597" text-anchor="middle" class="small">EV charger · LED strip</text>
+
+  <!-- Wiring: Relay COM → Load -->
+  <path d="M 780 445 L 830 445 L 830 540" class="wire-yellow"/>
+  <text x="835" y="495" class="wire-label" fill="#f39c12">COM</text>
+
+  <!-- Wiring: Relay NO → Load -->
+  <path d="M 780 425 L 820 425 L 820 540" class="wire-yellow"/>
+  <text x="800" y="420" class="wire-label" fill="#f39c12">NO</text>
+
+  <!-- External power for load (12V/24V) -->
+  <rect x="660" y="650" width="160" height="40" rx="6" class="power"/>
+  <text x="740" y="675" text-anchor="middle" class="label">12V/24V PSU</text>
+
+  <path d="M 700 650 L 700 620 L 740 620" class="wire-blue"/>
+  <path d="M 780 650 L 780 620 L 740 620" class="wire-black"/>
+
+  <!-- === POWER (USB-C) === -->
+  <rect x="280" y="620" width="160" height="50" rx="6" class="power"/>
+  <text x="360" y="642" text-anchor="middle" class="label">USB-C 5V/2A</text>
+  <text x="360" y="658" text-anchor="middle" class="small">Any phone charger works</text>
+  <path d="M 360 600 L 360 620" class="wire-red"/>
+
+  <!-- === PHONE (QR SCAN) === -->
+  <rect x="50" y="200" width="120" height="200" rx="16" fill="#1a1a2e" stroke="#00d4aa" stroke-width="2"/>
+  <rect x="62" y="215" width="96" height="150" rx="4" fill="#0a0a0f"/>
+  <text x="110" y="245" text-anchor="middle" fill="#00d4aa" font-size="11" font-weight="700">📱 Phone</text>
+  <rect x="78" y="260" width="64" height="64" rx="4" fill="none" stroke="#00d4aa" stroke-width="1.5"/>
+  <text x="110" y="295" text-anchor="middle" fill="#00d4aa" font-size="9">QR SCAN</text>
+  <text x="110" y="340" text-anchor="middle" fill="#8888a0" font-size="9">Send QZ</text>
+  <text x="110" y="355" text-anchor="middle" fill="#8888a0" font-size="9">to device</text>
+
+  <!-- Dotted arrow from phone to M5Stack screen -->
+  <path d="M 170 280 L 225 280" stroke="#00d4aa" stroke-width="2" stroke-dasharray="4 3" fill="none" marker-end="url(#arrow)"/>
+  <text x="195" y="272" text-anchor="middle" fill="#00d4aa" font-size="10">scan</text>
+
+  <!-- === WiFI WAVES === -->
+  <path d="M 200 380 Q 180 360 160 340" stroke="#00d4aa" stroke-width="1.5" fill="none" opacity="0.4"/>
+  <path d="M 210 385 Q 180 350 150 315" stroke="#00d4aa" stroke-width="1.5" fill="none" opacity="0.3"/>
+  <text x="170" y="395" class="small" fill="#00d4aa">WiFi</text>
+
+  <!-- === LEGEND === -->
+  <rect x="50" y="460" width="120" height="180" rx="8" class="note-box"/>
+  <text x="110" y="480" text-anchor="middle" class="section-header">Parts List</text>
+  <text x="60" y="500" class="small">🔮 M5Stack Core — $35</text>
+  <text x="60" y="518" class="small">⚡ Relay module — $2</text>
+  <text x="60" y="536" class="small">🔌 USB-C charger — $5</text>
+  <text x="60" y="554" class="small">🔗 Jumper wires — $1</text>
+  <text x="60" y="572" class="small">🔒 12V door lock — $8</text>
+  <text x="60" y="600" class="small" fill="#00d4aa" font-weight="700">Total: ~$51</text>
+
+  <!-- === WIRE COLOR LEGEND === -->
+  <rect x="50" y="660" width="120" height="35" rx="6" fill="none" stroke="#64748b" stroke-width="0.5"/>
+  <line x1="58" y1="672" x2="75" y2="672" stroke="#27ae60" stroke-width="2.5"/>
+  <text x="80" y="676" class="small">Signal</text>
+  <line x1="58" y1="686" x2="75" y2="686" stroke="#e74c3c" stroke-width="2.5"/>
+  <text x="80" y="690" class="small">Power</text>
+
+  <!-- === FLOW ARROW (Relay → Load) === -->
+  <path d="M 720 500 L 720 540" stroke="#ff6b35" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="725" y="522" fill="#ff6b35" font-size="10" font-weight="700">TRIGGER</text>
+
+</svg>
+
+<h2 style="margin-top: 48px;">Wiring Connections</h2>
+<table style="width:100%; border-collapse: collapse; margin-top: 16px;">
+  <tr style="border-bottom: 2px solid var(--line);">
+    <th style="text-align:left; padding: 10px;">M5Stack Pin</th>
+    <th style="text-align:left; padding: 10px;">Relay Pin</th>
+    <th style="text-align:left; padding: 10px;">Wire Color</th>
+    <th style="text-align:left; padding: 10px;">Purpose</th>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--neutral);">
+    <td style="padding: 10px; font-family: monospace;">GPIO26</td>
+    <td style="padding: 10px; font-family: monospace;">SIG / IN</td>
+    <td style="padding: 10px;">🟢 Green</td>
+    <td style="padding: 10px;">Relay control signal (3.3V logic)</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--neutral);">
+    <td style="padding: 10px; font-family: monospace;">3.3V</td>
+    <td style="padding: 10px; font-family: monospace;">VCC</td>
+    <td style="padding: 10px;">🔴 Red</td>
+    <td style="padding: 10px;">Relay power (some relays need 5V — use 5V/VIN pin instead)</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--neutral);">
+    <td style="padding: 10px; font-family: monospace;">GND</td>
+    <td style="padding: 10px; font-family: monospace;">GND</td>
+    <td style="padding: 10px;">⚫ Black</td>
+    <td style="padding: 10px;">Common ground</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--neutral);">
+    <td style="padding: 10px; font-family: monospace;">—</td>
+    <td style="padding: 10px; font-family: monospace;">COM</td>
+    <td style="padding: 10px;">🟡 Yellow</td>
+    <td style="padding: 10px;">Common terminal → Load power in</td>
+  </tr>
+  <tr>
+    <td style="padding: 10px; font-family: monospace;">—</td>
+    <td style="padding: 10px; font-family: monospace;">NO</td>
+    <td style="padding: 10px;">🟡 Yellow</td>
+    <td style="padding: 10px;">Normally Open → Load positive (closes on payment)</td>
+  </tr>
+</table>
+
+<h2 style="margin-top: 32px;">Payment Flow</h2>
+<ol style="line-height: 2; color: var(--muted);">
+  <li><strong style="color: var(--accent);">Display</strong> — M5Stack shows QR code with <code>quartz:address?amount=0.50</code></li>
+  <li><strong style="color: var(--accent);">Scan</strong> — Customer scans QR with phone wallet app</li>
+  <li><strong style="color: var(--accent);">Pay</strong> — Phone sends QZ to device's wallet address via node</li>
+  <li><strong style="color: var(--accent);">Verify</strong> — ESP32 polls node every 5s, detects incoming payment</li>
+  <li><strong style="color: var(--relay);">Trigger</strong> — Payment confirmed → GPIO26 goes HIGH → relay closes → load activates</li>
+</ol>
+
+<div style="margin-top: 32px; padding: 16px; background: var(--neutral); border-radius: 8px; border-left: 4px solid var(--relay);">
+  <strong style="color: var(--relay);">⚠️ Relay Power Note:</strong> Most relay modules need <strong>5V</strong> on VCC, not 3.3V. The M5Stack Core has a 5V pin on the bottom expansion port (labeled <code>5V</code>). If your relay doesn't click with 3.3V, move the VCC wire to the <code>5V</code> pin. The GPIO26 signal is 3.3V logic — this is fine for triggering most relay modules.
+</div>
+
+<div style="margin-top: 16px; padding: 16px; background: var(--neutral); border-radius: 8px; border-left: 4px solid var(--accent);">
+  <strong style="color: var(--accent);">💡 Tip:</strong> For a vending machine, wire the relay between the dispensing motor's power and the PSU's NO (Normally Open) terminal. When payment confirms, the relay closes for 3 seconds — just enough to dispense one item.
+</div>
+
+<p style="text-align: center; margin-top: 48px; color: var(--muted);">
+  <a href="/" style="color: var(--accent); text-decoration: none;">← Back to Quartz</a>
+</p>
+
+</main>

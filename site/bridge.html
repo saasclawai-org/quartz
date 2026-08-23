@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bridge — Quartz (QZ)</title>
+    <meta name="description" content="Turn your Helium hotspot into a Quartz bridge node. Relay blocks and transactions between the Quartz gateway and ESP32 leaf miners via LoRa. Bobcat, RAK, SenseCAP supported.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        .bridge-diagram {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px 24px;
+            margin: 32px 0;
+            text-align: center;
+            font-family: var(--mono);
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--muted);
+            overflow-x: auto;
+        }
+        .bridge-diagram .gw { color: var(--accent); font-weight: 600; }
+        .bridge-diagram .br { color: var(--orange); font-weight: 600; }
+        .bridge-diagram .lf { color: var(--purple); font-weight: 600; }
+        .bridge-diagram .arrow { color: var(--muted); }
+
+        .compat-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+            font-size: 15px;
+        }
+        .compat-table th {
+            background: var(--surface);
+            color: var(--accent);
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 2px solid var(--border);
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .compat-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+        .compat-table tr:hover td { background: var(--surface); }
+        .compat-table .yes { color: var(--accent); font-weight: 600; }
+        .compat-table .no { color: var(--orange); }
+
+        .step-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px 28px;
+            margin: 16px 0;
+        }
+        .step-card .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 700;
+            font-size: 15px;
+            margin-right: 12px;
+        }
+        .step-card h3 {
+            display: flex;
+            align-items: center;
+            color: var(--accent2);
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+        .step-card .cmd {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--accent);
+            margin: 12px 0;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        .step-card .note {
+            color: var(--muted);
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .step-card .warn {
+            color: var(--orange);
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .hero-badge-bridge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 100px; padding: 8px 16px;
+            font-size: 14px; color: var(--muted); margin-bottom: 24px;
+        }
+        .hero-badge-bridge .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--orange);
+        }
+
+        .pitch-card {
+            background: linear-gradient(135deg, var(--card) 0%, var(--surface) 100%);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px 32px;
+            margin: 32px 0;
+        }
+        .pitch-card h3 {
+            color: var(--accent);
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+        .pitch-card p {
+            color: var(--text);
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        details.faq {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin: 8px 0;
+        }
+        details.faq summary {
+            color: var(--accent2);
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        details.faq[open] summary { margin-bottom: 12px; }
+        details.faq p {
+            color: var(--muted);
+            font-size: 15px;
+            margin: 8px 0;
+        }
+        details.faq code {
+            background: var(--bg);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/architecture.html">Architecture</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <div class="hero" style="padding: 80px 24px 60px;">
+        <div class="hero-badge-bridge"><div class="dot"></div>New · Bridge for Helium hotspots</div>
+        <div class="crystal">📡</div>
+        <h1>Quartz Bridge</h1>
+        <p class="tagline">Turn your idle Helium hotspot into a Quartz mesh relay. Bridge blocks and transactions between the gateway and ESP32 miners over LoRa — no new hardware needed.</p>
+        <div class="cta-group">
+            <a href="#install" class="btn btn-primary">⚡ Quick Install</a>
+            <a href="#compat" class="btn btn-secondary">📋 Compatible Hardware</a>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <!-- The Pitch -->
+        <section style="padding: 20px 0 40px;">
+            <div class="pitch-card">
+                <h3>Got a Helium hotspot earning $0.05/month?</h3>
+                <p>Your Bobcat, RAK, or SenseCAP has a Linux board, a LoRa concentrator, storage, and WiFi — everything a Quartz bridge node needs. The hardware is already deployed on a rooftop with power and an antenna.</p>
+                <p>It can't <strong>mine</strong> Quartz (no ESP32 PUF), but it can <strong>relay</strong> for every ESP32 miner in its LoRa range (2–15km). The SX1302 concentrator is actually better for bridging than the ESP32's SX1276 — it listens on 8+ channels simultaneously.</p>
+                <p style="color: var(--accent); font-weight: 600; margin-top: 16px;">Put your $400 paperweight back to work for free.</p>
+            </div>
+        </section>
+
+        <!-- Architecture Diagram -->
+        <section style="padding: 20px 0;">
+            <h2>How It Works</h2>
+            <p class="section-subtitle">The bridge relays data between the online gateway and offline ESP32 miners.</p>
+
+            <div class="bridge-diagram">
+<span class="gw">Quartz Gateway (VPS)</span>
+    <span class="arrow">←── TCP P2P ──→</span>
+<span class="br">Bridge (Helium Hotspot)</span>
+    <span class="arrow">←── LoRa Mesh ──→</span>
+<span class="lf">ESP32 Leaf Miners</span>
+
+<span class="gw">  Gateway</span>  <span class="arrow">──── blocks, work templates ────→</span>  <span class="br">Bridge</span>  <span class="arrow">──── LoRa ────→</span>  <span class="lf">Miners</span>
+<span class="lf">  Miners</span>   <span class="arrow">──── found blocks, txs ─────→</span>  <span class="br">Bridge</span>  <span class="arrow">──── TCP ─────→</span>  <span class="gw">Gateway</span>
+            </div>
+
+            <div class="grid grid-3" style="margin-top: 24px;">
+                <div class="card">
+                    <div class="icon">📥</div>
+                    <h3>Gateway → LoRa</h3>
+                    <p>Receives new block headers and work templates from the Quartz gateway over TCP. Relays them to ESP32 miners over LoRa (2–15km range).</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📤</div>
+                    <h3>LoRa → Gateway</h3>
+                    <p>Receives found blocks and transactions from ESP32 miners via LoRa. Submits them to the gateway for network inclusion.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📡</div>
+                    <h3>Mesh Relay</h3>
+                    <p>Gossips packets between miners using TTL-based flooding. Store-and-forward for peers that were offline. Beacons every 60s.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Compatible Hardware -->
+        <section id="compat" style="padding: 40px 0;">
+            <h2>Compatible Hardware</h2>
+            <p class="section-subtitle">Any Linux-based Helium hotspot with an SX130x LoRa concentrator.</p>
+
+            <table class="compat-table">
+                <thead>
+                    <tr>
+                        <th>Hotspot</th>
+                        <th>SoC</th>
+                        <th>LoRa Chip</th>
+                        <th>Auto-Detected</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Bobcat Miner 300</td>
+                        <td>Pi CM4</td>
+                        <td>SX1302</td>
+                        <td class="yes">✅</td>
+                        <td class="yes">Supported</td>
+                    </tr>
+                    <tr>
+                        <td>RAK Wireless</td>
+                        <td>Pi Zero / ARM</td>
+                        <td>SX1302</td>
+                        <td class="yes">✅</td>
+                        <td class="yes">Supported</td>
+                    </tr>
+                    <tr>
+                        <td>SenseCAP M1</td>
+                        <td>Pi CM4</td>
+                        <td>SX1302</td>
+                        <td class="yes">✅</td>
+                        <td class="yes">Supported</td>
+                    </tr>
+                    <tr>
+                        <td>Milesight UG65</td>
+                        <td>ARM</td>
+                        <td>SX1302</td>
+                        <td class="yes">✅</td>
+                        <td class="yes">Supported</td>
+                    </tr>
+                    <tr>
+                        <td>Fineoffset / other</td>
+                        <td>ARM</td>
+                        <td>SX1301</td>
+                        <td class="yes">✅</td>
+                        <td class="yes">Generic fallback</td>
+                    </tr>
+                    <tr>
+                        <td>Any SX130x gateway</td>
+                        <td>Any Linux</td>
+                        <td>SX130x</td>
+                        <td class="yes">✅</td>
+                        <td class="yes">Generic fallback</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Install Instructions -->
+        <section id="install" style="padding: 40px 0 60px;">
+            <h2>Quick Install</h2>
+            <p class="section-subtitle">Three steps. Takes about 5 minutes. Reversible.</p>
+
+            <!-- Step 1 -->
+            <div class="step-card">
+                <h3><span class="step-num">1</span>SSH into your hotspot</h3>
+                <p>Find your hotspot's IP address (check your router's DHCP list or scan for port 22).</p>
+                <div class="cmd">ssh root@&lt;hotspot-ip&gt;
+# Bobcat default password: bobcat
+# RAK default: root
+# SenseCAP: check manufacturer docs</div>
+                <p class="note">If SSH is disabled, you may need to enable it via the hotspot's diagnostic tool or web UI. Some hotspots also have a serial console via USB.</p>
+                <p class="note">Check Python 3 is available: <code style="font-family: var(--mono); color: var(--accent);">python3 --version</code>. If not: <code style="font-family: var(--mono); color: var(--accent);">opkg install python3</code> (OpenWrt) or <code style="font-family: var(--mono); color: var(--accent);">apt install python3</code> (Debian).</p>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="step-card">
+                <h3><span class="step-num">2</span>Download and run the installer</h3>
+                <p>One command. The installer auto-detects your hotspot model, backs up the Helium packet forwarder config, and reconfigures it for Quartz.</p>
+                <div class="cmd">curl -sSL https://quartzchain.net/bridge-install.sh | bash</div>
+                <p class="note">Or with custom options:</p>
+                <div class="cmd">curl -sSL https://quartzchain.net/bridge-install.sh | bash -s -- --gateway quartzchain.net --region EU868</div>
+                <p class="note">The installer will:<br>
+                1. Download the bridge code from our server<br>
+                2. Detect your hotspot model (Bobcat, RAK, SenseCAP, or generic)<br>
+                3. Back up the Helium packet forwarder config to <code style="font-family: var(--mono); color: var(--accent);">/opt/quartz-bridge/backup/</code><br>
+                4. Reconfigure the packet forwarder to send to the bridge (UDP 1738)<br>
+                5. Install the bridge daemon to <code style="font-family: var(--mono); color: var(--accent);">/opt/quartz-bridge/</code><br>
+                6. Create and start systemd services</p>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="step-card">
+                <h3><span class="step-num">3</span>Verify it's running</h3>
+                <div class="cmd">journalctl -u quartz-bridge -f
+
+# You should see:
+# [INFO] Connected to gateway (height=N, hash=...)
+# [INFO] Beacon sent (height=N, peers=0)
+# [INFO] LoRa RX loop started</div>
+                <p class="note">That's it. The bridge is now listening for ESP32 miners on LoRa and relaying data to the Quartz gateway.</p>
+            </div>
+
+            <!-- Flash a miner -->
+            <div class="step-card" style="border-color: var(--accent);">
+                <h3>⛏️ Flash an ESP32 miner</h3>
+                <p>Now flash an ESP32 with Quartz firmware and power it on near the hotspot. It'll pick up the LoRa mesh and start mining.</p>
+                <a href="/download.html" class="btn btn-primary" style="margin-top: 12px;">⬇ Download Firmware</a>
+                <a href="/setup.html" class="btn btn-secondary" style="margin-top: 12px;">📖 Setup Guide</a>
+            </div>
+        </section>
+
+        <!-- Why It Works -->
+        <section style="padding: 20px 0 40px;">
+            <h2>Why This Works</h2>
+            <p class="section-subtitle">Helium hotspots are already Quartz bridge hardware — they just don't know it yet.</p>
+
+            <div class="grid grid-2" style="margin-top: 24px;">
+                <div class="card">
+                    <div class="icon">🏗️</div>
+                    <h3>Right Hardware</h3>
+                    <p>Linux SoC (Pi CM4 or ARM) runs the Python bridge daemon. SX1302 LoRa concentrator handles radio. SD card stores the chain. WiFi/Ethernet connects to the gateway. It's the exact bridge node spec from the Quartz roadmap.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🔄</div>
+                    <h3>Smart Reuse</h3>
+                    <p>The bridge uses the hotspot's <em>existing</em> Semtech packet forwarder binary — we just redirect its UDP traffic from Helium's servers to the bridge process. No board-specific SPI drivers needed. Works on any SX130x hotspot.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📊</div>
+                    <h3>Better Radio</h3>
+                    <p>The SX1302 concentrator listens on 8+ channels simultaneously. The ESP32's SX1276 is single-channel. A single Helium hotspot acting as a bridge can serve many more leaf miners than an ESP32 bridge could.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">♻️</div>
+                    <h3>Fully Reversible</h3>
+                    <p>The installer backs up the original Helium config. To revert: stop the Quartz services, restore the backup, restart Helium. Your hotspot goes back to mining HNT (such as it is).</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- SSH Passwords Reference -->
+        <section style="padding: 20px 0 40px;">
+            <h2>SSH Access by Model</h2>
+            <p class="section-subtitle">Default credentials for common Helium hotspot models.</p>
+
+            <table class="compat-table">
+                <thead>
+                    <tr>
+                        <th>Hotspot</th>
+                        <th>SSH User</th>
+                        <th>Default Password</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Bobcat Miner 300</td>
+                        <td><code style="font-family: var(--mono); color: var(--accent);">root</code></td>
+                        <td><code style="font-family: var(--mono); color: var(--accent);">bobcat</code></td>
+                        <td>May need enabling via diagnostic tool. Bobcat is defunct — if the diagnostic tool is down, try factory reset (hold button 30s) or USB serial console.</td>
+                    </tr>
+                    <tr>
+                        <td>RAK Wireless</td>
+                        <td><code style="font-family: var(--mono); color: var(--accent);">root</code></td>
+                        <td><code style="font-family: var(--mono); color: var(--accent);">root</code></td>
+                        <td>SSH usually enabled by default. Check RAK docs for your specific model.</td>
+                    </tr>
+                    <tr>
+                        <td>SenseCAP M1</td>
+                        <td><code style="font-family: var(--mono); color: var(--accent);">root</code></td>
+                        <td>Varies by firmware</td>
+                        <td>Check SenseCAP docs. Some firmware versions disabled SSH — may need USB serial.</td>
+                    </tr>
+                    <tr>
+                        <td>Milesight UG65</td>
+                        <td><code style="font-family: var(--mono); color: var(--accent);">admin</code></td>
+                        <td>Varies</td>
+                        <td>Web UI at the hotspot IP may have SSH toggle in settings.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p style="color: var(--muted); font-size: 14px; margin-top: 16px;">
+                <strong>Can't SSH in?</strong> Most hotspots have a micro-USB port for serial console. Connect with a USB-TTL adapter (<code style="font-family: var(--mono); color: var(--accent);">screen /dev/ttyUSB0 115200</code>) for root access.
+            </p>
+            <p style="color: var(--orange); font-size: 14px; margin-top: 8px;">
+                <strong>Buying secondhand?</strong> The previous owner may have changed the password. Factory reset the device first (hold the reset button 30+ seconds).
+            </p>
+        </section>
+
+        <!-- Monitoring -->
+        <section style="padding: 20px 0 40px;">
+            <h2>Monitoring</h2>
+            <p class="section-subtitle">Check bridge health and mesh stats.</p>
+
+            <div class="step-card">
+                <div class="cmd"># Bridge logs (live)
+journalctl -u quartz-bridge -f
+
+# Packet forwarder logs
+journalctl -u quartz-lora-fwd -f
+
+# Check if connected to gateway
+journalctl -u quartz-bridge | grep "Connected to gateway"
+
+# Service status
+systemctl status quartz-bridge quartz-lora-fwd</div>
+            </div>
+        </section>
+
+        <!-- Reverting -->
+        <section style="padding: 20px 0 40px;">
+            <h2>Reverting to Helium</h2>
+            <p class="section-subtitle">Changed your mind? Fully reversible.</p>
+
+            <div class="step-card">
+                <div class="cmd">sudo systemctl stop quartz-bridge quartz-lora-fwd
+sudo systemctl disable quartz-bridge quartz-lora-fwd
+
+# Restore original packet forwarder config
+sudo cp /opt/quartz-bridge/backup/*.bak.* /opt/&lt;hotspot&gt;/
+
+# Restart original Helium services
+sudo systemctl start helium-miner  # or lora-pkt-fwd</div>
+                <p class="note">Your Helium backup configs are saved in <code style="font-family: var(--mono); color: var(--accent);">/opt/quartz-bridge/backup/</code> during installation.</p>
+            </div>
+        </section>
+
+        <!-- FAQ -->
+        <section style="padding: 20px 0 60px;">
+            <h2>FAQ</h2>
+
+            <details class="faq">
+                <summary>Can the hotspot mine Quartz?</summary>
+                <p>No. Quartz mining requires an ESP32 with SRAM PUF attestation — the block hash includes a key derived from the physical silicon. A Linux-based hotspot can't produce PUF attestations. The bridge <strong>relays</strong> for miners; it doesn't mine.</p>
+            </details>
+
+            <details class="faq">
+                <summary>Does the bridge earn rewards?</summary>
+                <p>The Quartz roadmap allocates a 10% mesh relayer share of every block. This is currently deferred (set to 0%) until the LoRa mesh fleet is live and relay-share accounting is validated in-block. When that fork activates, bridge nodes will earn relayer rewards on every block mined by ESP32s in their LoRa range.</p>
+            </details>
+
+            <details class="faq">
+                <summary>Will this break my Helium mining?</summary>
+                <p>While the Quartz bridge is running, the hotspot's packet forwarder is pointed at the bridge instead of Helium's servers. Helium mining stops. The installer backs up the original config and the revert process restores it. You can switch back and forth.</p>
+            </details>
+
+            <details class="faq">
+                <summary>What LoRa frequency does Quartz use?</summary>
+                <p>Same as the ESP32 firmware: 915 MHz (US), 868.1 MHz (EU), 923.2 MHz (Asia), 470 MHz (China), 865 MHz (India). Set with the <code>--region</code> flag during install. Must match the frequency of your ESP32 miners.</p>
+            </details>
+
+            <details class="faq">
+                <summary>How many ESP32 miners can one bridge serve?</summary>
+                <p>The SX1302 concentrator can listen on 8+ channels simultaneously, so it can handle many more concurrent miners than a single-channel ESP32 bridge. Practical limit depends on LoRa airtime and packet frequency, but dozens of miners in range is feasible.</p>
+            </details>
+
+            <details class="faq">
+                <summary>Do I need internet on the hotspot?</summary>
+                <p>Yes — the bridge connects to the Quartz gateway over TCP. WiFi or Ethernet backhaul is required. For truly off-grid deployment, you'd need a bridge with satellite or a local gateway, but that's a future use case.</p>
+            </details>
+
+            <details class="faq">
+                <summary>Is the bridge open source?</summary>
+                <p>Yes — MIT licensed, same as the rest of Quartz. The bridge daemon is pure Python 3 with zero external dependencies.</p>
+            </details>
+        </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer style="border-top: 1px solid var(--border); padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px;">
+        <p>🔮 Quartz (QZ) — The answer to everything, mined by everyone.</p>
+        <p style="margin-top: 8px;">
+            <a href="/" style="color: var(--accent); text-decoration: none;">Home</a> ·
+            <a href="/hardware.html" style="color: var(--muted); text-decoration: none;">Hardware</a> ·
+            <a href="/mining.html" style="color: var(--muted); text-decoration: none;">Mining</a> ·
+            <a href="/download.html" style="color: var(--muted); text-decoration: none;">Download</a> ·
+            <a href="/setup.html" style="color: var(--muted); text-decoration: none;">Setup</a> ·
+            <a href="/bridge.html" style="color: var(--muted); text-decoration: none;">Bridge</a>
+        </p>
+        <p style="margin-top: 12px; font-size: 12px;">MIT Licensed · No premine · No ICO · No VC</p>
+    </footer>
+
+</body>
+</html>

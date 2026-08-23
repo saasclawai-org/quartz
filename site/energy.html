@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz — Off-Grid Energy</title>
+    <meta name="description" content="Quartz needs 1.2W. Bitcoin needs 3,000W. Mine on sunlight. Solar, wind, LiFePO4 storage, and piezoelectric vibration harvesting for off-grid crypto mining.">
+    <link rel="stylesheet" href="/css/quartz.css">
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="hero">
+        <div class="hero-badge"><div class="dot"></div>1.2W per device · Zero grid power</div>
+        <div class="crystal">⚡</div>
+        <h1>Off-Grid Energy</h1>
+        <p class="tagline">Quartz needs 1.2W. Bitcoin needs 3,000W. Mine on sunlight.</p>
+    </div>
+
+    <!-- Off-Grid Power -->
+    <section id="off-grid-power">
+        <div class="container">
+            <h2>Off-Grid Power</h2>
+            <p class="section-subtitle">Three energy sources. All under 5W. All capable of mining Quartz.</p>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="icon">☀️</div>
+                    <h3>Solar Mining</h3>
+                    <p>A 5V 1W solar panel (100×60mm, ~$3) powers a single ESP32 miner in direct sunlight. Pair with a supercapacitor for cloud buffering. Scale to a backyard array of 10 panels and you've got a 10-node cluster running on free photons.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">1W = 1 miner · $3 entry</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🌬️</div>
+                    <h3>Wind Harvesting</h3>
+                    <p>Small vertical-axis wind turbines (5-15W) charge a LiFePO4 battery that feeds ESP32 nodes. A single turbine can power 4-12 miners in steady wind. Ideal for coastal or ridge-line deployments where solar is inconsistent.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">5-15W = 4-12 miners</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🔋</div>
+                    <h3>LiFePO₄ Storage</h3>
+                    <p>LiFePO₄ (LFP) cells are the recommended storage chemistry — thermally stable, 2,000+ cycle life, and safe for unattended outdoor deployments. A single 3.2V 10Ah cell stores 32Wh: enough to mine through 26 hours of darkness on one node.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">32Wh = 26h night mining</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solar Farm Hashrate Table -->
+    <section id="hashrate-table" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+        <div class="container">
+            <h2>Solar Farm Hashrate</h2>
+            <p class="section-subtitle">How many QZ blocks can you mine on sunlight? Estimates at 100% uptime with CrystalHash at 50 H/s per node.</p>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border);">
+                            <th style="text-align:left;padding:14px 16px;color:var(--accent);font-size:15px;">Setup</th>
+                            <th style="text-align:right;padding:14px 16px;color:var(--accent);font-size:15px;">Power</th>
+                            <th style="text-align:right;padding:14px 16px;color:var(--accent);font-size:15px;">Nodes</th>
+                            <th style="text-align:right;padding:14px 16px;color:var(--accent);font-size:15px;">Hashrate</th>
+                            <th style="text-align:right;padding:14px 16px;color:var(--accent);font-size:15px;">Est. Blocks/Day</th>
+                            <th style="text-align:right;padding:14px 16px;color:var(--accent);font-size:15px;">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:14px 16px;">📱 Single Node<br><span style="color:var(--muted);font-size:13px;">1 solar panel + 1 ESP32</span></td>
+                            <td style="text-align:right;padding:14px 16px;">1W</td>
+                            <td style="text-align:right;padding:14px 16px;">1</td>
+                            <td style="text-align:right;padding:14px 16px;">50 H/s</td>
+                            <td style="text-align:right;padding:14px 16px;">~0.1</td>
+                            <td style="text-align:right;padding:14px 16px;">~$8</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:14px 16px;">🏡 Backyard Cluster<br><span style="color:var(--muted);font-size:13px;">10 panels + 10 ESP32s + LFP battery</span></td>
+                            <td style="text-align:right;padding:14px 16px;">10W</td>
+                            <td style="text-align:right;padding:14px 16px;">10</td>
+                            <td style="text-align:right;padding:14px 16px;">500 H/s</td>
+                            <td style="text-align:right;padding:14px 16px;">~1.0</td>
+                            <td style="text-align:right;padding:14px 16px;">~$80</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:14px 16px;">🌻 Solar Farm<br><span style="color:var(--muted);font-size:13px;">100 panels + 100 ESP32s + LFP bank</span></td>
+                            <td style="text-align:right;padding:14px 16px;">100W</td>
+                            <td style="text-align:right;padding:14px 16px;">100</td>
+                            <td style="text-align:right;padding:14px 16px;">5,000 H/s</td>
+                            <td style="text-align:right;padding:14px 16px;">~10</td>
+                            <td style="text-align:right;padding:14px 16px;">~$800</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:14px 16px;">💨 Wind Farm<br><span style="color:var(--muted);font-size:13px;">1 turbine + 12 ESP32s + LFP buffer</span></td>
+                            <td style="text-align:right;padding:14px 16px;">15W</td>
+                            <td style="text-align:right;padding:14px 16px;">12</td>
+                            <td style="text-align:right;padding:14px 16px;">600 H/s</td>
+                            <td style="text-align:right;padding:14px 16px;">~1.2</td>
+                            <td style="text-align:right;padding:14px 16px;">~$150</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="note" style="margin-top:24px;">
+                💡 <strong>Comparison:</strong> A single Bitcoin ASIC (Antminer S19) draws 3,000W and costs ~$2,000. A 100-node Quartz solar farm draws 100W, costs $800, and runs on free sunlight forever. No grid tie. No electric bill. No cooling infrastructure.
+            </div>
+        </div>
+    </section>
+
+    <!-- Piezoelectric Harvesting -->
+    <section id="piezoelectric">
+        <div class="container">
+            <h2>Piezoelectric Harvesting</h2>
+            <p class="section-subtitle">Vibration energy from road traffic, footsteps, or machinery — another way to power Quartz miners without a wall outlet.</p>
+
+            <div class="grid grid-2" style="margin-bottom: 32px;">
+                <div class="card">
+                    <div class="icon">🟢</div>
+                    <h3>How It Works</h3>
+                    <p>Piezoelectric discs (PZT-5H, Ø35mm) generate AC voltage when mechanically stressed. Road vibrations, footstep impacts, or machinery oscillations produce 1-20V AC per disc. Six discs in parallel yield ~0.5-3mW of harvestable power — enough to mine Quartz in short bursts with a supercapacitor buffer.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚙️</div>
+                    <h3>Power Chain</h3>
+                    <p><strong>6× PZT-5H discs</strong> → Schottky bridge rectifier → smoothing capacitor → <strong>LTC3588-1 buck-boost</strong> → supercapacitor bank (2× 10F, 72J) → <strong>HT7333 LDO</strong> → ESP32 at 3.3V. Optional 5V solar panel supplements the supercapacitor input.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-2" style="margin-bottom: 32px;">
+                <div class="card">
+                    <div class="icon">📊</div>
+                    <h3>Power Budget</h3>
+                    <p style="margin-bottom:12px;">ESP32 active mining: ~180mA @ 3.3V = <strong>594mW</strong></p>
+                    <p style="margin-bottom:12px;">Deep sleep: ~10µA · Light sleep: ~0.8mA</p>
+                    <p>At 3mW harvest rate, the duty cycle is <strong>~1% active</strong> (30 seconds mining, 50 minutes charging). Enough to produce a block every few hours on vibration alone.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">💰</div>
+                    <h3>Piezo Node BOM</h3>
+                    <p style="margin-bottom:4px;">Piezo discs (6× PZT-5H) — $12</p>
+                    <p style="margin-bottom:4px;">Schottky diodes (6× 1N5817) — $2</p>
+                    <p style="margin-bottom:4px;">LTC3588-1 module — $8</p>
+                    <p style="margin-bottom:4px;">Supercapacitors (2× 10F) — $6</p>
+                    <p style="margin-bottom:4px;">Caps + passives — $2</p>
+                    <p style="margin-bottom:4px;">ESP32 dev board — $5</p>
+                    <p style="color:var(--accent);font-weight:700;margin-top:12px;font-size:18px;">Total: ~$35</p>
+                    <p style="color:var(--muted);font-size:13px;margin-top:4px;">+ Solar panel (optional): +$5<br>+ LoRa module (optional): +$8<br>Full autonomous node: ~$48</p>
+                </div>
+            </div>
+
+            <!-- Piezoelectric Energy Harvesting Diagram -->
+            <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; overflow-x: auto;">
+                <svg viewBox="0 0 1060 720" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;min-width:700px;">
+                  <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+                    </marker>
+                    <marker id="arrow-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+                    </marker>
+                    <marker id="arrow-dc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M0,0 L10,5 L0,10 z" fill="#059669"/>
+                    </marker>
+                  </defs>
+
+                  <text x="530" y="34" text-anchor="middle" fill="#e4e4ef" font-size="22" font-weight="700">Piezoelectric Energy Harvesting → ESP32 Quartz Miner</text>
+                  <text x="530" y="54" text-anchor="middle" fill="#8888a0" font-size="14">Road vibration / footstep harvesting power chain</text>
+
+                  <!-- ZONE: Energy Source -->
+                  <rect x="20" y="80" width="200" height="520" rx="8" fill="none" stroke="#8888a0" stroke-width="1" stroke-dasharray="6 5" opacity="0.5"/>
+                  <text x="120" y="100" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">ENERGY SOURCE</text>
+
+                  <!-- Piezo discs -->
+                  <g>
+                    <rect x="45" y="125" width="60" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                    <text x="75" y="142" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">PZ1</text>
+                    <text x="75" y="156" text-anchor="middle" fill="#8888a0" font-size="10">PZT-5H</text>
+                    <rect x="125" y="125" width="60" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                    <text x="155" y="142" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">PZ2</text>
+                    <text x="155" y="156" text-anchor="middle" fill="#8888a0" font-size="10">PZT-5H</text>
+                    <rect x="45" y="180" width="60" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                    <text x="75" y="197" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">PZ3</text>
+                    <text x="75" y="211" text-anchor="middle" fill="#8888a0" font-size="10">PZT-5H</text>
+                    <rect x="125" y="180" width="60" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                    <text x="155" y="197" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">PZ4</text>
+                    <text x="155" y="211" text-anchor="middle" fill="#8888a0" font-size="10">PZT-5H</text>
+                    <rect x="45" y="235" width="60" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                    <text x="75" y="252" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">PZ5</text>
+                    <text x="75" y="266" text-anchor="middle" fill="#8888a0" font-size="10">PZT-5H</text>
+                    <rect x="125" y="235" width="60" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                    <text x="155" y="252" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">PZ6</text>
+                    <text x="155" y="266" text-anchor="middle" fill="#8888a0" font-size="10">PZT-5H</text>
+                  </g>
+                  <text x="120" y="300" text-anchor="middle" fill="#8888a0" font-size="11">6× piezo discs in parallel</text>
+                  <text x="120" y="315" text-anchor="middle" fill="#8888a0" font-size="10">Ø35mm, 0.3mm PZT-5H</text>
+                  <text x="120" y="330" text-anchor="middle" fill="#8888a0" font-size="10">~2-5V AC each per impact</text>
+
+                  <text x="120" y="365" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">Mechanical Input</text>
+                  <text x="120" y="382" text-anchor="middle" fill="#8888a0" font-size="10">Road traffic / footsteps</text>
+                  <text x="120" y="397" text-anchor="middle" fill="#8888a0" font-size="10">~10-1000 Hz vibration</text>
+                  <text x="120" y="412" text-anchor="middle" fill="#8888a0" font-size="10">or direct impact</text>
+
+                  <text x="120" y="445" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">Yield: ~0.5-3 mW</text>
+                  <text x="120" y="461" text-anchor="middle" fill="#8888a0" font-size="10">(depending on traffic)</text>
+                  <text x="120" y="480" text-anchor="middle" fill="#8888a0" font-size="10">Cost: ~$2 per disc</text>
+
+                  <path d="M105,125 L105,110 L210,110 L210,170 L260,170" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#arrow-ac)"/>
+                  <path d="M155,125 L155,105 L220,105 L220,165 L260,165" fill="none" stroke="#7c3aed" stroke-width="1.8" opacity="0.5"/>
+                  <text x="235" y="100" fill="#8888a0" font-size="11">AC (chaotic)</text>
+                  <text x="235" y="115" fill="#059669" font-size="11" font-weight="600">1-20V AC</text>
+
+                  <!-- ZONE: Power Conditioning -->
+                  <rect x="250" y="80" width="260" height="360" rx="8" fill="none" stroke="#8888a0" stroke-width="1" stroke-dasharray="6 5" opacity="0.5"/>
+                  <text x="380" y="100" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">POWER CONDITIONING</text>
+
+                  <rect x="290" y="140" width="120" height="55" rx="4" fill="#c7d2fe" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="350" y="162" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Bridge Rectifier</text>
+                  <text x="350" y="178" text-anchor="middle" fill="#8888a0" font-size="10">6× Schottky (1N5817)</text>
+                  <text x="350" y="190" text-anchor="middle" fill="#8888a0" font-size="10">Vf=0.2V, low loss</text>
+
+                  <path d="M260,168 L290,168" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#arrow-ac)"/>
+                  <path d="M350,195 L350,230" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrow-dc)"/>
+                  <text x="365" y="215" fill="#059669" font-size="11" font-weight="600">DC (ripply)</text>
+
+                  <rect x="300" y="230" width="100" height="50" rx="4" fill="#99f6e4" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="350" y="250" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Smoothing Cap</text>
+                  <text x="350" y="265" text-anchor="middle" fill="#8888a0" font-size="10">470µF, 16V electrolytic</text>
+                  <text x="350" y="277" text-anchor="middle" fill="#8888a0" font-size="10">+ ceramic 100nF</text>
+
+                  <path d="M350,280 L350,310" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrow-dc)"/>
+
+                  <rect x="280" y="310" width="140" height="65" rx="4" fill="#c7d2fe" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="350" y="332" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Buck-Boost Converter</text>
+                  <text x="350" y="348" text-anchor="middle" fill="#8888a0" font-size="10">LTC3588-1 or BQ25570</text>
+                  <text x="350" y="362" text-anchor="middle" fill="#8888a0" font-size="10">1.8V → 5V regulated out</text>
+
+                  <path d="M420,342 L470,342" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrow-dc)"/>
+                  <text x="440" y="335" fill="#059669" font-size="11" font-weight="600">5V DC</text>
+
+                  <rect x="290" y="400" width="140" height="55" rx="4" fill="#99f6e4" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="360" y="420" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Supercapacitor Bank</text>
+                  <text x="360" y="435" text-anchor="middle" fill="#8888a0" font-size="10">2× 10F supercaps in series</text>
+                  <text x="360" y="448" text-anchor="middle" fill="#8888a0" font-size="10">5F @ 5.4V = 72J buffer</text>
+
+                  <path d="M350,375 L350,400" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrow-dc)"/>
+
+                  <!-- ZONE: ESP32 Load -->
+                  <rect x="540" y="80" width="280" height="520" rx="8" fill="none" stroke="#8888a0" stroke-width="1" stroke-dasharray="6 5" opacity="0.5"/>
+                  <text x="680" y="100" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">ESP32 LOAD (QUARTZ MINER)</text>
+
+                  <rect x="580" y="140" width="160" height="50" rx="4" fill="#bfdbfe" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="660" y="160" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Power Mgmt (PMIC)</text>
+                  <text x="660" y="175" text-anchor="middle" fill="#8888a0" font-size="10">HT7333 LDO 3.3V</text>
+                  <text x="660" y="187" text-anchor="middle" fill="#8888a0" font-size="10">or ESP32 built-in</text>
+
+                  <path d="M430,427 L510,427 L510,165 L580,165" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow-dc)"/>
+                  <text x="520" y="155" fill="#059669" font-size="11" font-weight="600">5V → 3.3V</text>
+
+                  <rect x="570" y="210" width="180" height="80" rx="4" fill="#c7d2fe" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="660" y="232" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">ESP32-D0WDQ6</text>
+                  <text x="660" y="248" text-anchor="middle" fill="#8888a0" font-size="10">240MHz dual-core LX6</text>
+                  <text x="660" y="262" text-anchor="middle" fill="#8888a0" font-size="10">WiFi + BLE radio</text>
+                  <text x="660" y="276" text-anchor="middle" fill="#8888a0" font-size="10">PUF mining + WOTS+ signing</text>
+
+                  <path d="M660,190 L660,210" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow-dc)"/>
+                  <text x="672" y="203" fill="#059669" font-size="11" font-weight="600">3.3V</text>
+
+                  <rect x="570" y="315" width="80" height="40" rx="4" fill="#334155" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="610" y="332" text-anchor="middle" fill="#8888a0" font-size="11">Flash</text>
+                  <text x="610" y="346" text-anchor="middle" fill="#8888a0" font-size="10">4MB SPI</text>
+
+                  <rect x="665" y="315" width="80" height="40" rx="4" fill="#334155" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="705" y="332" text-anchor="middle" fill="#8888a0" font-size="11">RTC SRAM</text>
+                  <text x="705" y="346" text-anchor="middle" fill="#8888a0" font-size="10">PUF source</text>
+
+                  <path d="M615,290 L615,315" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)"/>
+                  <path d="M700,290 L700,315" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+                  <rect x="570" y="380" width="80" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="610" y="397" text-anchor="middle" fill="#8888a0" font-size="11">WiFi</text>
+                  <text x="610" y="411" text-anchor="middle" fill="#8888a0" font-size="10">2.4GHz</text>
+
+                  <rect x="665" y="380" width="80" height="40" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="705" y="397" text-anchor="middle" fill="#8888a0" font-size="11">BLE</text>
+                  <text x="705" y="411" text-anchor="middle" fill="#8888a0" font-size="10">phone link</text>
+
+                  <path d="M615,290 L580,290 L580,380" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)" opacity="0.4"/>
+                  <path d="M700,290 L735,290 L735,380" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow)" opacity="0.4"/>
+
+                  <rect x="570" y="445" width="180" height="130" rx="4" fill="#fecaca" stroke="#8888a0" stroke-width="1.5" opacity="0.6"/>
+                  <text x="660" y="465" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Power Budget</text>
+                  <text x="660" y="482" text-anchor="middle" fill="#8888a0" font-size="10">ESP32 mining: ~180mA @ 3.3V</text>
+                  <text x="660" y="497" text-anchor="middle" fill="#8888a0" font-size="10">= 594mW active</text>
+                  <text x="660" y="514" text-anchor="middle" fill="#8888a0" font-size="10">Deep sleep: ~10µA</text>
+                  <text x="660" y="529" text-anchor="middle" fill="#8888a0" font-size="10">Light sleep: ~0.8mA</text>
+                  <text x="660" y="548" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">Duty cycle needed:</text>
+                  <text x="660" y="563" text-anchor="middle" fill="#8888a0" font-size="10">~1% active @ 3mW harvest</text>
+                  <text x="660" y="575" text-anchor="middle" fill="#8888a0" font-size="10">(30s mine / 50min charge)</text>
+
+                  <!-- ZONE: Optional Solar Supplement -->
+                  <rect x="850" y="80" width="190" height="250" rx="8" fill="none" stroke="#8888a0" stroke-width="1" stroke-dasharray="6 5" opacity="0.5"/>
+                  <text x="945" y="100" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">SOLAR (OPTIONAL)</text>
+
+                  <rect x="880" y="130" width="130" height="50" rx="4" fill="#fde68a" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="945" y="150" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Solar Panel</text>
+                  <text x="945" y="165" text-anchor="middle" fill="#8888a0" font-size="10">5V 1W mini panel</text>
+                  <text x="945" y="177" text-anchor="middle" fill="#8888a0" font-size="10">100×60mm</text>
+
+                  <path d="M945,180 L945,210" fill="none" stroke="#059669" stroke-width="1.8" marker-end="url(#arrow-dc)"/>
+
+                  <rect x="880" y="210" width="130" height="45" rx="4" fill="#c7d2fe" stroke="#8888a0" stroke-width="1.5"/>
+                  <text x="945" y="228" text-anchor="middle" fill="#e4e4ef" font-size="14" font-weight="600">Solar Charge Ctrl</text>
+                  <text x="945" y="243" text-anchor="middle" fill="#8888a0" font-size="10">TP4056 or MCP73871</text>
+
+                  <path d="M880,232 L845,232 L845,342 L420,342" fill="none" stroke="#059669" stroke-width="1.8" opacity="0.5" marker-end="url(#arrow-dc)"/>
+                  <text x="855" y="225" fill="#059669" font-size="11" font-weight="600">→ joins supercap</text>
+
+                  <text x="945" y="285" text-anchor="middle" fill="#8888a0" font-size="10">Adds ~1W in daylight</text>
+                  <text x="945" y="300" text-anchor="middle" fill="#8888a0" font-size="10">enables continuous mining</text>
+                  <text x="945" y="315" text-anchor="middle" fill="#8888a0" font-size="10">Cost: ~$3</text>
+
+                  <!-- BOM Summary -->
+                  <rect x="850" y="360" width="190" height="240" rx="8" fill="none" stroke="#8888a0" stroke-width="1" stroke-dasharray="6 5" opacity="0.5"/>
+                  <text x="945" y="380" text-anchor="middle" fill="#8888a0" font-size="11" font-weight="600">ESTIMATED BOM</text>
+
+                  <text x="865" y="405" fill="#8888a0" font-size="10" font-weight="600">Piezo discs (6×)</text>
+                  <text x="1040" y="405" text-anchor="end" fill="#8888a0" font-size="10">$12</text>
+                  <text x="865" y="422" fill="#8888a0" font-size="10" font-weight="600">Schottky diodes (6×)</text>
+                  <text x="1040" y="422" text-anchor="end" fill="#8888a0" font-size="10">$2</text>
+                  <text x="865" y="439" fill="#8888a0" font-size="10" font-weight="600">LTC3588-1 module</text>
+                  <text x="1040" y="439" text-anchor="end" fill="#8888a0" font-size="10">$8</text>
+                  <text x="865" y="456" fill="#8888a0" font-size="10" font-weight="600">Supercaps (2× 10F)</text>
+                  <text x="1040" y="456" text-anchor="end" fill="#8888a0" font-size="10">$6</text>
+                  <text x="865" y="473" fill="#8888a0" font-size="10" font-weight="600">Caps + passives</text>
+                  <text x="1040" y="473" text-anchor="end" fill="#8888a0" font-size="10">$2</text>
+                  <text x="865" y="490" fill="#8888a0" font-size="10" font-weight="600">ESP32 dev board</text>
+                  <text x="1040" y="490" text-anchor="end" fill="#8888a0" font-size="10">$5</text>
+
+                  <line x1="865" y1="500" x2="1040" y2="500" stroke="#8888a0" stroke-width="0.5"/>
+
+                  <text x="865" y="518" fill="#e4e4ef" font-size="11" font-weight="700">Total (piezo only)</text>
+                  <text x="1040" y="518" text-anchor="end" fill="#e4e4ef" font-size="11" font-weight="700">~$35</text>
+                  <text x="865" y="538" fill="#8888a0" font-size="10" font-weight="600">+ Solar panel (opt.)</text>
+                  <text x="1040" y="538" text-anchor="end" fill="#8888a0" font-size="10">+$5</text>
+                  <text x="865" y="558" fill="#8888a0" font-size="10" font-weight="600">+ LoRa module (opt.)</text>
+                  <text x="1040" y="558" text-anchor="end" fill="#8888a0" font-size="10">+$8</text>
+                  <text x="945" y="585" text-anchor="middle" fill="#8888a0" font-size="10" font-weight="600">Full autonomous node: ~$48</text>
+
+                  <!-- Legend -->
+                  <rect x="20" y="630" width="700" height="60" rx="6" fill="none" stroke="#8888a0" stroke-width="0.5" opacity="0.5"/>
+                  <text x="35" y="650" fill="#8888a0" font-size="11" font-weight="600">Legend:</text>
+                  <rect x="100" y="640" width="14" height="14" rx="2" fill="#fde68a"/>
+                  <text x="120" y="652" fill="#8888a0" font-size="10">Energy source</text>
+                  <rect x="210" y="640" width="14" height="14" rx="2" fill="#c7d2fe"/>
+                  <text x="230" y="652" fill="#8888a0" font-size="10">Conditioning / conversion</text>
+                  <rect x="380" y="640" width="14" height="14" rx="2" fill="#99f6e4"/>
+                  <text x="400" y="652" fill="#8888a0" font-size="10">Energy storage</text>
+                  <rect x="500" y="640" width="14" height="14" rx="2" fill="#bfdbfe"/>
+                  <text x="520" y="652" fill="#8888a0" font-size="10">Power management</text>
+                  <rect x="640" y="640" width="14" height="14" rx="2" fill="#fecaca" opacity="0.6"/>
+                  <text x="660" y="652" fill="#8888a0" font-size="10">Constraints</text>
+                  <line x1="100" y1="672" x2="130" y2="672" stroke="#7c3aed" stroke-width="1.8"/>
+                  <text x="135" y="676" fill="#8888a0" font-size="10">AC path</text>
+                  <line x1="190" y1="672" x2="220" y2="672" stroke="#059669" stroke-width="1.8"/>
+                  <text x="225" y="676" fill="#8888a0" font-size="10">DC path</text>
+                  <line x1="280" y1="672" x2="310" y2="672" stroke="#64748b" stroke-width="1.8"/>
+                  <text x="315" y="676" fill="#8888a0" font-size="10">Signal / data</text>
+                </svg>
+            </div>
+
+            <div class="note" style="margin-top:24px;">
+                🔬 <strong>Deployment scenario:</strong> Mount piezo discs under a road surface or walkway. Each vehicle passing over the discs generates a burst of AC voltage. The supercapacitor bank accumulates this energy. When the buffer reaches 5V, the ESP32 wakes, mines for ~30 seconds, submits any block found, and returns to deep sleep. A busy road can produce 1-3mW continuously — enough for sporadic mining with zero maintenance.
+            </div>
+        </div>
+    </section>
+
+    <!-- Intermittent Mining Protocol -->
+    <section id="intermittent-mining" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+        <div class="container">
+            <h2>Intermittent Mining Protocol</h2>
+            <p class="section-subtitle">Quartz firmware is designed for intermittent power. The miner doesn't assume constant electricity — it harvests, mines, and sleeps in cycles.</p>
+
+            <div class="grid grid-2" style="margin-bottom: 32px;">
+                <div class="card">
+                    <div class="icon">🔍</div>
+                    <h3>1. Energy Detection</h3>
+                    <p>The ESP32 monitors supercapacitor voltage via its ADC. While in deep sleep (~10µA), the RTC periodically wakes the chip to sample the buffer level. If voltage is below the boot threshold, the chip returns to sleep immediately — no wasted cycles.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⚡</div>
+                    <h3>2. Boot Threshold</h3>
+                    <p>When the supercapacitor reaches <strong>4.5V</strong>, the full system boots: WiFi/BLE radio initializes, the PUF cold-boot sequence reads SRAM entropy, and CrystalHash mining begins. This threshold ensures enough energy for a complete mining + broadcast cycle.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">⛏️</div>
+                    <h3>3. Mine Until Depleted</h3>
+                    <p>The miner runs CrystalHash at full speed (~50 H/s, 594mW). It continues mining until the supercapacitor drops to <strong>3.3V</strong> — the minimum for stable ESP32 operation. If a valid block is found during this window, it's signed with WOTS+ and broadcast immediately.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">😴</div>
+                    <h3>4. Deep Sleep Cycle</h3>
+                    <p>At 3.3V, the ESP32 flushes state to flash, enters deep sleep, and waits for the buffer to recharge. The RTC alarm checks voltage every 60 seconds. A 5F supercapacitor at 5V stores ~72J — enough for ~2 minutes of active mining before depletion.</p>
+                </div>
+            </div>
+
+            <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px;">
+                <h3 style="color:var(--accent);margin-bottom:16px;">Cycle Timeline (Solar Example)</h3>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border);">
+                                <th style="text-align:left;padding:12px 16px;color:var(--accent);font-size:14px;">Phase</th>
+                                <th style="text-align:right;padding:12px 16px;color:var(--accent);font-size:14px;">Duration</th>
+                                <th style="text-align:right;padding:12px 16px;color:var(--accent);font-size:14px;">Power Draw</th>
+                                <th style="text-align:right;padding:12px 16px;color:var(--accent);font-size:14px;">Energy Used</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding:12px 16px;">Deep sleep (charging)</td>
+                                <td style="text-align:right;padding:12px 16px;">~58 min</td>
+                                <td style="text-align:right;padding:12px 16px;">10µA</td>
+                                <td style="text-align:right;padding:12px 16px;">~0.01J</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding:12px 16px;">Boot + PUF read</td>
+                                <td style="text-align:right;padding:12px 16px;">~2 s</td>
+                                <td style="text-align:right;padding:12px 16px;">594mW</td>
+                                <td style="text-align:right;padding:12px 16px;">~1.2J</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding:12px 16px;">Active mining</td>
+                                <td style="text-align:right;padding:12px 16px;">~2 min</td>
+                                <td style="text-align:right;padding:12px 16px;">594mW</td>
+                                <td style="text-align:right;padding:12px 16px;">~71J</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding:12px 16px;">Block broadcast + sleep</td>
+                                <td style="text-align:right;padding:12px 16px;">~5 s</td>
+                                <td style="text-align:right;padding:12px 16px;">594mW</td>
+                                <td style="text-align:right;padding:12px 16px;">~3J</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding:12px 16px;font-weight:600;">Total cycle</td>
+                                <td style="text-align:right;padding:12px 16px;font-weight:600;">~60 min</td>
+                                <td style="text-align:right;padding:12px 16px;color:var(--muted);">—</td>
+                                <td style="text-align:right;padding:12px 16px;font-weight:600;color:var(--accent);">~75J</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p style="color:var(--muted);font-size:13px;margin-top:16px;">At 1W solar input, the supercapacitor recharges 72J in ~72 seconds of direct sunlight. A full cycle (charge + mine) takes about 1 hour with intermittent clouds. In steady sun, mining is continuous.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Environmental Impact -->
+    <section id="environmental-impact">
+        <div class="container">
+            <h2>Environmental Impact</h2>
+            <p class="section-subtitle">Quartz mining has a negligible environmental footprint by design.</p>
+            <div style="background: var(--card); border: 1px solid var(--accent); border-radius: 16px; padding: 36px; border-left: 4px solid var(--accent);">
+                <div style="font-size: 28px; margin-bottom: 16px;">🌱</div>
+                <p style="font-size: 18px; line-height: 1.7; color: var(--text);">
+                    Bitcoin mining consumes an estimated <strong>150 terawatt-hours per year</strong> — more than many countries. It relies on grid electricity, much of it from fossil fuels, and generates significant e-waste from short-lived ASIC hardware.
+                </p>
+                <p style="font-size: 18px; line-height: 1.7; color: var(--text); margin-top: 16px;">
+                    Quartz mining consumes <strong>1.2 watts per node</strong>, runs entirely on solar, wind, or vibration harvesting, and uses ESP32 chips with a 10+ year lifespan. A 100-node solar farm draws less power than a single incandescent light bulb. No grid tie. No cooling fans. No noise. No fossil fuels.
+                </p>
+                <p style="font-size: 18px; line-height: 1.7; color: var(--text); margin-top: 16px;">
+                    <strong style="color:var(--accent);">Quartz mining is carbon-negative capable:</strong> when powered by solar panels that would otherwise not be installed, each node offsets more CO₂ than it could ever produce. The hardware lasts a decade. The energy is free. The environmental cost is essentially zero.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bill of Materials -->
+    <section id="bom" style="background: var(--surface); border-top: 1px solid var(--border);">
+        <div class="container">
+            <h2>Bill of Materials — Solar Node</h2>
+            <p class="section-subtitle">Everything you need to build one off-grid Quartz miner. Total: ~$48.</p>
+            <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border);">
+                            <th style="text-align:left;padding:12px 16px;color:var(--accent);font-size:14px;">Component</th>
+                            <th style="text-align:left;padding:12px 16px;color:var(--accent);font-size:14px;">Part</th>
+                            <th style="text-align:right;padding:12px 16px;color:var(--accent);font-size:14px;">Qty</th>
+                            <th style="text-align:right;padding:12px 16px;color:var(--accent);font-size:14px;">Unit Cost</th>
+                            <th style="text-align:right;padding:12px 16px;color:var(--accent);font-size:14px;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">📱 Miner board</td>
+                            <td style="padding:12px 16px;color:var(--muted);">ESP32-D0WDQ6 dev board</td>
+                            <td style="text-align:right;padding:12px 16px;">1</td>
+                            <td style="text-align:right;padding:12px 16px;">$5</td>
+                            <td style="text-align:right;padding:12px 16px;">$5</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">☀️ Solar panel</td>
+                            <td style="padding:12px 16px;color:var(--muted);">5V 1W, 100×60mm</td>
+                            <td style="text-align:right;padding:12px 16px;">1</td>
+                            <td style="text-align:right;padding:12px 16px;">$3</td>
+                            <td style="text-align:right;padding:12px 16px;">$3</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">🔋 Supercapacitor</td>
+                            <td style="padding:12px 16px;color:var(--muted);">10F 5.4V, series pair</td>
+                            <td style="text-align:right;padding:12px 16px;">2</td>
+                            <td style="text-align:right;padding:12px 16px;">$3</td>
+                            <td style="text-align:right;padding:12px 16px;">$6</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">⚙️ Charge controller</td>
+                            <td style="padding:12px 16px;color:var(--muted);">TP4056 or MCP73871</td>
+                            <td style="text-align:right;padding:12px 16px;">1</td>
+                            <td style="text-align:right;padding:12px 16px;">$2</td>
+                            <td style="text-align:right;padding:12px 16px;">$2</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">🔻 Voltage regulator</td>
+                            <td style="padding:12px 16px;color:var(--muted);">HT7333 LDO 3.3V</td>
+                            <td style="text-align:right;padding:12px 16px;">1</td>
+                            <td style="text-align:right;padding:12px 16px;">$1</td>
+                            <td style="text-align:right;padding:12px 16px;">$1</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">📡 LoRa module (optional)</td>
+                            <td style="padding:12px 16px;color:var(--muted);">SX1276, 433/868/915MHz</td>
+                            <td style="text-align:right;padding:12px 16px;">1</td>
+                            <td style="text-align:right;padding:12px 16px;">$8</td>
+                            <td style="text-align:right;padding:12px 16px;">$8</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">🔌 Passive components</td>
+                            <td style="padding:12px 16px;color:var(--muted);">Caps, resistors, diodes, wire</td>
+                            <td style="text-align:right;padding:12px 16px;">—</td>
+                            <td style="text-align:right;padding:12px 16px;">—</td>
+                            <td style="text-align:right;padding:12px 16px;">$3</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">🟢 Piezo discs (optional)</td>
+                            <td style="padding:12px 16px;color:var(--muted);">PZT-5H Ø35mm</td>
+                            <td style="text-align:right;padding:12px 16px;">6</td>
+                            <td style="text-align:right;padding:12px 16px;">$2</td>
+                            <td style="text-align:right;padding:12px 16px;">$12</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding:12px 16px;">📦 Enclosure</td>
+                            <td style="padding:12px 16px;color:var(--muted);">IP65 weatherproof box</td>
+                            <td style="text-align:right;padding:12px 16px;">1</td>
+                            <td style="text-align:right;padding:12px 16px;">$4</td>
+                            <td style="text-align:right;padding:12px 16px;">$4</td>
+                        </tr>
+                        <tr style="border-bottom: 2px solid var(--accent);">
+                            <td style="padding:12px 16px;font-weight:700;color:var(--accent);" colspan="4">Base solar node (no piezo, no LoRa)</td>
+                            <td style="text-align:right;padding:12px 16px;font-weight:700;color:var(--accent);font-size:18px;">$24</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:12px 16px;font-weight:700;" colspan="4">Full node (solar + piezo + LoRa)</td>
+                            <td style="text-align:right;padding:12px 16px;font-weight:700;font-size:18px;color:var(--accent);">$48</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="note" style="margin-top:24px;">
+                🛒 <strong>Where to buy:</strong> ESP32 dev boards and passive components from AliExpress, Amazon, or Mouser. Solar panels from any electronics supplier. Supercapacitors from DigiKey or LCSC. LoRa modules from AliExpress or Mouser. The BOM is deliberately composed of commodity parts — no custom PCBs, no hard-to-source chips.
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No dev fund · <a href="/terms.html" style="color: var(--muted);">Terms & Disclaimers</a></p>
+            <p style="margin-top: 8px; font-size: 12px;">1.2W per node · Solar-powered · Off-grid mining · $5 entry cost</p>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--muted); max-width: 600px;">Quartz is a decentralized, open-source protocol. No entity controls, issues, or redeems QZ. This website provides information and non-custodial tools only. Nothing here is financial advice. QZ has no guaranteed value.</p>
+        </div>
+    </footer>
+</body>
+</html>

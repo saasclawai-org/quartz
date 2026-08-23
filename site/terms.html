@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz — Terms & Disclaimers</title>
+    <meta name="theme-color" content="#0a0a0f">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+    <style>
+        :root {
+            --bg: #0a0a0f; --surface: #12121a; --card: #1a1a2e;
+            --border: #2a2a3e; --text: #e4e4ef; --muted: #8888a0;
+            --accent: #00d4aa; --orange: #ff6b35; --red: #ff4444;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.7; }
+        a { color: var(--accent); }
+        .container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        h1 { font-size: 28px; margin-bottom: 8px; }
+        h2 { font-size: 20px; margin-top: 32px; margin-bottom: 12px; color: var(--accent); }
+        p { margin-bottom: 16px; color: var(--text); }
+        ul { margin-bottom: 16px; padding-left: 20px; }
+        li { margin-bottom: 8px; color: var(--text); }
+        .header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 24px; }
+        .header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+        .callout { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 20px 0; }
+        .callout.warning { border-color: var(--orange); }
+        .callout.important { border-color: var(--accent); }
+        .callout strong { color: var(--accent); }
+        .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+        .updated { color: var(--muted); font-size: 13px; }
+        .quartz-nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10, 10, 15, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #2a2a3e;
+            padding: 0;
+        }
+        .quartz-nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+        }
+        .quartz-nav-logo {
+            color: #00d4aa;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 18px;
+        }
+        .quartz-nav-links {
+            display: flex;
+            gap: 24px;
+        }
+        .quartz-nav-links a {
+            color: #8888a0;
+            text-decoration: none;
+            font-size: 15px;
+            transition: color 0.2s;
+        }
+        .quartz-nav-links a:hover {
+            color: #e4e4ef;
+        }
+        @media (max-width: 768px) {
+            .quartz-nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+<nav class="quartz-nav">
+  <div class="quartz-nav-inner">
+    <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+    <div class="quartz-nav-links">
+      <a href="/">Home</a>
+      <a href="/security.html">Security</a>
+      <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+      <a href="/wallet/">Wallet</a>
+      <a href="/wiring.html">Wiring</a>
+      <a href="/download.html">Download</a>
+    </div>
+  </div>
+</nav>
+    <div class="container">
+        <div class="header">
+            <a href="/">← Back to Quartz</a>
+        </div>
+
+        <h1>🔮 Terms & Disclaimers</h1>
+        <p class="updated">Last updated: August 10, 2026</p>
+
+        <div class="callout important">
+            <strong>TL;DR:</strong> Quartz is a decentralized, open-source protocol. No entity controls, issues, administers, or redeems Quartz (QZ). This website provides information and non-custodial software tools only. Nothing here is financial advice. Mining QZ has no guaranteed value.
+        </div>
+
+        <h2>1. Decentralized Protocol</h2>
+        <p>Quartz (QZ) is a decentralized cryptocurrency protocol released under the MIT license. The protocol operates without a central administrator, issuer, or redeemer. No single entity — including the developers, contributors, or website operators — has the power to:</p>
+        <ul>
+            <li>Issue, create, or mint new QZ outside the protocol's consensus rules</li>
+            <li>Redeem, exchange, or buy back QZ</li>
+            <li>Reverse, freeze, or censor transactions</li>
+            <li>Modify the protocol's fixed supply (42,000,000 QZ)</li>
+            <li>Access users' private keys or funds</li>
+        </ul>
+
+        <h2>2. Non-Custodial Software</h2>
+        <p>All software provided on this website is non-custodial:</p>
+        <ul>
+            <li><strong>Wallet:</strong> Private keys are generated and stored entirely in your browser or on your ESP32 device. They are never transmitted to, stored on, or accessible by any server.</li>
+            <li><strong>Block Explorer:</strong> Read-only access to public blockchain data.</li>
+            <li><strong>Testnet:</strong> Testnet QZ has no monetary value and is for testing purposes only.</li>
+            <li><strong>Firmware:</strong> Open-source ESP32 firmware that runs on hardware you own and control.</li>
+        </ul>
+        <p>You are solely responsible for the security of your private keys, seed phrases, and hardware devices. If you lose your keys, no one can recover your funds.</p>
+
+        <h2>3. Not Financial Advice</h2>
+        <p>Nothing on this website constitutes financial, investment, legal, or tax advice. Quartz is presented as a technology project and payment rail for IoT devices, not as an investment opportunity. The value of QZ, if any, is determined solely by market participants. No party guarantees any return, profit, or value appreciation.</p>
+
+        <p>Do your own research. Cryptocurrency markets are volatile. You may lose some or all of any value you assign to QZ.</p>
+
+        <h2>4. Not a Security</h2>
+        <p>Quartz was designed and is marketed as a decentralized payment network and IoT economy tool — not as an investment contract. Key facts:</p>
+        <ul>
+            <li>No initial coin offering (ICO), token sale, or fundraising event</li>
+            <li>No premine — all QZ is mined through proof-of-work</li>
+            <li>No common enterprise — mining and transacting are independent activities</li>
+            <li>No expectation of profit from the efforts of others — QZ value, if any, derives from network usage, not promoter efforts</li>
+            <li>The dev fund (5%) is allocated via transparent, protocol-defined per-block emission with a published vesting schedule, governed by multi-signature governance (not any single individual)</li>
+        </ul>
+
+        <h2>5. Money Services Business (MSB) Status</h2>
+        <p>Consistent with FinCEN's 2013 and 2019 virtual currency guidance:</p>
+        <ul>
+            <li><strong>Users and miners</strong> of Quartz are not money transmitters and need not register with FinCEN</li>
+            <li><strong>This website does not</strong> exchange, transmit, or store QZ on behalf of users</li>
+            <li><strong>This website does not</strong> facilitate conversion between QZ and fiat currency</li>
+            <li><strong>The operators of this website</strong> are software developers publishing open-source code, which FinCEN has stated does not constitute money transmission</li>
+        </ul>
+        <p>Third parties who wish to operate exchanges, payment processors, or custodial services for QZ are responsible for their own regulatory compliance, including FinCEN registration and state money transmitter licenses where applicable.</p>
+
+        <h2>6. Dev Fund Transparency</h2>
+        <p>The Quartz dev fund (5% of total supply, 2,100,000 QZ) is governed as follows:</p>
+        <ul>
+            <li><strong>Emission:</strong> 2.5 QZ per block, emitted automatically by protocol consensus rules</li>
+            <li><strong>Vesting:</strong> ~4 years (~525,600 blocks), ending after block 525,600</li>
+            <li><strong>Governance:</strong> Multi-signature control (target: 3-of-5), not controlled by any single individual</li>
+            <li><strong>Purpose:</strong> Development, security audits, bug bounty (50,000 QZ), and ecosystem grants</li>
+            <li><strong>Public address:</strong> Published on-chain and in the block explorer</li>
+            <li><strong>Spending log:</strong> All dev fund transactions are visible on the public blockchain</li>
+        </ul>
+
+        <h2>7. Regulatory Uncertainty</h2>
+        <div class="callout warning">
+            <strong>Cryptocurrency regulation is evolving.</strong> Laws vary by jurisdiction and are subject to change. What is permissible today may be restricted tomorrow. You are responsible for understanding and complying with the laws of your jurisdiction regarding:
+            <ul style="margin-top: 8px;">
+                <li>Cryptocurrency ownership and mining</li>
+                <li>Tax reporting for cryptocurrency transactions</li>
+                <li>Money transmission and exchange activities</li>
+                <li>Import/export of hardware devices</li>
+                <li>Radio frequency use (LoRa modules have region-specific regulations)</li>
+            </ul>
+        </div>
+
+        <h2>8. Hardware Safety</h2>
+        <p>ESP32 devices are electrical hardware. Follow manufacturer safety guidelines:</p>
+        <ul>
+            <li>Use appropriate power supplies (USB 5V, or battery per board spec)</li>
+            <li>Do not expose to water unless properly enclosed (IP65+ for outdoor use)</li>
+            <li>LoRa antennas must comply with regional frequency regulations (EU 868, US 915, etc.) and power limits</li>
+            <li>Solar installations should follow local electrical codes</li>
+            <li>Flash encryption and secure boot, once enabled, are irreversible — understand the implications before provisioning</li>
+        </ul>
+
+        <h2>9. No Warranty</h2>
+        <p>The Quartz protocol, firmware, reference node, wallet software, and all related tools are provided "as is" without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and non-infringement. The entire risk as to the quality and performance of the software is with you.</p>
+
+        <h2>10. Limitation of Liability</h2>
+        <p>In no event shall the Quartz developers, contributors, or website operators be liable for any damages arising out of the use or inability to use the software, including but not limited to loss of funds, hardware damage, data loss, or business interruption.</p>
+
+        <h2>11. Open Source</h2>
+        <p>Quartz is released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>. You are free to use, modify, distribute, and fork the code. If you operate a modified version of the protocol, you are responsible for your own regulatory compliance.</p>
+
+        <h2>12. Contact</h2>
+        <p>For legal inquiries: See the project repository at <a href="https://github.com/saasclawai-org/quartz">github.com/saasclawai-org/quartz</a> (pending public launch). For security reports: submit via GitHub Issues with a [SECURITY] tag.</p>
+
+        <div class="footer">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No central administrator</p>
+            <p>This document is informational and does not create any legal relationship between you and the Quartz project contributors. Consult a qualified attorney for legal advice specific to your situation.</p>
+        </div>
+    </div>
+</body>
+</html>

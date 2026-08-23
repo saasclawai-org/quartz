@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokenomics — Quartz (QZ)</title>
+    <meta name="description" content="Quartz tokenomics: fair launch, no premine, no dev fund. 42M total supply, 42 QZ block reward, 100% to miners. Halving every 500,000 blocks.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a>
+          <a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="hero" style="padding: 80px 24px 60px;">
+        <h1>Tokenomics</h1>
+        <p class="tagline">Fair launch. No premine. No dev fund. 42 QZ per block, 100% to miners.</p>
+    </div>
+
+    <div class="container">
+
+        <!-- Reward Split Visualization -->
+        <section style="padding: 40px 0 60px;">
+            <h2>Block Reward</h2>
+            <p class="section-subtitle">Every block mints 42 QZ — 100% goes to the miner who found it (pre-mesh-fork).</p>
+
+            <div class="grid grid-2" style="margin-bottom: 32px;">
+                <div class="card" style="text-align:center; border-color: var(--accent);">
+                    <div class="icon">⛏️</div>
+                    <h3>Mining Reward</h3>
+                    <div style="font-size: 42px; font-weight: 800; color: var(--accent); margin: 16px 0;">42 QZ</div>
+                    <p>100% of every block goes to the PUF-attested miner who found it. No dev fund, no protocol tax, no hidden mint. Pure fair launch.</p>
+                </div>
+                <div class="card" style="text-align:center; border-color: var(--purple);">
+                    <div class="icon">📡</div>
+                    <h3>Mesh Relayer Pool (deferred)</h3>
+                    <div style="font-size: 42px; font-weight: 800; color: var(--purple); margin: 16px 0;">0 QZ</div>
+                    <p>Design preserved, payment deferred. Activates only at a future hard fork when a real LoRa/ESP-NOW mesh fleet carries live traffic. At that point: 90% miner / 10% relayer of the 42 QZ base.</p>
+                </div>
+            </div>
+
+            <div style="text-align:center; margin: 24px 0;">
+                <div style="display:inline-flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--border); border-radius:99px; padding:12px 32px;">
+                    <span style="font-size:24px; font-weight:800; color:var(--accent);">42 QZ</span>
+                    <span style="color:var(--muted);">→</span>
+                    <span style="font-size:16px; color:var(--muted);">miner (100% pre-fork)</span>
+                </div>
+            </div>
+
+            <div class="card" style="max-width: 700px; margin: 24px auto; border-left: 4px solid var(--purple);">
+                <p style="font-size: 14px; margin-bottom: 8px;"><strong>At the future mesh fork:</strong></p>
+                <p style="font-size: 14px; margin-bottom: 4px;">⛏️ Miner: <strong style="color: var(--accent);">37.8 QZ</strong> (90%)</p>
+                <p style="font-size: 14px;">📡 Relayers: <strong style="color: var(--purple);">4.2 QZ</strong> (10%, in-block-validated relay shares)</p>
+            </div>
+        </section>
+
+        <!-- Token Details Table -->
+        <section style="padding: 40px 0 60px; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+            <h2>Token Details</h2>
+            <p class="section-subtitle">The fundamental parameters of the Quartz protocol.</p>
+
+            <div class="card" style="padding: 0; overflow: hidden;">
+                <table>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Ticker</td>
+                            <td style="padding: 16px 24px; font-family: var(--mono); color: var(--accent); font-size: 16px;">QZ</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Total Supply</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">42,000,000 QZ (42M exact)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Dev Fund</td>
+                            <td style="padding: 16px 24px; font-size: 16px; color: var(--accent);">0 QZ — none</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Premine</td>
+                            <td style="padding: 16px 24px; font-size: 16px; color: var(--accent);">0 QZ — none</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">ICO / Sale</td>
+                            <td style="padding: 16px 24px; font-size: 16px; color: var(--accent);">None</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Block Time</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">30 seconds (target)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Block Reward</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">42 QZ per block (Era 1)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Halving Interval</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">500,000 blocks (~9 months at 30s)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Miner Share</td>
+                            <td style="padding: 16px 24px; font-size: 16px; color: var(--accent);">100% (pre-mesh-fork)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Consensus</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">CrystalHash (PUF-attested PoW)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Signature Scheme</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">WOTS+ (quantum-safe, hash-based)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">Max Txs / Block</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">10 (100KB block size limit)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 16px 24px; color: var(--muted); font-weight: 600;">License</td>
+                            <td style="padding: 16px 24px; font-size: 16px;">MIT (open source)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Mining Eras + Supply Chart -->
+        <section style="padding: 60px 0;">
+            <h2>Mining Eras</h2>
+            <p class="section-subtitle">Block rewards halve every 500,000 blocks. 33 halvings → supply hits 42M exactly.</p>
+
+            <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 32px;">
+                <table>
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border);">
+                            <th style="padding: 14px 24px; text-align: left; color: var(--accent); font-weight: 600;">Era</th>
+                            <th style="padding: 14px 24px; text-align: left; color: var(--accent); font-weight: 600;">Blocks</th>
+                            <th style="padding: 14px 24px; text-align: left; color: var(--accent); font-weight: 600;">Reward / Block</th>
+                            <th style="padding: 14px 24px; text-align: left; color: var(--accent); font-weight: 600;">Era Supply</th>
+                            <th style="padding: 14px 24px; text-align: left; color: var(--accent); font-weight: 600;">Cumulative Supply</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 14px 24px; font-weight: 600;">Era 1</td>
+                            <td style="padding: 14px 24px; font-family: var(--mono); font-size: 14px;">0 – 500,000</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 600;">42 QZ</td>
+                            <td style="padding: 14px 24px;">21,000,000</td>
+                            <td style="padding: 14px 24px;">21,000,000</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 14px 24px; font-weight: 600;">Era 2</td>
+                            <td style="padding: 14px 24px; font-family: var(--mono); font-size: 14px;">500,001 – 1,000,000</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 600;">21 QZ</td>
+                            <td style="padding: 14px 24px;">10,500,000</td>
+                            <td style="padding: 14px 24px;">31,500,000</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 14px 24px; font-weight: 600;">Era 3</td>
+                            <td style="padding: 14px 24px; font-family: var(--mono); font-size: 14px;">1,000,001 – 1,500,000</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 600;">10.5 QZ</td>
+                            <td style="padding: 14px 24px;">5,250,000</td>
+                            <td style="padding: 14px 24px;">36,750,000</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 14px 24px; font-weight: 600;">Era 4</td>
+                            <td style="padding: 14px 24px; font-family: var(--mono); font-size: 14px;">1,500,001 – 2,000,000</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 600;">5.25 QZ</td>
+                            <td style="padding: 14px 24px;">2,625,000</td>
+                            <td style="padding: 14px 24px;">39,375,000</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 14px 24px; font-weight: 600;">Era 5</td>
+                            <td style="padding: 14px 24px; font-family: var(--mono); font-size: 14px;">2,000,001 – 2,500,000</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 600;">2.625 QZ</td>
+                            <td style="padding: 14px 24px;">1,312,500</td>
+                            <td style="padding: 14px 24px;">40,687,500</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 14px 24px; font-weight: 600;">Era 6+</td>
+                            <td style="padding: 14px 24px; font-family: var(--mono); font-size: 14px;">2,500,001+</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 600;">1.3125 QZ</td>
+                            <td style="padding: 14px 24px;">≈ 1,312,500 / era</td>
+                            <td style="padding: 14px 24px;">→ 42,000,000</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 14px 24px; font-weight: 600; color: var(--muted);">Limit</td>
+                            <td style="padding: 14px 24px; color: var(--muted);">∞</td>
+                            <td style="padding: 14px 24px; color: var(--muted);">→ 0</td>
+                            <td style="padding: 14px 24px; color: var(--muted);">→ 0</td>
+                            <td style="padding: 14px 24px; color: var(--accent); font-weight: 700;">42,000,000</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card" style="padding: 32px;">
+                <h3 style="margin-bottom: 20px; font-size: 18px;">Cumulative Supply Curve</h3>
+                <div style="position: relative; height: 400px;">
+                    <canvas id="supplyChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Emission Decisions -->
+        <section style="padding: 60px 0; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+            <h2>Emission Decisions</h2>
+            <p class="section-subtitle">What changed from the original design and why.</p>
+
+            <div class="card" style="max-width: 800px; margin: 0 auto 24px; border-left: 4px solid var(--accent);">
+                <h3 style="font-size: 18px; margin-bottom: 12px;">Supply Retune (Aug 2026)</h3>
+                <p style="font-size: 15px; margin-bottom: 12px;">Base emission set to <strong>42 QZ/block with 500,000-block halving</strong>, making total supply land exactly on 42,000,000 QZ (42 × 500,000 × 2). The original 50 QZ / 210K schedule never matched the 42M figure — this was the last paper-vs-chain drift.</p>
+                <p style="font-size: 15px;">A 1.2% emission trim, not an expansion. Decided before the first halving, so no historical schedule was rewritten.</p>
+            </div>
+
+            <div class="card" style="max-width: 800px; margin: 0 auto 24px; border-left: 4px solid var(--accent);">
+                <h3 style="font-size: 18px; margin-bottom: 12px;">Dev Fund: Killed</h3>
+                <p style="font-size: 15px;">Zero percent. No premine, no ICO, no founder allocation. 100% of block rewards go to miners. The quantum security pool was also dropped — a protocol tax minting to an address with no spender is dead supply.</p>
+            </div>
+
+            <div class="card" style="max-width: 800px; margin: 0 auto 24px; border-left: 4px solid var(--purple);">
+                <h3 style="font-size: 18px; margin-bottom: 12px;">Mesh Relayer Pool: Deferred</h3>
+                <p style="font-size: 15px;">Design preserved, payment deferred. 10% of block reward activates only at a future hard fork — and only when a real mesh fleet carries live traffic with validated relay-share accounting. Paying it before that would mint to nothing.</p>
+            </div>
+
+            <div class="card" style="max-width: 800px; margin: 0 auto; border-left: 4px solid var(--orange);">
+                <h3 style="font-size: 18px; margin-bottom: 12px;">Early Adopter Bonus: Removed</h3>
+                <p style="font-size: 15px;">The originally-planned 2x bonus for the first 1,000 PUF devices paid above the coinbase schedule, which the consensus engine correctly rejects. Fair launch means one schedule for everyone, from block 1.</p>
+            </div>
+        </section>
+
+        <!-- Token Distribution -->
+        <section style="padding: 60px 0;">
+            <div class="card" style="max-width: 800px; margin: 0 auto; border-left: 4px solid var(--purple);">
+                <div class="icon">⏳</div>
+                <h3 style="font-size: 22px; margin-bottom: 16px;">Founder Timelock</h3>
+                <p style="font-size: 16px; margin-bottom: 16px;">
+                    Quartz has no dev fund, no premine, and no ICO. The founders mine on exactly the same terms as everyone else — PUF-attested ESP32 hardware, same block rewards, same difficulty.
+                </p>
+                <p style="font-size: 16px; margin-bottom: 16px;">
+                    To demonstrate long-term commitment and prevent any appearance of a dump, any blocks mined by founder-identified wallets are <strong style="color: var(--accent);">timelocked for 2 years</strong> from the block height at which they were mined. These coins cannot be transferred, staked, or sold until the timelock expires.
+                </p>
+                <p style="font-size: 16px;">
+                    This is a voluntary, transparent commitment recorded on-chain. Founder wallets are publicly identified. After the 2-year period, the coins are fully liquid — no special privileges, no admin keys, no escape hatches.
+                </p>
+                <div class="note" style="margin-top: 20px;">
+                    <strong>Key point:</strong> The timelock is a social commitment encoded in the reference wallet software. The protocol itself does not special-case founder addresses. Anyone can verify founder wallet balances and timelock heights on the explorer.
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>🔮 Quartz (QZ) · MIT License · No premine · No ICO · No dev fund · <a href="/terms.html" style="color: var(--muted);">Terms & Disclaimers</a></p>
+            <p style="margin-top: 8px; font-size: 12px;">Quantum-safe wallets. Hardware-bound mining. $5 entry cost.</p>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--muted); max-width: 600px;">Quartz is a decentralized, open-source protocol. No entity controls, issues, or redeems QZ. This website provides information and non-custodial tools only. Nothing here is financial advice. QZ has no guaranteed value.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Cumulative supply chart — 42 QZ / 500K halving
+        const eras = [
+            { label: 'Era 1', reward: 42, blocks: 500000 },
+            { label: 'Era 2', reward: 21, blocks: 500000 },
+            { label: 'Era 3', reward: 10.5, blocks: 500000 },
+            { label: 'Era 4', reward: 5.25, blocks: 500000 },
+            { label: 'Era 5', reward: 2.625, blocks: 500000 },
+            { label: 'Era 6', reward: 1.3125, blocks: 500000 },
+            { label: 'Era 7', reward: 0.65625, blocks: 500000 },
+            { label: 'Era 8', reward: 0.328125, blocks: 500000 },
+        ];
+
+        let cumulative = 0;
+        const labels = [];
+        const data = [];
+        const colors = [];
+
+        labels.push('Genesis');
+        data.push(0);
+        colors.push('#00d4aa');
+
+        eras.forEach((era, i) => {
+            const eraSupply = era.reward * era.blocks;
+            cumulative += eraSupply;
+            labels.push(era.label);
+            data.push(Math.round(cumulative));
+            colors.push(i % 2 === 0 ? '#00d4aa' : '#9d4edd');
+        });
+
+        labels.push('Limit (42M)');
+        data.push(42000000);
+        colors.push('#ff6b35');
+
+        const ctx = document.getElementById('supplyChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Cumulative Supply (QZ)',
+                    data: data,
+                    backgroundColor: colors.map(c => c + '44'),
+                    borderColor: colors,
+                    borderWidth: 2,
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1a1a2e',
+                        borderColor: '#2a2a3e',
+                        borderWidth: 1,
+                        titleColor: '#00d4aa',
+                        bodyColor: '#e4e4ef',
+                        callbacks: {
+                            label: function(ctx) {
+                                return ctx.parsed.y.toLocaleString() + ' QZ';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(42,42,62,0.5)' },
+                        ticks: { color: '#8888a0', font: { size: 12 } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(42,42,62,0.5)' },
+                        ticks: {
+                            color: '#8888a0',
+                            font: { size: 12 },
+                            callback: function(v) {
+                                if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+                                if (v >= 1000) return (v / 1000).toFixed(0) + 'K';
+                                return v;
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Cumulative Supply (QZ)',
+                            color: '#8888a0',
+                            font: { size: 13 }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

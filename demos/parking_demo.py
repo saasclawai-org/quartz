@@ -16,12 +16,12 @@ On-chain messages:
 
 Usage:
   # Pay-per-park (terminal demo):
-  python3 parking_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 parking_demo.py --node https://quartzchain.net \\
       --address Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U \\
       --rate 0.50 --mode pay --terminal
 
   # Occupancy logger (simulated):
-  python3 parking_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 parking_demo.py --node https://quartzchain.net \\
       --mode occupancy --spots 4 --simulated --interval 30
 
 License: MIT
@@ -280,7 +280,7 @@ Examples:
   # Occupancy logger (simulated, 4 spots):
   python3 parking_demo.py --mode occupancy --spots 4 --simulated --interval 30
         """)
-    parser.add_argument('--node', default='https://quartz.preview.saasclaw.ai')
+    parser.add_argument('--node', default='https://quartzchain.net')
     parser.add_argument('--address', default='')
     parser.add_argument('--station', default='pk-001')
     parser.add_argument('--rate', type=float, default=0.50,

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Monitor — Quartz (QZ)</title>
+    <meta name="description" content="Live parking occupancy data on the Quartz blockchain. Pay-per-park with QZ and tamper-proof spot availability.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        .live-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--surface); border: 1px solid var(--accent);
+            border-radius: 100px; padding: 6px 14px;
+            font-size: 13px; color: var(--accent); font-weight: 600;
+        }
+        .live-badge .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(0,212,170,0.7)} 70%{box-shadow:0 0 0 10px rgba(0,212,170,0)} 100%{box-shadow:0 0 0 0 rgba(0,212,170,0)} }
+        .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+        .stat-card .stat-value { font-size: 32px; font-weight: 800; color: var(--accent); margin: 8px 0; }
+        .stat-card .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+        .spot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin: 20px 0; }
+        .spot-box {
+            background: var(--card); border: 2px solid var(--border); border-radius: 12px;
+            padding: 16px; text-align: center; transition: all 0.3s;
+        }
+        .spot-box.occupied { border-color: var(--orange); background: rgba(255,107,53,0.08); }
+        .spot-box.free { border-color: var(--accent); background: rgba(0,212,170,0.08); }
+        .spot-box .spot-icon { font-size: 28px; }
+        .spot-box .spot-num { font-size: 14px; color: var(--muted); margin-top: 4px; }
+        .spot-box .spot-status { font-size: 13px; font-weight: 600; margin-top: 4px; }
+        .spot-box.occupied .spot-status { color: var(--orange); }
+        .spot-box.free .spot-status { color: var(--accent); }
+        .readings-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .readings-table th { background: var(--surface); color: var(--accent); padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--border); font-size: 13px; position: sticky; top: 0; }
+        .readings-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 13px; }
+        .readings-table tr:hover td { background: var(--surface); }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a><a href="/mining.html">Mining</a><a href="/energy.html">Energy</a><a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a><a href="/tokenomics.html">Tokenomics</a><a href="/agents.html">Agents</a><a href="/security.html">Security</a><a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a><a href="/explorer/">Explorer</a><a href="/names.html">Names</a><a href="/wallet/">Wallet</a><a href="/download.html">Download</a><a href="/setup.html">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero" style="padding: 60px 24px 30px;">
+        <div class="live-badge"><div class="pulse"></div>Live · Querying Quartz testnet</div>
+        <h1 style="font-size: 28px; margin-top: 16px;">🅿️ Parking Monitor</h1>
+        <p class="tagline" style="font-size: 16px;">Spot occupancy logged on the Quartz blockchain. Pay-per-park with QZ. No payment processor — just a QR code.</p>
+    </div>
+
+    <div class="container" style="padding-bottom: 60px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:24px 0;">
+            <div class="stat-card"><div class="stat-label">Total Spots</div><div class="stat-value" id="totalSpots">—</div></div>
+            <div class="stat-card"><div class="stat-label">Occupied</div><div class="stat-value" id="occupiedCount" style="color:var(--orange)">—</div></div>
+            <div class="stat-card"><div class="stat-label">On-chain Logs</div><div class="stat-value" id="totalLogs" style="font-size:28px">—</div></div>
+        </div>
+
+        <h3 style="color:var(--accent2);font-size:16px;margin-bottom:8px;">Current Spot Status</h3>
+        <div class="spot-grid" id="spotGrid"><div style="color:var(--muted);padding:20px;">Loading...</div></div>
+
+        <h3 style="color:var(--accent2);font-size:16px;margin:24px 0 8px;">Occupancy History</h3>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;max-height:300px;overflow-y:auto;">
+            <table class="readings-table">
+                <thead><tr><th>Time</th><th>Station</th><th>Spot</th><th>Status</th><th>TXID</th></tr></thead>
+                <tbody id="readingsBody"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px;">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:24px;">
+            <h3 style="color:var(--accent2);font-size:18px;margin-bottom:12px;">Run your own parking monitor</h3>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:13px;color:var(--accent);overflow-x:auto;">
+# Occupancy logger (simulated, 4 spots):
+curl -sO https://quartzchain.net/parking_demo.py
+python3 parking_demo.py --mode occupancy --station pk-002 --spots 4 --simulated --interval 30
+
+# Pay-per-park (terminal demo):
+python3 parking_demo.py --mode pay --terminal \\
+    --address Qk6QSGe2TtBc3cDLtBHmZMg5CHAbGm4n4U --rate 0.50
+            </div>
+            <p style="color:var(--muted);font-size:14px;margin-top:12px;">
+                <a href="/parking_demo.py" style="color:var(--accent);">Download parking_demo.py</a> ·
+                <a href="/iot.html" style="color:var(--accent);">← IoT page</a>
+            </p>
+        </div>
+    </div>
+
+    <footer style="border-top:1px solid var(--border);padding:30px 20px;text-align:center;color:var(--muted);font-size:14px;">
+        <p>🔮 Quartz (QZ) — Parking data on the blockchain, not in a server.</p>
+    </footer>
+
+    <script>
+        const API = 'https://quartzchain.net/api/v1/messages';
+
+        function parseParking(msg) {
+            const text = msg.data_text || '';
+            if (!text.startsWith('PARK:')) return null;
+            const parts = {};
+            text.split('|').forEach(p => { const [k,...r] = p.split(':'); parts[k.trim()] = r.join(':').trim(); });
+            return {
+                type: parts.PARK || text.split(':')[0],
+                station: parts.STATION || '',
+                spot: parseInt(parts.SPOT || '0'),
+                status: parts.STATUS || '',
+                duration: parseInt(parts.DURATION || '0'),
+                amount: parseFloat(parts.AMOUNT || '0'),
+                plate: parts.PLATE || '',
+                timestamp: msg.timestamp || 0,
+                txid: msg.txid || '',
+            };
+        }
+
+        function fmtTime(ts) {
+            if (!ts) return '—';
+            return new Date(ts * 1000).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }
+
+        async function fetchData() {
+            try {
+                const resp = await fetch(API);
+                const data = await resp.json();
+                const logs = (data.messages || []).map(parseParking).filter(r => r).sort((a,b) => b.timestamp - a.timestamp);
+
+                if (logs.length === 0) {
+                    document.getElementById('spotGrid').innerHTML = '<div style="color:var(--muted);padding:20px;">No parking data yet. Run parking_demo.py to add data.</div>';
+                    return;
+                }
+
+                // Get latest status per spot
+                const spotStatus = {};
+                logs.forEach(l => {
+                    if (l.status && (l.status === 'OCCUPIED' || l.status === 'FREE')) {
+                        if (!spotStatus[l.spot] || l.timestamp > spotStatus[l.spot].timestamp) {
+                            spotStatus[l.spot] = l;
+                        }
+                    }
+                });
+
+                const spots = Object.keys(spotStatus).map(Number).sort((a,b) => a - b);
+                const occupied = spots.filter(s => spotStatus[s].status === 'OCCUPIED').length;
+
+                document.getElementById('totalSpots').textContent = spots.length;
+                document.getElementById('occupiedCount').textContent = occupied;
+                document.getElementById('totalLogs').textContent = logs.length;
+
+                // Render spot grid
+                document.getElementById('spotGrid').innerHTML = spots.map(s => {
+                    const st = spotStatus[s];
+                    const cls = st.status === 'OCCUPIED' ? 'occupied' : 'free';
+                    const icon = st.status === 'OCCUPIED' ? '🔴' : '🟢';
+                    return `<div class="spot-box ${cls}"><div class="spot-icon">${icon}</div><div class="spot-num">Spot ${s}</div><div class="spot-status">${st.status}</div></div>`;
+                }).join('');
+
+                // Render table (occupancy logs only)
+                const occLogs = logs.filter(l => l.status).slice(0, 50);
+                document.getElementById('readingsBody').innerHTML = occLogs.map(l => `
+                    <tr><td>${fmtTime(l.timestamp)}</td><td>${l.station}</td><td>${l.spot}</td>
+                    <td style="color:${l.status==='OCCUPIED'?'var(--orange)':'var(--accent)'};font-weight:600">${l.status}</td>
+                    <td style="color:var(--muted);font-size:12px">${l.txid.substring(0,12)}...</td></tr>`).join('');
+
+            } catch(e) { console.error(e); }
+        }
+
+        fetchData();
+        setInterval(fetchData, 15000);
+    </script>
+</body>
+</html>

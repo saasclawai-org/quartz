@@ -25,7 +25,7 @@ Three roles in one systemd service:
 ## Install (on the Pi)
 
 ```bash
-curl -LO https://quartz.preview.saasclaw.ai/downloads/quartz-pi-node.tar.gz
+curl -LO https://quartzchain.net/downloads/quartz-pi-node.tar.gz
 tar xzf quartz-pi-node.tar.gz
 cd quartz-pi-node
 sudo bash install.sh
@@ -47,7 +47,7 @@ monopoly**. List any number of peers (comma-separated): the seed, your
 friends' Quartz Pis, anything running this node software:
 
 ```
-Environment=QUARTZ_PEERS=https://quartz.preview.saasclaw.ai,http://192.168.1.42:21100
+Environment=QUARTZ_PEERS=https://quartzchain.net,http://192.168.1.42:21100
 ```
 
 Every peer is polled; the node syncs **incrementally** (batched blocks + a
@@ -69,7 +69,7 @@ Log signature of healthy p2p sync: `🔄 Synced +N blocks: X → Y` lines in
 Point your ESP32 at the Pi — **no firmware rebuild needed**:
 
 1. Flash the latest firmware (single merged image, no toolchain needed):
-   `https://quartz.preview.saasclaw.ai/downloads/` →
+   `https://quartzchain.net/downloads/` →
    `quartz-esp32-merged.bin` (classic ESP32) or `quartz-s3-merged.bin` (S3)
    → `esptool write_flash 0x0 <file>`. Wallet and settings in NVS survive
    a re-flash; do NOT `erase_flash` (that wipes the device's private key).
@@ -86,11 +86,11 @@ curl -s localhost:21100/api/v1/info | python3 -m json.tool
 journalctl -u quartz-node -f          # 🔄 Synced lines, ⛏ local blocks on failover
 
 # network view: hardware miner count, hashrate, recent blocks by miner id
-curl -s https://quartz.preview.saasclaw.ai/api/v1/info
-curl -s https://quartz.preview.saasclaw.ai/api/v1/blocks/since/40750
+curl -s https://quartzchain.net/api/v1/info
+curl -s https://quartzchain.net/api/v1/blocks/since/40750
 
 # the receipts: rewards pay the device wallet directly in the coinbase
-curl -s https://quartz.preview.saasclaw.ai/api/v1/address/<DEVICE_ADDRESS>
+curl -s https://quartzchain.net/api/v1/address/<DEVICE_ADDRESS>
 ```
 
 While relaying (normal mode), `hardware_miners`/`total_hashrate` read ~0

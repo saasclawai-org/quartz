@@ -18,11 +18,11 @@ Works with:
 
 Usage:
   # Terminal demo (no hardware):
-  python3 pay_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 pay_demo.py --node https://quartzchain.net \\
       --amount 0.5 --label "USB Charge 30min" --terminal
 
   # Real relay on Raspberry Pi (GPIO26):
-  python3 pay_demo.py --node https://quartz.preview.saasclaw.ai \\
+  python3 pay_demo.py --node https://quartzchain.net \\
       --amount 1.0 --label "Water Valve" --relay-pin 26 --duration 10000
 
 License: MIT
@@ -211,7 +211,7 @@ Examples:
       --amount 1.0 --label "Water Valve" --relay-pin 26 --duration 10000
         """,
     )
-    parser.add_argument('--node', default='https://quartz.preview.saasclaw.ai',
+    parser.add_argument('--node', default='https://quartzchain.net',
                         help='Quartz node URL')
     parser.add_argument('--address', required=True,
                         help='Wallet address to receive payments')

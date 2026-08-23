@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quartz — Downloads</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --card: #1a1a2e;
+            --border: #2a2a3e;
+            --text: #e4e4ef;
+            --muted: #8888a0;
+            --accent: #00d4aa;
+            --purple: #9d4edd;
+            --orange: #ff6b35;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        .quartz-nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(10,10,15,0.95); backdrop-filter: blur(12px);
+            border-bottom: 1px solid #2a2a3e;
+        }
+        .quartz-nav-inner {
+            max-width: 900px; margin: 0 auto;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 20px;
+        }
+        .quartz-nav-logo { color: var(--accent); text-decoration: none; font-weight: 700; font-size: 18px; }
+        .quartz-nav-links { display: flex; gap: 24px; }
+        .quartz-nav-links a { color: var(--muted); text-decoration: none; font-size: 15px; transition: color 0.2s; }
+        .quartz-nav-links a:hover { color: var(--text); }
+        .quartz-nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 8px; }
+        .quartz-nav-toggle span { display: block; width: 24px; height: 2px; background: var(--text, #e4e4ef); border-radius: 2px; }
+        .quartz-nav-toggle span + span { margin-top: 5px; }
+        @media (max-width: 900px) {
+            .quartz-nav-toggle { display: block; }
+            .quartz-nav-links { display: none; flex-direction: column; position: absolute; top: 100%; left: 0; right: 0; background: rgba(10,10,15,0.98); border-bottom: 1px solid var(--border, #2a2a3e); padding: 0; }
+            .quartz-nav-links.open { display: flex; }
+            .quartz-nav-links a { padding: 14px 20px; border-bottom: 1px solid var(--border, #2a2a3e); }
+        }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 60px 20px; }
+        h1 { color: var(--accent); font-size: 36px; margin-bottom: 8px; }
+        .subtitle { color: var(--muted); font-size: 18px; margin-bottom: 48px; }
+
+        .section-title {
+            font-size: 20px; font-weight: 700; color: var(--text);
+            margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+        }
+
+        .download-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 16px; padding: 28px; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 24px; transition: border-color 0.2s;
+        }
+        .download-card:hover { border-color: var(--accent); }
+        .download-icon { font-size: 48px; flex-shrink: 0; }
+        .download-info { flex: 1; }
+        .download-info h3 { font-size: 18px; margin-bottom: 4px; }
+        .download-info p { color: var(--muted); font-size: 14px; }
+        .download-btn {
+            display: inline-block; background: var(--accent); color: var(--bg);
+            padding: 12px 24px; border-radius: 10px; text-decoration: none;
+            font-weight: 700; font-size: 15px; flex-shrink: 0;
+            transition: transform 0.2s;
+        }
+        .download-btn:hover { transform: translateY(-2px); }
+
+        .board-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px; margin-bottom: 32px;
+        }
+        .board-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px;
+        }
+        .board-card h4 { font-size: 16px; margin-bottom: 4px; }
+        .board-card .price { color: var(--accent); font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+        .board-card p { color: var(--muted); font-size: 13px; }
+        .board-card .features { color: var(--text); font-size: 12px; margin-top: 8px; }
+
+        .flash-cmd {
+            background: #000; border-radius: 8px; padding: 14px;
+            font-family: monospace; font-size: 13px; color: var(--accent);
+            overflow-x: auto; margin: 12px 0;
+        }
+        .note {
+            padding: 12px 16px; background: var(--surface); border-radius: 8px;
+            border-left: 3px solid var(--orange); color: var(--muted); font-size: 14px;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+<nav class="quartz-nav">
+  <div class="quartz-nav-inner">
+    <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+    <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+      <a href="/hardware.html">Hardware</a>
+      <a href="/mining.html">Mining</a>
+      <a href="/energy.html">Energy</a>
+      <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/agents.html">Agents</a>
+      <a href="/security.html">Security</a>
+      <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+      <a href="/wallet/">Wallet</a>
+      <a href="/download.html" style="color:#00d4aa;font-weight:600">Download</a>
+      <a href="/node.html">Node</a>
+      <a href="/setup.html">Setup</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+    <h1>🔮 Downloads</h1>
+    <p class="subtitle">Firmware, wallet app, and tools for the Quartz ecosystem.</p>
+
+    <div class="section-title">⚡ Firmware</div>
+
+    <div class="download-card">
+        <div class="download-icon">🔧</div>
+        <div class="download-info">
+            <h3>Quartz Miner v073</h3>
+            <p>ESP32 firmware — M5Stack Core, WROOM, NodeMCU, all classic ESP32 boards</p>
+            <p style="font-size: 12px; margin-top: 4px;">1.4 MB · 42 QZ/block emission · SHA-256 + WOTS+ · BLE bonding · QR seed · BOOT-button confirm</p>
+        </div>
+        <a href="/firmware/quartz-app-v074.bin" download class="download-btn">Download</a>
+    </div>
+
+    <div class="download-card">
+        <div class="download-icon">📦</div>
+        <div class="download-info">
+            <h3>Bootloader + Partition Table v066</h3>
+            <p>Only needed for fresh boards or partition layout changes</p>
+            <p style="font-size: 12px; margin-top: 4px;">bootloader-v066.bin · partition-table-v066.bin</p>
+        </div>
+        <a href="/firmware/bootloader-v066.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Bootloader</a>
+        <a href="/firmware/partition-table-v066.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Partitions</a>
+    </div>
+
+    <div class="section-title">📱 Android App</div>
+
+    <div class="download-card">
+        <div class="download-icon">📱</div>
+        <div class="download-info">
+            <h3>Quartz Wallet v0.2.5</h3>
+            <p>Android 7.0+ · Seed-phrase software wallet · BLE pairing · Mining stats</p>
+            <p style="font-size: 12px; margin-top: 4px;">22 MB · debug APK · 🏷 on-chain names: name your wallet, send to names</p>
+        </div>
+        <a href="/firmware/quartz-wallet-v0.2.5.apk" download class="download-btn">Download APK</a>
+    </div>
+
+    <div class="section-title">🖥️ Supported Hardware</div>
+
+    <div class="board-grid">
+        <div class="board-card">
+            <h4>ESP32-WROOM</h4>
+            <div class="price">$5</div>
+            <p>Entry miner. Bare board, no display.</p>
+            <div class="features">✅ Mining · ✅ BLE · ✅ Serial QR<br>❌ Display · ❌ LoRa</div>
+        </div>
+        <div class="board-card">
+            <h4>Heltec LoRa 32 V3 <span style="font-size:11px;color:var(--muted);">(beta)</span></h4>
+            <div class="price">$15</div>
+            <p>Mesh miner. All three radios + OLED.</p>
+            <div class="features">🔧 ESP32-S3 build in validation<br>⏳ LoRa mesh · OLED on roadmap</div>
+        </div>
+        <div class="board-card" style="border-color: var(--accent);">
+            <h4>M5Stack Core ⭐</h4>
+            <div class="price">$35</div>
+            <p>Hardware wallet. Full-color display.</p>
+            <div class="features">✅ Mining · ✅ BLE · ✅ QR Display<br>✅ TFT 320×240 · ✅ 3 buttons</div>
+        </div>
+    </div>
+
+    <p style="color: var(--muted); font-size: 13px; margin: 10px 0 4px;">
+        📦 One binary covers all <strong>classic ESP32</strong> boards (DevKit, WROOM/WROVER, M5Stack Core/Gray).
+        <strong>ESP32-S3</strong> and <strong>ESP32-C3</strong> builds are below. ESP32-<strong>S2</strong> (no Bluetooth) is not supported.
+    </p>
+
+    <div class="section-title">📜 Flash Command</div>
+    <p style="color: var(--muted); font-size: 14px;">After downloading, flash with esptool:</p>
+    <div class="flash-cmd">python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x1000 bootloader-v066.bin 0x10000 partition-table-v066.bin 0x20000 quartz-app-v074.bin</div>
+    <div class="note">
+        <strong>Already flashed before?</strong> Just flash the app binary:<br>
+        <code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x20000 quartz-app-v074.bin</code>
+    </div>
+    <div class="note" style="border-color: var(--accent);">
+        Need help? Check the <a href="/setup.html" style="color:var(--accent)">Setup Guide</a> for step-by-step instructions.
+    </div>
+</div>
+
+    <div class="download-card" style="margin-top:24px">
+        <h3>Quartz Miner v073 — ESP32-S3</h3>
+        <p style="font-size: 12px; margin-top: 4px;">OLED display support — device ID, battery status, animated mining indicator. USER button cycles screens (ID → Mining → Fleet → Payment). Heltec V3 + LilyGO T3 auto-detected.</p>
+        <a href="/firmware/quartz-app-s3-v074.bin" download class="download-btn">Download App</a>
+        <a href="/firmware/bootloader-s3-v066.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Bootloader</a>
+        <a href="/firmware/partition-table-s3-v066.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Partitions</a>
+        <div class="flash-cmd" style="margin-top:10px">python -m esptool --chip esp32s3 --port COM6 --baud 460800 write_flash 0x0 bootloader-s3-v066.bin 0x10000 partition-table-s3-v066.bin 0x20000 quartz-app-s3-v074.bin</div>
+        <div class="flash-cmd" style="margin-top:6px;font-size:11px">Full reset (wipe, then re-flash): python -m esptool --chip esp32s3 --port COM6 erase_flash — then run the flash command above. Update (keep wallet): flash only 0x20000 quartz-app-s3-v074.bin</div>
+    </div>
+
+    <div class="download-card" style="margin-top:24px">
+        <h3>Quartz Miner v071 — ESP32-C3</h3>
+        <p style="font-size: 12px; margin-top: 4px;">For ESP32-C3 boards (C3 DevKitM, C3 SuperMini, etc. — headless, serial console). WiFi+BLE coex fix (MIN_MODEM) + wifi re-provision command.</p>
+        <a href="/firmware/quartz-app-v072-c3.bin" download class="download-btn">Download App</a>
+        <a href="/firmware/bootloader-v066-c3.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Bootloader</a>
+        <a href="/firmware/partition-table-v066-c3.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Partitions</a>
+        <div class="flash-cmd" style="margin-top:10px">python -m esptool --chip esp32c3 --port COM6 --baud 460800 write_flash 0x0 bootloader-v066-c3.bin 0x10000 partition-table-v066-c3.bin 0x20000 quartz-app-v072-c3.bin</div>
+        <div class="flash-cmd" style="margin-top:6px;font-size:11px">Full reset (wipe, then re-flash): python -m esptool --chip esp32c3 --port COM6 erase_flash — then run the flash command above. Update (keep wallet): flash only 0x20000 quartz-app-v072-c3.bin</div>
+    </div>
+</body>
+</html>

@@ -17,9 +17,9 @@ I've been building a small cryptocurrency called **Quartz** with one design cons
 - WiFi recovery: survives router reboots, power cycles, hotel portals — it re-captives itself
 
 **To try it:**
-- Flash the merged image at 0x0: https://quartz.preview.saasclaw.ai/downloads/quartz-esp32-merged.bin (esptool write_flash 0x0 ...). Source and C3 build are on GitHub
+- Flash the merged image at 0x0: https://quartzchain.net/downloads/quartz-esp32-merged.bin (esptool write_flash 0x0 ...). Source and C3 build are on GitHub
 - Or run your own node first: one tarball, 15 minutes on a Raspberry Pi — https://github.com/saasclawai-org/quartz
-- Setup guide: https://quartz.preview.saasclaw.ai/setup.html — web wallet with QR codes: https://quartz.preview.saasclaw.ai/wallet/
+- Setup guide: https://quartzchain.net/setup.html — web wallet with QR codes: https://quartzchain.net/wallet/
 
 **Honest state of the network:** it's my board and my nodes today. The node software is pure-Python stdlib on GitHub, so you can run the whole stack yourself and verify blocks aren't coming from me. Mainnet only happens after published bars (20–50 independent miners, founder has to clear the same hardware-cost bar as everyone else): https://github.com/saasclawai-org/quartz/blob/main/MAINNET.md
 
@@ -34,6 +34,6 @@ If you flash a board, post a photo of the portal with your address — I want to
 - **"Why not just a database?"** Fair. The answer is the node story: you can run the verifier yourself on a Pi and don't have to trust my server. If that's not worth anything to you, the database wins — I accept that.
 - **Is this a premine?** Testnet rewards reset before mainnet; mainnet bars (in MAINNET.md) include founder share < 40% and difficulty floors from launch. Judge the repo, not the promise.
 - **Tokens have no value.** Nothing is for sale. No token sale ever — the mainnet doc says so.
-- Bonus if you made it this far: the wallet key also logs you into websites — challenge/signature login demo (MetaMask-style): https://quartz.preview.saasclaw.ai/demos/login.html
+- Bonus if you made it this far: the wallet key also logs you into websites — challenge/signature login demo (MetaMask-style): https://quartzchain.net/demos/login.html
 
 I'm monitoring this thread — ask anything.

@@ -14,11 +14,11 @@ Works with:
 
 Usage:
   # Real sensor (Raspberry Pi + DS18B20 on GPIO4):
-  python3 sensor_logger.py --node https://quartz.preview.saasclaw.ai \
+  python3 sensor_logger.py --node https://quartzchain.net \
       --device cold-001 --sensor ds18b20 --pin 4 --interval 300
 
   # Simulated (no hardware needed):
-  python3 sensor_logger.py --node https://quartz.preview.saasclaw.ai \
+  python3 sensor_logger.py --node https://quartzchain.net \
       --device cold-001 --simulated --interval 60
 
 License: MIT
@@ -208,7 +208,7 @@ Examples:
       --sensor soil --location "north-field" --interval 600
         """,
     )
-    parser.add_argument('--node', default='https://quartz.preview.saasclaw.ai',
+    parser.add_argument('--node', default='https://quartzchain.net',
                         help='Quartz node URL (default: testnet)')
     parser.add_argument('--device', default='sensor-001',
                         help='Device ID (default: sensor-001)')

@@ -46,7 +46,7 @@ leaf miners.
 - Helium hotspot with SSH access (Bobcat, RAK, SenseCAP, or any SX130x-based gateway)
 - Python 3.8+ (most hotspots have this)
 - The hotspot's original Semtech packet forwarder binary (we reconfigure it, not replace it)
-- A Quartz gateway to connect to (default: `quartz.preview.saasclaw.ai`)
+- A Quartz gateway to connect to (default: `quartzchain.net`)
 
 ## Install
 
@@ -72,12 +72,12 @@ The installer:
 
 ```bash
 # Override defaults during install
-GATEWAY_HOST=quartz.preview.saasclaw.ai LORA_REGION=US915 sudo bash install.sh
+GATEWAY_HOST=quartzchain.net LORA_REGION=US915 sudo bash install.sh
 ```
 
 | Variable | Default | Options |
 |----------|---------|---------|
-| `GATEWAY_HOST` | `quartz.preview.saasclaw.ai` | Any Quartz gateway hostname |
+| `GATEWAY_HOST` | `quartzchain.net` | Any Quartz gateway hostname |
 | `LORA_REGION` | `US915` | `US915`, `EU868`, `AS923`, `CN470`, `IN865` |
 | `LORA_UDP_PORT` | `1738` | UDP port for packet forwarder |
 
@@ -205,4 +205,4 @@ MIT — same as the rest of Quartz.
 - [Quartz Whitepaper](../docs/WHITEPAPER.md)
 - [LoRa Mesh Protocol (firmware)](../firmware-c3/main/quartz_lora.h)
 - [P2P Protocol (reference node)](../reference-node/quartz/p2p.py)
-- [Website](https://quartz.preview.saasclaw.ai)
+- [Website](https://quartzchain.net)

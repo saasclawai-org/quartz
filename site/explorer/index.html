@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz Explorer — Testnet</title>
+    <meta name="theme-color" content="#0a0a0f">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+    <style>
+        :root {
+            --bg: #0a0a0f; --surface: #12121a; --card: #1a1a2e;
+            --border: #2a2a3e; --text: #e4e4ef; --muted: #8888a0;
+            --accent: #00d4aa; --orange: #ff6b35; --red: #ff4444;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --mono: 'SF Mono', Consolas, monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; overflow-x: hidden; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .header {
+            position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px);
+            background: rgba(10,10,15,0.9); border-bottom: 1px solid var(--border);
+            padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 4px;
+        }
+        .header h1 { font-size: 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .header h1 span { color: var(--accent); }
+        .header .links { display: flex; gap: 12px; }
+        .header .links a { color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+        .stat-card .label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card .value { font-size: 17px; font-weight: 700; margin-top: 4px; }
+        .stat-card .value.accent { color: var(--accent); }
+
+        .section-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+
+        .block-list { display: flex; flex-direction: column; gap: 8px; }
+        .block-row {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 12px 14px; display: flex; justify-content: space-between; align-items: center;
+            cursor: pointer; transition: border-color 0.2s; gap: 10px;
+        }
+        .block-row:hover { border-color: var(--accent); }
+        .block-row .left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+        .block-row .height { background: var(--surface); border-radius: 8px; padding: 5px 8px; font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 13px; min-width: 46px; text-align: center; flex-shrink: 0; }
+        .block-row .hash { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .block-row .block-meta { font-size: 10px; color: var(--muted); }
+        .block-row .right { text-align: right; flex-shrink: 0; }
+        .block-row .reward { font-weight: 600; color: var(--accent); font-size: 13px; }
+        .block-row .time { font-size: 11px; color: var(--muted); }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; display: none; align-items: center; justify-content: center; padding: 12px; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; max-width: 600px; width: 100%; max-height: 85vh; overflow-y: auto; }
+        .modal h2 { margin-bottom: 14px; font-size: 17px; }
+        .modal .close { float: right; cursor: pointer; color: var(--muted); font-size: 24px; line-height: 1; padding: 4px 8px; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+        .modal .close:active { background: var(--card); }
+        .detail-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+        .detail-row:last-child { border: none; }
+        .detail-row .key { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+        .detail-row .val { font-family: var(--mono); font-size: 12px; text-align: right; word-break: break-all; min-width: 0; }
+
+        .loading { text-align: center; padding: 60px 20px; color: var(--muted); }
+        .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .badge { background: var(--accent); color: var(--bg); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+        .badge.testnet { background: var(--orange); color: white; }
+
+        /* Tablet and up */
+        @media (min-width: 640px) {
+            .header { padding: 12px 20px; }
+            .header h1 { font-size: 18px; }
+            .header .links { gap: 16px; }
+            .header .links a { font-size: 14px; }
+            .container { padding: 20px; }
+            .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+            .stat-card { padding: 16px; }
+            .stat-card .label { font-size: 11px; }
+            .stat-card .value { font-size: 20px; }
+            .section-title { font-size: 18px; }
+            .block-row { padding: 14px 16px; }
+            .block-row .height { font-size: 14px; min-width: 50px; }
+            .block-row .hash { font-size: 12px; }
+            .block-row .reward { font-size: 14px; }
+            .block-row .time { font-size: 12px; }
+            .modal-overlay { padding: 20px; }
+            .modal { padding: 24px; }
+            .modal h2 { font-size: 18px; }
+            .detail-row .key { font-size: 14px; }
+            .detail-row .val { font-size: 13px; }
+        }
+
+        /* Desktop */
+        @media (min-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔮 <span>Quartz</span> Explorer <span class="badge testnet">TESTNET</span></h1>
+        <div class="links">
+            <a href="/">← Home</a>
+            <a href="/wallet/">Wallet</a>
+            <a href="/names.html">Names</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="stats-grid" id="stats">
+            <div class="stat-card"><div class="label">Height</div><div class="value accent" id="stat-height">—</div></div>
+            <div class="stat-card"><div class="label">Supply</div><div class="value" id="stat-supply">—</div></div>
+            <div class="stat-card"><div class="label">Active Miners</div><div class="value" id="stat-miners">—</div><div class="sub" id="stat-miners-total" style="font-size:0.72rem;color:#6b7280;margin-top:2px"></div></div>
+            <div class="stat-card"><div class="label">Block Time</div><div class="value" id="stat-blocktime">30s</div></div>
+            <div class="stat-card"><div class="label">Difficulty</div><div class="value" id="stat-diff">—</div></div>
+            <div class="stat-card"><div class="label">Circulating</div><div class="value" id="stat-circ">—</div></div>
+        </div>
+
+        <div class="section-title">📦 Latest Blocks</div>
+        <div class="block-list" id="blocks">
+            <div class="loading"><div class="spinner"></div><div style="margin-top:12px">Loading blocks...</div></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-block">
+        <div class="modal">
+            <span class="close" onclick="closeModal()">×</span>
+            <div id="block-detail"></div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api/v1';
+        let NAMES = {};      // address -> label (on-chain registry)
+        let MINER_ADDR = {}; // miner_id -> address
+
+        async function fetchJSON(path) {
+            const resp = await fetch(API + path);
+            if (!resp.ok) throw new Error(`${resp.status}`);
+            return resp.json();
+        }
+
+        // Build the name map from on-chain NAME:REGISTER messages (latest wins)
+        async function loadNames() {
+            try {
+                const data = await fetchJSON('/messages');
+                (data.messages || []).forEach(m => {
+                    const text = m.data_text || '';
+                    if (!text.startsWith('NAME:REGISTER') || !m.from) return;
+                    const parts = {};
+                    text.split('|').forEach(p => { const i = p.indexOf(':'); if (i > 0) parts[p.slice(0,i)] = p.slice(i+1); });
+                    if (!parts.LABEL) return;
+                    const prev = NAMES[m.from];
+                    if (!prev || (m.timestamp || 0) >= prev.ts) NAMES[m.from] = { label: parts.LABEL, ts: m.timestamp || 0 };
+                });
+                const miners = await fetchJSON('/miners');
+                (miners.miners || []).forEach(mn => { MINER_ADDR[mn.id] = mn.address; });
+            } catch (e) { console.error('Names error:', e); }
+        }
+
+        // Resolve miner_id -> "id · on-chain name" or "id · short address"
+        function minerLabel(minerId) {
+            if (!minerId) return '—';
+            const addr = MINER_ADDR[minerId];
+            if (addr && NAMES[addr]) return `${minerId} · ${NAMES[addr].label}`;
+            if (addr) return `${minerId} · ${addr.slice(0, 8)}…`;
+            return minerId;
+        }
+
+        async function loadInfo() {
+            try {
+                const info = await fetchJSON('/info');
+                document.getElementById('stat-height').textContent = info.height.toLocaleString();
+                document.getElementById('stat-supply').textContent = info.total_supply_qz.toLocaleString(undefined, {maximumFractionDigits: 1}) + ' QZ';
+                document.getElementById('stat-miners').textContent = info.miner_count;
+                document.getElementById('stat-miners-total').textContent = info.miners_total ? info.miners_total + ' lifetime' : '';
+                document.getElementById('stat-diff').textContent = info.difficulty;
+                document.getElementById('stat-circ').textContent = info.circulating_pct + '%';
+            } catch (e) {
+                console.error('Info error:', e);
+            }
+        }
+
+        async function loadBlocks() {
+            try {
+                const blocks = await fetchJSON('/blocks/recent');
+                const container = document.getElementById('blocks');
+                if (!blocks.length) {
+                    container.innerHTML = '<div class="loading">No blocks yet — waiting for first block...</div>';
+                    return;
+                }
+                container.innerHTML = blocks.map(b => `
+                    <div class="block-row" onclick="showBlock(${b.height})">
+                        <div class="left">
+                            <div class="height">#${b.height}</div>
+                            <div style="min-width:0; overflow:hidden;">
+                                <div class="hash">${b.hash.slice(0, 20)}...</div>
+                                <div class="block-meta">${b.tx_count} txs · nonce ${b.nonce}</div>
+                            </div>
+                        </div>
+                        <div class="right">
+                            <div class="reward">+${b.reward_qz.toFixed(1)} QZ</div>
+                            <div class="time">${b.time}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById('blocks').innerHTML = '<div class="loading">Failed to load blocks</div>';
+            }
+        }
+
+        async function showBlock(height) {
+            try {
+                const block = await fetchJSON('/block/' + height);
+                const txsHtml = block.txs.map((tx, i) => `
+                    <div class="detail-row">
+                        <span class="key">${tx.type}</span>
+                        <span class="val">${tx.outputs.map(o => o.amount_qz.toFixed(4) + ' QZ').join(', ')}</span>
+                    </div>
+                `).join('');
+
+                document.getElementById('block-detail').innerHTML = `
+                    <h2>Block #${block.height}</h2>
+                    <div class="detail-row"><span class="key">Hash</span><span class="val">${block.hash}</span></div>
+                    <div class="detail-row"><span class="key">Previous</span><span class="val">${block.prev_hash}</span></div>
+                    <div class="detail-row"><span class="key">Timestamp</span><span class="val">${block.time}</span></div>
+                    <div class="detail-row"><span class="key">Version</span><span class="val">${block.version}</span></div>
+                    <div class="detail-row"><span class="key">Difficulty</span><span class="val">${block.difficulty} bits</span></div>
+                    <div class="detail-row"><span class="key">Nonce</span><span class="val">${block.nonce}</span></div>
+                    <div class="detail-row"><span class="key">Miner</span><span class="val">${minerLabel(block.miner_id)}</span></div>
+                    <div class="detail-row"><span class="key">Merkle Root</span><span class="val">${block.merkle_root}</span></div>
+                    <div class="detail-row"><span class="key">Size</span><span class="val">${block.size_bytes} bytes</span></div>
+                    <div class="detail-row"><span class="key">Reward</span><span class="val">${block.reward_qz.toFixed(4)} QZ</span></div>
+                    <h3 style="margin-top: 20px; margin-bottom: 8px; font-size: 16px;">Transactions (${block.tx_count})</h3>
+                    ${txsHtml || '<div class="detail-row"><span class="key">No transactions</span></div>'}
+                `;
+                document.getElementById('modal-block').classList.add('show');
+            } catch (e) {
+                alert('Failed to load block: ' + e.message);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal-block').classList.remove('show');
+        }
+
+        // Auto-refresh every 15 seconds
+        async function refresh() {
+            await loadNames();
+            await Promise.all([loadInfo(), loadBlocks()]);
+        }
+
+        refresh();
+        setInterval(refresh, 15000);
+    </script>
+</body>
+</html>
