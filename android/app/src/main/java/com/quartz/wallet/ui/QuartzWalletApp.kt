@@ -1,5 +1,6 @@
 package com.quartz.wallet.ui
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -955,6 +956,10 @@ fun formatUptime(seconds: Long): String {
 fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { WalletStore(context) }
+    val prefs = remember { context.getSharedPreferences("quartz_wallet", Context.MODE_PRIVATE) }
+    var nodeUrl by remember {
+        mutableStateOf(prefs.getString("node_url", SoftwareWallet.DEFAULT_NODE_URL)!!)
+    }
     var showConfirm by remember { mutableStateOf(false) }
     var confirmText by remember { mutableStateOf("") }
     var deleted by remember { mutableStateOf(false) }
@@ -964,12 +969,33 @@ fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
         Spacer(Modifier.height(24.dp))
 
         OutlinedTextField(
-            value = "https://quartzchain.net",
-            onValueChange = {},
+            value = nodeUrl,
+            onValueChange = { nodeUrl = it },
             label = { Text("Node URL") },
+            placeholder = { Text(SoftwareWallet.DEFAULT_NODE_URL) },
+            supportingText = { Text("e.g. http://192.168.1.42:21100 (your Pi) — tap Save to apply") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+        Spacer(Modifier.height(8.dp))
+        Row {
+            Button(
+                onClick = {
+                    SoftwareWallet.setNodeUrl(nodeUrl)
+                    prefs.edit().putString("node_url", SoftwareWallet.NODE_URL).apply()
+                },
+                modifier = Modifier.height(44.dp)
+            ) { Text("Save Node") }
+            Spacer(Modifier.width(12.dp))
+            OutlinedButton(
+                onClick = {
+                    nodeUrl = SoftwareWallet.DEFAULT_NODE_URL
+                    SoftwareWallet.setNodeUrl(SoftwareWallet.DEFAULT_NODE_URL)
+                    prefs.edit().remove("node_url").apply()
+                },
+                modifier = Modifier.height(44.dp)
+            ) { Text("Reset") }
+        }
         Spacer(Modifier.height(16.dp))
 
         OutlinedTextField(

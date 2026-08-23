@@ -20,8 +20,22 @@ import java.util.concurrent.TimeUnit
  */
 object SoftwareWallet {
 
-    const val NODE_URL = "https://quartzchain.net"
+    const val DEFAULT_NODE_URL = "https://quartzchain.net"
     const val FEE_SATS = 1_000L // node-enforced fee on /api/v1/send
+
+    /** Runtime node URL. Defaults to quartzchain.net; the Settings screen
+     *  can point the app at any node (e.g. your own Pi on the LAN).
+     *  Persistence is handled by the app layer (MainActivity, prefs). */
+    @Volatile
+    var NODE_URL: String = DEFAULT_NODE_URL
+        private set
+
+    fun setNodeUrl(url: String) {
+        var u = url.trim().trimEnd('/')
+        if (u.isEmpty()) u = DEFAULT_NODE_URL
+        if (!u.startsWith("http://") && !u.startsWith("https://")) u = "http://$u"
+        NODE_URL = u
+    }
 
     private val json = "application/json; charset=utf-8".toMediaType()
     private val http: OkHttpClient = OkHttpClient.Builder()
