@@ -261,6 +261,14 @@ static void console_task(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
+        /* Local echo so typed commands are visible between log lines */
+        if (ch == '\r' || ch == '\n') {
+            putchar('\n'); fflush(stdout);
+        } else if (ch == 0x08 || ch == 0x7f) {
+            if (pos > 0) { pos--; fputs("\b \b", stdout); fflush(stdout); }
+        } else {
+            putchar(ch); fflush(stdout);
+        }
         if (ch != '\n' && ch != '\r') {
             if (pos < (int)sizeof(line) - 1) line[pos++] = ch;
             continue;
