@@ -16,7 +16,7 @@
     .flash-card h3 { margin: 0 0 6px; font-size: 17px; color: var(--accent); }
     .flash-card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
     .flash-actions { display: flex; flex-direction: column; gap: 14px; align-items: center; margin: 26px 0; }
-    .flash-actions ewt-install-button { --ewt-button-primary-background: var(--accent); }
+    .flash-actions esp-web-install-button { --ewt-button-primary-background: var(--accent); }
     .btn-xlarge { font-size: 17px !important; padding: 16px 34px !important; }
     .flash-note { color: var(--muted); font-size: 13px; text-align: center; max-width: 620px; margin: 6px auto 0; line-height: 1.55; }
     .flash-steps { margin: 30px auto; max-width: 620px; }
@@ -62,12 +62,12 @@
   </div>
 
   <div class="flash-actions">
-    <ewt-install-button manifest="/tools/manifests/flash-full.json">
+    <esp-web-install-button manifest="/tools/manifests/flash-full.json">
       <button class="btn btn-primary btn-xlarge" slot="activate">🚀 Connect board &amp; flash (fresh install)</button>
-    </ewt-install-button>
-    <ewt-install-button manifest="/tools/manifests/update-app-only.json">
+    </esp-web-install-button>
+    <esp-web-install-button manifest="/tools/manifests/update-app-only.json">
       <button class="btn btn-secondary" slot="activate">🔄 Update app only — keep my wallet</button>
-    </ewt-install-button>
+    </esp-web-install-button>
     <p class="flash-note"><b>Fresh install</b> erases the chip and sets up everything (use it on new boards).<br>
     <b>Update app only</b> rewrites just the application and preserves your wallet &amp; WiFi settings. If the dialog asks about erasing, choose <b>Keep</b>.</p>
   </div>
