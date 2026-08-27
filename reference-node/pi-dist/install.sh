@@ -26,8 +26,14 @@ fi
 #    never mines, so it can never fork the chain; syncs continuously from
 #    the seed node — kilobyte batches, every block fully validated)
 cp "$DIR/quartz-node.service" /etc/systemd/system/
+# Drop any drop-in overrides left behind by the old fork's installer —
+# the unit above is self-contained and canonical.
+rm -rf /etc/systemd/system/quartz-node.service.d
 systemctl daemon-reload
-systemctl enable --now quartz-node
+systemctl enable quartz-node >/dev/null 2>&1 || true
+# Restart, not just enable --now: if an old node is already running,
+# enable --now is a no-op and the old code/chain would keep serving.
+systemctl restart quartz-node
 
 # 4. Local firewall (if ufw present): allow the node port on LAN
 if command -v ufw >/dev/null; then

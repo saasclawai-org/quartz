@@ -28,6 +28,9 @@ The installer copies node + chain snapshot to `/opt/quartz-node`, installs
 and starts the `quartz-node` systemd service (auto-restart, enabled on
 boot), and opens port 21100/tcp in ufw if present.
 
+Re-running `install.sh` over an existing install is safe — it replaces
+the code, drops stale overrides, and restarts the service.
+
 Verify: `curl http://<pi-ip>:21100/api/v1/info` → JSON with chain height
 matching https://quartzchain.net/api/v1/info.
 
