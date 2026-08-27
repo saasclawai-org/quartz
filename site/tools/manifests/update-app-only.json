@@ -1,5 +1,7 @@
 {
-  "version": 1,
+  "name": "Quartz Miner (app update)",
+  "version": "0.3.2",
+  "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32",

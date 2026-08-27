@@ -1,5 +1,6 @@
 {
-  "version": 1,
+  "name": "Quartz Miner",
+  "version": "0.3.2",
   "builds": [
     {
       "chipFamily": "ESP32",
