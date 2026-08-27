@@ -1,28 +1,19 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.2-domain",
-  "new_install_prompt_erase": false,
+  "version": "0.3.2",
   "builds": [
     {
       "chipFamily": "ESP32",
-      "improperWakeUp": true,
-      "parts": [
-        {
-          "path": "../quartz-miner.bin",
-          "offset": 0
-        }
-      ]
+      "parts": [{ "path": "../../downloads/quartz-esp32-merged.bin", "offset": 0 }]
     },
     {
       "chipFamily": "ESP32-S3",
-      "improperWakeUp": true,
-      "parts": [
-        {
-          "path": "../quartz-miner-t3.bin",
-          "offset": 0
-        }
-      ]
+      "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [{ "path": "../../downloads/quartz-c3-merged.bin", "offset": 0 }]
     }
   ],
-  "notes": "v0.3.2: Default node switched to quartzchain.net (quartz.preview.saasclaw.ai still works). ESP32 SHA-256: 837cbb27da810a9b28085593e87ff4f080107fdce68310fe6bce965f5b44f381 | ESP32-S3 SHA-256: 0238f3ef55b4992247e47458f9f5650c34e777fe02a04fbc4fd4d4e295bb0a50"
+  "notes": "0.3.2: full merged images (bootloader + partition table + app) — same documented release set as the Flasher page. The previous entries wrote app-only images at offset 0, which cannot boot. v075-c3 (serial console keyboard input) remains available as a manual download from /firmware/ until it ships as a merged image."
 }
