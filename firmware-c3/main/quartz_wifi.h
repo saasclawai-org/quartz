@@ -93,6 +93,7 @@ const char *quartz_wifi_get_ip(void);
  * Returns QZ_OK on success, template filled in.
  */
 int quartz_mining_get_work(qz_block_template_t *tmpl);
+int quartz_mining_get_work_for(const char *address, qz_block_template_t *tmpl);
 
 /**
  * Submit a found block (nonce that meets target).

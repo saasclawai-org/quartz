@@ -44,6 +44,10 @@ static bool s_rx_work_valid = false;
 static qz_mesh_found_t s_rx_found;
 static bool s_rx_found_valid = false;
 
+/* Pending work request from a peer — v076 per-board payouts */
+static qz_mesh_work_req_t s_rx_req;
+static bool s_rx_req_valid = false;
+
 /* ============================================================
  * Peer management
  * ============================================================ */
@@ -124,7 +128,9 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
 
     case QZ_MESH_WORK: {
         if (len < (int)sizeof(qz_mesh_work_t)) break;
-        if (s_caps & QZ_CAP_HAS_WIFI) break;  /* already have WiFi, ignore mesh work */
+        /* v076: store for everyone — a board with WiFi but an unreachable
+         * node still consumes directed replies. The mining loop only uses
+         * mesh work when it has none of its own. */
         const qz_mesh_work_t *w = (const qz_mesh_work_t *)data;
         memcpy(s_rx_work.header, w->header, 80);
         s_rx_work.target_bits = w->target_bits;
@@ -144,6 +150,17 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
         s_rx_found.nonce = f->nonce;
         s_rx_found_valid = true;
         ESP_LOGI(TAG, "Block found via mesh peer — relaying to node");
+        break;
+    }
+
+    case QZ_MESH_WORK_REQ: {
+        if (len < (int)sizeof(qz_mesh_work_req_t)) break;
+        if (!(s_caps & QZ_CAP_HAS_WIFI)) break;  /* only connected peers can serve */
+        memcpy(&s_rx_req, data, sizeof(s_rx_req));
+        s_rx_req_valid = true;
+        add_peer(src, 0, 0, now);  /* know the requester for the directed reply */
+        ESP_LOGI(TAG, "Work request from %02x%02x%02x%02x%02x%02x",
+                 src[0], src[1], src[2], src[3], src[4], src[5]);
         break;
     }
 
@@ -207,6 +224,7 @@ int quartz_mesh_init(void) {
     s_peer_count = 0;
     s_rx_work_valid = false;
     s_rx_found_valid = false;
+    s_rx_req_valid = false;
 
     ESP_LOGI(TAG, "ESP-NOW mesh initialized (MAC %02x%02x%02x%02x%02x%02x, ch %d)",
              s_mymac[0], s_mymac[1], s_mymac[2], s_mymac[3], s_mymac[4], s_mymac[5],
@@ -241,6 +259,37 @@ void quartz_mesh_share_found(const uint8_t header[80], uint64_t nonce) {
 
     broadcast((uint8_t *)&pkt, sizeof(pkt));
     ESP_LOGI(TAG, "Broadcasted block found to mesh peers");
+}
+
+void quartz_mesh_request_work(const char *address) {
+    if (!s_initialized || !address) return;
+
+    qz_mesh_work_req_t pkt = {0};
+    pkt.type = QZ_MESH_WORK_REQ;
+    memcpy(pkt.mac, s_mymac, 6);
+    strlcpy(pkt.address, address, sizeof(pkt.address));
+    broadcast((uint8_t *)&pkt, sizeof(pkt));
+}
+
+int quartz_mesh_get_work_req(char address[40], uint8_t mac[6]) {
+    if (!s_initialized || !s_rx_req_valid || !address || !mac) return -1;
+
+    strlcpy(address, s_rx_req.address, 40);
+    memcpy(mac, s_rx_req.mac, 6);
+    s_rx_req_valid = false;  /* consume */
+    return 0;
+}
+
+void quartz_mesh_send_work_to(const uint8_t mac[6], const qz_block_template_t *tmpl) {
+    if (!s_initialized || !mac || !tmpl) return;
+
+    qz_mesh_work_t pkt = {0};
+    pkt.type = QZ_MESH_WORK;
+    memcpy(pkt.header, tmpl->header, 80);
+    pkt.target_bits = tmpl->target_bits;
+    pkt.height = tmpl->height;
+    strlcpy(pkt.job_id, tmpl->job_id, sizeof(pkt.job_id));
+    esp_now_send(mac, (uint8_t *)&pkt, sizeof(pkt));
 }
 
 int quartz_mesh_get_work(qz_block_template_t *tmpl) {

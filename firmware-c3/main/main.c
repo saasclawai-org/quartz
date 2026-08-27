@@ -857,8 +857,8 @@ static void mining_task(void *pvParameters) {
                 last_work_fetch = now;
                 ESP_LOGI(TAG, "📡 Got work: block %d, target %d",
                          tmpl.height, tmpl.target_bits);
-                /* Share work with mesh peers */
-                quartz_mesh_share_work(&tmpl);
+                /* v076: no verbatim sharing — peers request work paying
+                 * their own address instead (per-board payouts) */
             } else {
                 /* Fallback to local mining if node unreachable */
                 if (!have_work) {
@@ -867,14 +867,28 @@ static void mining_task(void *pvParameters) {
             }
         }
 
-        /* If no WiFi, try to get work from mesh peers */
-        if (!have_work && quartz_mesh_is_active()) {
-            if (quartz_mesh_get_work(&tmpl) == 0) {
+        /* v076: mesh work with per-board payouts. When idle (headless, or
+         * node unreachable), broadcast a WORK_REQ carrying OUR wallet
+         * address; a connected peer fetches a template paying US and sends
+         * it directed. Drop + re-request stale work so finds aren't
+         * orphaned on an old template. */
+        if (quartz_mesh_is_active()) {
+            if (have_work && (now - last_work_fetch) > 45) {
+                have_work = false;  /* stale — ask for fresh */
+            }
+            if (!have_work) {
+                static uint32_t last_req = 0;
+                if ((uint32_t)(now - last_req) >= 10) {
+                    last_req = now;
+                    quartz_mesh_request_work(quartz_wallet_get_address());
+                }
+            }
+            if (!have_work && quartz_mesh_get_work(&tmpl) == 0) {
                 memcpy(header, tmpl.header, 80);
                 nonce = 0;
                 have_work = true;
                 last_work_fetch = now;
-                ESP_LOGI(TAG, "📡 Got work via mesh: block %d, target %d",
+                ESP_LOGI(TAG, "📡 Got work via mesh (pays us): block %d, target %d",
                          tmpl.height, tmpl.target_bits);
             }
         }
@@ -985,25 +999,40 @@ static void mining_task(void *pvParameters) {
             /* Update BLE stats for phone app */
             if (ble_on) {
                 quartz_ble_update_stats(s_hash_count, hps, s_blocks_found, uptime);
+            }
 
-                /* Check for mesh-found blocks from peers — relay to node */
-                if (quartz_wifi_is_connected()) {
-                    uint8_t m_header[80];
-                    uint64_t m_nonce;
-                    if (quartz_mesh_get_found(m_header, &m_nonce) == 0) {
-                        ESP_LOGI(TAG, "📡 Relaying mesh peer's block to node (nonce %llu)", m_nonce);
-                        int rc = quartz_mining_submit("mesh", m_nonce, m_header);
-                        if (rc == 0) {
-                            ESP_LOGI(TAG, "✅ Mesh block relayed successfully!");
-                        } else {
-                            ESP_LOGW(TAG, "Mesh block relay failed (%d)", rc);
-                        }
+            /* v076: mesh serving + maintenance run regardless of BLE —
+             * relaying peer blocks and answering work requests must not
+             * depend on the phone-app link. */
+            if (quartz_wifi_is_connected()) {
+                uint8_t m_header[80];
+                uint64_t m_nonce;
+                if (quartz_mesh_get_found(m_header, &m_nonce) == 0) {
+                    ESP_LOGI(TAG, "📡 Relaying mesh peer's block to node (nonce %llu)", m_nonce);
+                    int rc = quartz_mining_submit("mesh", m_nonce, m_header);
+                    if (rc == 0) {
+                        ESP_LOGI(TAG, "✅ Mesh block relayed successfully!");
+                    } else {
+                        ESP_LOGW(TAG, "Mesh block relay failed (%d)", rc);
                     }
                 }
 
-                /* Mesh maintenance */
-                quartz_mesh_step(uptime);
+                /* v076: serve pending work request — fetch a template
+                 * paying the REQUESTER's address, send it directed */
+                char req_addr[40];
+                uint8_t req_mac[6];
+                if (quartz_mesh_get_work_req(req_addr, req_mac) == 0) {
+                    qz_block_template_t rt;
+                    if (quartz_mining_get_work_for(req_addr, &rt) == 0) {
+                        quartz_mesh_send_work_to(req_mac, &rt);
+                        ESP_LOGI(TAG, "📡 Served work req (block %d) → %s",
+                                 rt.height, req_addr);
+                    }
+                }
             }
+
+            /* Mesh maintenance */
+            quartz_mesh_step(uptime);
 
             /* Poll for messages every 10 seconds */
             static uint32_t last_msg_check = 0;

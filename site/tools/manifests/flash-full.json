@@ -1,18 +1,10 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "builds": [
-    {
-      "chipFamily": "ESP32",
-      "parts": [{ "path": "../../downloads/quartz-esp32-merged.bin", "offset": 0 }]
-    },
-    {
-      "chipFamily": "ESP32-S3",
-      "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }]
-    },
-    {
-      "chipFamily": "ESP32-C3",
-      "parts": [{ "path": "../../downloads/quartz-c3-merged.bin", "offset": 0 }]
-    }
-  ]
+    { "chipFamily": "ESP32", "parts": [{ "path": "../../downloads/quartz-esp32-merged.bin", "offset": 0 }] },
+    { "chipFamily": "ESP32-S3", "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }] },
+    { "chipFamily": "ESP32-C3", "parts": [{ "path": "../../downloads/quartz-c3-merged.bin", "offset": 0 }] }
+  ],
+  "notes": "0.4.0 (v076): per-board payouts — mesh work-request protocol; every board (headless or WiFi) mines to its OWN wallet. Includes v075 console keyboard input and the mesh-relay-without-BLE fix. ESP32 + C3 updated; S3 pending."
 }

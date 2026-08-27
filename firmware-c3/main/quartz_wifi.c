@@ -627,15 +627,15 @@ static bool json_find_hex(const char *json, const char *key, uint8_t *out, size_
     return true;
 }
 
-int quartz_mining_get_work(qz_block_template_t *tmpl) {
-    if (!quartz_wifi_is_connected()) return -1;
+int quartz_mining_get_work_for(const char *address, qz_block_template_t *tmpl) {
+    if (!quartz_wifi_is_connected() || !address || !address[0]) return -1;
 
-    /* Include address + hashrate in work request so node can track us */
-    const char *addr = quartz_wallet_get_address();
+    /* v076: fetch a template paying the GIVEN address (ours, or a mesh
+     * peer's that requested work). Hashrate reporting stays ours. */
     extern uint32_t g_last_hps;
     char path[256];
     snprintf(path, sizeof(path), "%s?address=%s&hashrate=%lu",
-             NODE_PATH_WORK, addr ? addr : "", (unsigned long)g_last_hps);
+             NODE_PATH_WORK, address, (unsigned long)g_last_hps);
 
     char response[2048];
     int n = http_request("GET", path, NULL, response, sizeof(response));
@@ -651,6 +651,14 @@ int quartz_mining_get_work(qz_block_template_t *tmpl) {
     json_find_int(response, "target_bits", (int *)&tmpl->target_bits);
     json_find_int(response, "height", (int *)&tmpl->height);
     json_find_string(response, "job_id", tmpl->job_id, sizeof(tmpl->job_id));
+
+    return 0;
+}
+
+int quartz_mining_get_work(qz_block_template_t *tmpl) {
+    const char *addr = quartz_wallet_get_address();
+    int rc = quartz_mining_get_work_for(addr ? addr : "", tmpl);
+    if (rc != 0) return rc;
 
     g_mining_state = QZ_MINING_HAS_WORK;
     ESP_LOGI(TAG, "Got work: height=%d job=%s target=%d",
