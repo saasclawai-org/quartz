@@ -22,6 +22,10 @@ if [ -f "$DIR/testnet-data/chain.json" ]; then
   cp "$DIR/testnet-data/chain.json" "$DEST/testnet-data/"
 fi
 
+# Drop old-fork leftovers: a stale dev-wallet.json makes /info report a
+# dead dev-fund address (harmless — 0 balance — but confusing).
+rm -f "$DEST/testnet-data/dev-wallet.json" "$DEST"/dev-wallet*.json
+
 # 3. systemd service (QUARTZ_NO_MINER=1 + QUARTZ_PEERS inside the unit:
 #    never mines, so it can never fork the chain; syncs continuously from
 #    the seed node — kilobyte batches, every block fully validated)

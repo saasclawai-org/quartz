@@ -2106,7 +2106,10 @@ def main():
         print(f"⛏ Gateway mode: mining submits relay to {relay_url} — "
               f"point ESP32s at this node (LAN IP port "
               f"{QUARTZ_PORT})")
-    else:
+    elif os.environ.get('QUARTZ_NO_MINER') != '1':
+        # Standby nodes (QUARTZ_NO_MINER=1, no relay) must never run a
+        # simulator — it would mine on top of a synced snapshot and fork
+        # the chain. (Was a bare `else` keyed on relay_url: bug.)
         miner_thread = threading.Thread(target=mining_simulator, args=(chain,), daemon=True)
         miner_thread.start()
         print(f"\n🚀 Mining simulator started ({len(DEMO_MINERS)} virtual ESP32s)")
