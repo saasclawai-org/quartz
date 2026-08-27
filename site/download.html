@@ -188,6 +188,9 @@
         <strong>ESP32-S3</strong> and <strong>ESP32-C3</strong> builds are below. ESP32-<strong>S2</strong> (no Bluetooth) is not supported.
     </p>
 
+    <div class="section-title">⚡ Easiest: One-Click Web Flasher</div>
+    <p style="color: var(--muted); font-size: 14px;">No Python, no drivers, no terminal — flash straight from your browser (Chrome/Edge/Opera):</p>
+    <p style="margin: 14px 0;"><a class="btn btn-primary" href="/flash.html" style="text-decoration:none; display:inline-block;">🚀 Open the Web Flasher</a></p>
     <div class="section-title">📜 Flash Command</div>
     <p style="color: var(--muted); font-size: 14px;">After downloading, flash with esptool:</p>
     <div class="flash-cmd">python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x1000 bootloader-v066.bin 0x10000 partition-table-v066.bin 0x20000 quartz-app-v074.bin</div>

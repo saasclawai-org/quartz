@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [{ "path": "../../downloads/quartz-esp32-merged.bin", "offset": 0 }]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [{ "path": "../../downloads/quartz-c3-merged.bin", "offset": 0 }]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [{ "path": "../../firmware/quartz-app-v074.bin", "offset": 262144 }]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [{ "path": "../../firmware/quartz-app-s3-v074.bin", "offset": 262144 }]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [{ "path": "../../firmware/quartz-app-v072-c3.bin", "offset": 262144 }]
+    }
+  ]
+}

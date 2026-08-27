@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quartz — Web Flasher</title>
+  <meta name="description" content="Flash Quartz miner firmware to your ESP32 directly from the browser. No tools, no drivers, no terminal.">
+  <link rel="stylesheet" href="/css/quartz.css">
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
+    .flash-hero { text-align: center; padding: 48px 0 28px; }
+    .flash-hero h1 { font-size: 32px; margin-bottom: 10px; }
+    .flash-hero p { color: var(--muted); font-size: 16px; max-width: 560px; margin: 0 auto 8px; }
+    .flash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 28px 0; }
+    .flash-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .flash-card h3 { margin: 0 0 6px; font-size: 17px; color: var(--accent); }
+    .flash-card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+    .flash-actions { display: flex; flex-direction: column; gap: 14px; align-items: center; margin: 26px 0; }
+    .flash-actions ewt-install-button { --ewt-button-primary-background: var(--accent); }
+    .btn-xlarge { font-size: 17px !important; padding: 16px 34px !important; }
+    .flash-note { color: var(--muted); font-size: 13px; text-align: center; max-width: 620px; margin: 6px auto 0; line-height: 1.55; }
+    .flash-steps { margin: 30px auto; max-width: 620px; }
+    .flash-steps li { color: var(--muted); font-size: 14.5px; margin-bottom: 8px; line-height: 1.5; }
+    .flash-steps b { color: var(--text); }
+    code { background: var(--surface); padding: 2px 7px; border-radius: 5px; font-size: 13px; border: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <nav class="quartz-nav">
+    <div class="quartz-nav-inner">
+      <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+      <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+        <a href="/hardware.html">Hardware</a>
+        <a href="/mining.html">Mining</a>
+        <a href="/tokenomics.html">Tokenomics</a>
+        <a href="/explorer/">Explorer</a>
+        <a href="/wallet/">Wallet</a>
+        <a href="/download.html">Download</a>
+        <a href="/node.html">Node</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="flash-hero">
+    <h1>⚡ Flash Quartz from your browser</h1>
+    <p>Plug in your ESP32 board, click one button. No Python, no drivers, no terminal.</p>
+    <p style="font-size:13.5px">Works with <b>Chrome, Edge, and Opera</b> on desktop (needs Web Serial). On Firefox/Safari? Use the <a href="/download.html">manual instructions</a>.</p>
+  </div>
+
+  <div class="flash-cards">
+    <div class="flash-card">
+      <h3>ESP32-C3 · recommended</h3>
+      <p>The $3 Super Mini. Best value miner — the board most Quartz miners start with. Firmware v072.</p>
+    </div>
+    <div class="flash-card">
+      <h3>ESP32 (classic)</h3>
+      <p>Original ESP32 / WROOM boards, M5Stack Core. Firmware v074.</p>
+    </div>
+    <div class="flash-card">
+      <h3>ESP32-S3</h3>
+      <p>S3 boards (DevKitC, Feather S3). Firmware v074.</p>
+    </div>
+  </div>
+
+  <div class="flash-actions">
+    <ewt-install-button manifest="/tools/manifests/flash-full.json">
+      <button class="btn btn-primary btn-xlarge" slot="activate">🚀 Connect board &amp; flash (fresh install)</button>
+    </ewt-install-button>
+    <ewt-install-button manifest="/tools/manifests/update-app-only.json">
+      <button class="btn btn-secondary" slot="activate">🔄 Update app only — keep my wallet</button>
+    </ewt-install-button>
+    <p class="flash-note"><b>Fresh install</b> erases the chip and sets up everything (use it on new boards).<br>
+    <b>Update app only</b> rewrites just the application and preserves your wallet &amp; WiFi settings. If the dialog asks about erasing, choose <b>Keep</b>.</p>
+  </div>
+
+  <div class="flash-steps">
+    <ol>
+      <li><b>Plug the board in</b> via USB. If it has a data/charge switch, use <code>data</code> — many cables are charge-only and won't work.</li>
+      <li><b>Click a flash button</b> above and pick the port (<code>USB Serial</code> on Windows, <code>/dev/ttyUSB*</code> or <code>/dev/ttyACM*</code> on Linux/Mac).</li>
+      <li><b>Wait for the success screen</b> (~1–2 minutes). The board reboots into Quartz automatically.</li>
+      <li><b>Connect to WiFi:</b> on first boot the board shows a <code>Quartz-XXXX</code> setup network — join it from your phone to configure your WiFi, then it starts mining.</li>
+    </ol>
+  </div>
+
+  <p class="flash-note">Stuck? The board isn't listed, or flashing fails? See <a href="/setup.html">Setup Help</a> or the <a href="/download.html">manual esptool instructions</a>.<br>
+  Images are pinned to the documented release set on the <a href="/download.html">Download page</a> — same files, zero surprises.</p>
+
+  <script type="module" src="/tools/ewt/dist/web/install-button.js"></script>
+</body>
+</html>
