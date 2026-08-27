@@ -190,7 +190,7 @@ class QuartzChain:
         if os.path.exists(DEV_WALLET_FILE):
             with open(DEV_WALLET_FILE) as f:
                 self.dev_wallet = json.load(f)
-        else:
+        elif os.environ.get('QUARTZ_DEV_WALLET') == '1':
             try:
                 self.dev_wallet = create_new_wallet()
                 with open(DEV_WALLET_FILE, 'w') as f:
@@ -200,6 +200,13 @@ class QuartzChain:
                 print(f"⚠️ Dev wallet not created ({e}) — running watch-only. "
                       f"Standby duty unaffected; install PyNaCl for signing.",
                       flush=True)
+        else:
+            # Dev fund is OPT-IN (QUARTZ_DEV_WALLET=1). Default: no dev
+            # wallet — 100% of rewards go to miners and total supply equals
+            # height × block reward exactly (see tokenomics: no premine).
+            self.dev_wallet = None
+            print("💰 Dev fund disabled (no dev-wallet.json, QUARTZ_DEV_WALLET unset) "
+                  "— 100% miner rewards", flush=True)
 
         # Load or create chain
         if os.path.exists(CHAIN_FILE):
@@ -239,9 +246,12 @@ class QuartzChain:
         genesis = Block.create_genesis()
         genesis.header.timestamp = int(time.time())
 
-        # Genesis coinbase — 50 QZ to dev fund (pre-allocation for faucet)
-        coinbase = Transaction.coinbase(b'\x00' * 6, INITIAL_GENESIS_REWARD, 0)
-        genesis.transactions = [coinbase]
+        # Genesis coinbase — only minted when a dev fund exists (faucet
+        # pre-allocation). With no dev wallet the genesis block carries NO
+        # coinbase: supply starts at 0 and equals height × reward exactly.
+        if self.dev_wallet:
+            coinbase = Transaction.coinbase(b'\x00' * 6, INITIAL_GENESIS_REWARD, 0)
+            genesis.transactions = [coinbase]
         genesis.build_header()
 
         # Mine with low difficulty for fast testnet genesis
@@ -420,6 +430,7 @@ class QuartzChain:
         return {
             "height": len(self.blocks) - 1,
             "best_hash": self.blocks[-1].header.hash.hex() if self.blocks else None,
+            "genesis_hash": self.blocks[0].header.hash.hex() if self.blocks else None,
             "difficulty": self.current_difficulty,
             "block_time": TESTNET_BLOCK_TIME,
             "total_supply": total_supply,
@@ -1240,6 +1251,15 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             })
 
         elif path == '/api/v1/faucet':
+            # Testnet faucet — DISABLED by default (QUARTZ_FAUCET=1 to enable).
+            # It mints synthetic coins outside blocks, which breaks exact
+            # supply accounting (supply = height × reward). New miners get
+            # coins the honest way: mine a block (~30s).
+            if os.environ.get('QUARTZ_FAUCET') != '1':
+                self.json_error(404, 'Faucet disabled on this chain — mine a '
+                                     'block to earn test QZ (~30s at current '
+                                     'difficulty)')
+                return
             # Testnet faucet — send test QZ to an address
             # body already parsed at top of do_POST
             address = body.get('address', '').strip()
@@ -1970,18 +1990,51 @@ def standby_sync():
 
     while True:
         try:
-            best_peer, best_height, best_hash = None, -1, ''
+            best_peer, best_height, best_hash, best_genesis = None, -1, '', ''
             for p in peers:
                 try:
                     info = json.loads(_http_get(p + '/api/v1/info', timeout=15).decode())
                     h = int(info.get('height', 0))
                     if h > best_height:
                         best_peer, best_height, best_hash = p, h, info.get('best_hash', '')
+                        best_genesis = info.get('genesis_hash', '')
                 except Exception as e:
                     print(f"⚠️ peer {p}: {type(e).__name__} (skipping this poll)",
                           flush=True)
             chain = QuartzAPIHandler.chain
             local_height = len(chain.blocks)
+
+            # Genesis identity guard (Bitcoin-style fork follow): if the
+            # peer runs a DIFFERENT chain — e.g. the testnet was reset with
+            # a new genesis — archive our stale chain and pull the peer's
+            # snapshot from scratch. Peers on the same genesis are unaffected.
+            our_genesis = chain.blocks[0].header.hash.hex() if chain.blocks else None
+            if best_genesis and our_genesis and best_genesis != our_genesis:
+                stale = CHAIN_FILE + f'.stale-{int(time.time())}'
+                try:
+                    os.replace(CHAIN_FILE, stale)
+                    end = _snapshot_resync(best_peer, 0)
+                    if not end:
+                        raise RuntimeError("snapshot not ahead after wipe")
+                    print(f"🌐 Genesis mismatch — followed reset chain "
+                          f"(old chain archived as {os.path.basename(stale)}): "
+                          f"0 → {end} from {best_peer}", flush=True)
+                    time.sleep(interval)
+                    continue
+                except Exception as e:
+                    # Never serve nothing: restore the archived chain and
+                    # retry on the next poll.
+                    try:
+                        if os.path.exists(CHAIN_FILE):
+                            os.remove(CHAIN_FILE)
+                        if os.path.exists(stale):
+                            os.replace(stale, CHAIN_FILE)
+                    except OSError:
+                        pass
+                    print(f"⚠️ genesis follow failed ({type(e).__name__}: {e}) — "
+                          f"keeping local chain, retrying next poll", flush=True)
+                    time.sleep(interval)
+                    continue
 
             if best_peer is None:
                 raise RuntimeError("no peer reachable")

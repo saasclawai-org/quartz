@@ -205,7 +205,7 @@ sudo bash install.sh</code></pre>
 <pre><code>curl -s localhost:21100/api/v1/info | python3 -m json.tool
 journalctl -u quartz-node -f</code></pre>
     <p>You want a JSON response with the current <code>height</code>, and log lines like:</p>
-<pre><code>🔄 Synced +2 blocks: 40739 → 40741 from https://quartzchain.net</code></pre>
+<pre><code>🔄 Synced +2 blocks: 128 → 130 from https://quartzchain.net</code></pre>
     <p class="muted">That's incremental p2p sync — kilobytes per batch, not a giant snapshot re-pull.
     The node keeps itself current from its peer list automatically; no cron, no babysitting.</p>
   </div>
