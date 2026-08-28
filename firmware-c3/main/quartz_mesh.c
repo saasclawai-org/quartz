@@ -226,9 +226,12 @@ int quartz_mesh_init(void) {
     s_rx_found_valid = false;
     s_rx_req_valid = false;
 
+    uint8_t cur_ch = 0;
+    wifi_second_chan_t cur_2nd = WIFI_SECOND_CHAN_NONE;
+    esp_wifi_get_channel(&cur_ch, &cur_2nd);
     ESP_LOGI(TAG, "ESP-NOW mesh initialized (MAC %02x%02x%02x%02x%02x%02x, ch %d)",
              s_mymac[0], s_mymac[1], s_mymac[2], s_mymac[3], s_mymac[4], s_mymac[5],
-             QZ_MESH_CHANNEL);
+             cur_ch);
 
     /* Initial HELLO */
     send_hello();

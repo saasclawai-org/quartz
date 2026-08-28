@@ -1,10 +1,10 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "builds": [
     { "chipFamily": "ESP32", "parts": [{ "path": "../../downloads/quartz-esp32-merged.bin", "offset": 0 }] },
     { "chipFamily": "ESP32-S3", "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }] },
     { "chipFamily": "ESP32-C3", "parts": [{ "path": "../../downloads/quartz-c3-merged.bin", "offset": 0 }] }
   ],
-  "notes": "0.4.0 (v076): per-board payouts — mesh work-request protocol; every board (headless or WiFi) mines to its OWN wallet. Includes v075 console keyboard input and the mesh-relay-without-BLE fix. ESP32 + C3 updated; S3 pending."
+  "notes": "0.4.1 (v077): portal channel discovery — headless boards camp ESP-NOW on the strongest AP's channel so connected peers hear mesh work requests. Console: meshscan / meshch. ESP32 + C3 at v077; S3 still older (pending)."
 }

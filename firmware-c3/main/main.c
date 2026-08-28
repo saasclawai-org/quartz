@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include <ctype.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #ifdef ESP_PLATFORM
@@ -285,6 +286,8 @@ static void console_task(void *pvParameters) {
             ESP_LOGI(TAG, "  pin <digits>         unlock (if PIN set)");
             ESP_LOGI(TAG, "  setpin <digits>      set/change PIN");
             ESP_LOGI(TAG, "  pinstatus            PIN state");
+            ESP_LOGI(TAG, "  meshscan             list nearby WiFi networks + channels");
+            ESP_LOGI(TAG, "  meshch <1-13|0>      lock/clear portal mesh channel, reboot");
         } else if (strcasecmp(line, "address") == 0) {
             ESP_LOGI(TAG, "Address: %s", quartz_wallet_get_address());
         } else if (strcasecmp(line, "seed") == 0) {
@@ -463,9 +466,24 @@ static void console_task(void *pvParameters) {
             ESP_LOGI(TAG, "PIN set");
         } else if (strcasecmp(line, "pinstatus") == 0) {
             ESP_LOGI(TAG, "PIN: %s, attempts: %d/10, unlocked: %s",
-                     quartz_wallet_has_pin() ? "SET" : "NONE",
-                     quartz_wallet_pin_attempts(),
-                     quartz_ble_is_unlocked() ? "YES" : "NO");
+                    quartz_wallet_has_pin() ? "SET" : "NONE",
+                    quartz_wallet_pin_attempts(),
+                    quartz_ble_is_unlocked() ? "YES" : "NO");
+        } else if (strcasecmp(line, "meshscan") == 0) {
+            quartz_wifi_scan_dump();
+        } else if (strncasecmp(line, "meshch ", 7) == 0) {
+            int ch = atoi(line + 7);
+            if (ch >= 0 && ch <= 13) {
+                quartz_wifi_save_mesh_channel((int8_t)ch);
+                if (ch)
+                    ESP_LOGI(TAG, "Mesh channel locked to %d — rebooting…", ch);
+                else
+                    ESP_LOGI(TAG, "Mesh channel override cleared (auto-scan) — rebooting…");
+                vTaskDelay(pdMS_TO_TICKS(500));
+                esp_restart();
+            } else {
+                ESP_LOGW(TAG, "Usage: meshch <1-13>  (meshch 0 = auto-discover)");
+            }
         }
 console_next:
         ;

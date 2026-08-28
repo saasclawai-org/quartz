@@ -1,10 +1,10 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "new_install_prompt_erase": false,
   "builds": [
-    { "chipFamily": "ESP32", "parts": [{ "path": "../../firmware/quartz-app-v076.bin", "offset": 131072 }] },
-    { "chipFamily": "ESP32-C3", "parts": [{ "path": "../../firmware/quartz-app-v076-c3.bin", "offset": 131072 }] }
+    { "chipFamily": "ESP32", "parts": [{ "path": "../../firmware/quartz-app-v077.bin", "offset": 131072 }] },
+    { "chipFamily": "ESP32-C3", "parts": [{ "path": "../../firmware/quartz-app-v077-c3.bin", "offset": 131072 }] }
   ],
-  "notes": "0.4.0 (v076): app-only update preserving wallet + WiFi. App offset corrected to 0x20000 (v076 partition layout). Updating from very old firmware? Prefer a fresh install."
+  "notes": "0.4.1 (v077): portal channel discovery — headless boards scan once and camp ESP-NOW on the strongest AP's channel so connected peers hear mesh work requests. New console: meshscan / meshch. App-only update preserving wallet + WiFi."
 }

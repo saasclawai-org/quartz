@@ -393,8 +393,103 @@ static void portal_task(void *pv) {
  * WiFi Start (captive portal or station mode)
  * ============================================================ */
 
+/* ============================================================
+ * v077: portal channel discovery
+ *
+ * ESP-NOW mesh peers only hear each other on the same WiFi channel.
+ * Connected peers camp on the home router's channel; an offline
+ * (portal-mode) board used to sit on a hardcoded channel 6 and was
+ * deaf to the mesh. Now the portal AP camps on the strongest nearby
+ * AP's channel (in a home: the router), so headless boards can ask
+ * connected peers for work. Override: 'meshch <1-13>' console command.
+ * ============================================================ */
+
+#define WIFI_KEY_MESHCH "meshch"
+
+static int load_mesh_channel_override(void) {
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NVS_NS, NVS_READONLY, &h) != ESP_OK) return 0;
+    int8_t ch = 0;
+    if (nvs_get_i8(h, WIFI_KEY_MESHCH, &ch) != ESP_OK) ch = 0;
+    nvs_close(h);
+    return ch;
+}
+
+void quartz_wifi_save_mesh_channel(int8_t ch) {
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    if (ch >= 1 && ch <= 13) {
+        nvs_set_i8(h, WIFI_KEY_MESHCH, ch);
+    } else {
+        nvs_erase_key(h, WIFI_KEY_MESHCH);
+    }
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+/* Scan once (WiFi not yet started at portal boot) and return the
+ * strongest AP's channel. Blocking, ~2-3s. */
+static uint8_t discover_portal_channel(void) {
+    uint8_t best = 6;  /* legacy fallback */
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();
+
+    wifi_scan_config_t sc = { .show_hidden = false };
+    esp_err_t err = esp_wifi_scan_start(&sc, true);
+    if (err == ESP_OK) {
+        static wifi_ap_record_t recs[8];
+        uint16_t n = 8;
+        esp_wifi_scan_get_ap_records(&n, recs);  /* sorted by RSSI desc */
+        if (n > 0) {
+            best = recs[0].primary;
+            ESP_LOGI(TAG, "📡 Channel discovery: strongest AP \"%s\" ch %d (%d dBm), %d seen",
+                     (const char *)recs[0].ssid, recs[0].primary,
+                     recs[0].rssi, n);
+        } else {
+            ESP_LOGW(TAG, "Channel discovery: no APs in range — defaulting to ch 6");
+        }
+    } else {
+        ESP_LOGW(TAG, "Channel scan failed (%s) — defaulting to ch 6",
+                 esp_err_to_name(err));
+    }
+    esp_wifi_stop();
+    if (best < 1 || best > 13) best = 6;
+    return best;
+}
+
+/* Runtime scan for the console ('meshscan'). Works in any mode but
+ * briefly pauses the radio (~2-3s). */
+void quartz_wifi_scan_dump(void) {
+    wifi_scan_config_t sc = { .show_hidden = false };
+    esp_err_t err = esp_wifi_scan_start(&sc, true);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Scan failed: %s", esp_err_to_name(err));
+        return;
+    }
+    static wifi_ap_record_t recs[15];
+    uint16_t n = 15;
+    esp_wifi_scan_get_ap_records(&n, recs);
+    ESP_LOGI(TAG, "🔍 %d networks (strongest first):", n);
+    for (uint16_t i = 0; i < n; i++)
+        ESP_LOGI(TAG, "  %2d. ch %-2d %4d dBm  \"%s\"",
+                 i + 1, recs[i].primary, recs[i].rssi,
+                 (const char *)recs[i].ssid);
+    ESP_LOGI(TAG, "Lock: meshch <1-13> | auto: meshch 0 (reboots)");
+}
+
 static void start_captive_portal(void) {
     ESP_LOGI(TAG, "📱 Starting captive portal (no WiFi creds in NVS)");
+
+    /* v077: camp the portal AP (and ESP-NOW) on the channel connected
+     * peers are listening on — strongest nearby AP = the home router. */
+    int ovr = load_mesh_channel_override();
+    uint8_t ch;
+    if (ovr >= 1 && ovr <= 13) {
+        ch = (uint8_t)ovr;
+        ESP_LOGI(TAG, "Portal channel locked via console: ch %d", ch);
+    } else {
+        ch = discover_portal_channel();
+    }
 
     /* Generate AP name from MAC */
     uint8_t mac[6];
@@ -405,7 +500,7 @@ static void start_captive_portal(void) {
     wifi_config_t ap_config = {0};
     strncpy((char *)ap_config.ap.ssid, ap_ssid, sizeof(ap_config.ap.ssid));
     ap_config.ap.ssid_len = strlen(ap_ssid);
-    ap_config.ap.channel = 6;
+    ap_config.ap.channel = ch;
     ap_config.ap.max_connection = 2;
     ap_config.ap.authmode = WIFI_AUTH_OPEN;
 
@@ -414,6 +509,8 @@ static void start_captive_portal(void) {
     esp_wifi_start();
 
     g_wifi_state = QZ_WIFI_PORTAL_ACTIVE;
+    ESP_LOGI(TAG, "Portal AP \"%s\" on ch %d — ESP-NOW mesh will use it",
+             ap_ssid, ch);
 
     /* Start portal HTTP server task */
     xTaskCreate(portal_task, "portal", 4096, NULL, 5, NULL);

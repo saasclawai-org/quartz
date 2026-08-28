@@ -86,6 +86,10 @@ bool quartz_wifi_wait_connected(int timeout_ms);
  */
 const char *quartz_wifi_get_ip(void);
 
+/* v077: portal channel discovery ('meshscan' / 'meshch' console) */
+void quartz_wifi_scan_dump(void);
+void quartz_wifi_save_mesh_channel(int8_t ch);
+
 /* === Mining Protocol === */
 
 /**
