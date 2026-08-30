@@ -4,10 +4,12 @@
 // v5 2026-08-30 payment streams + lanes release;
 // v6 2026-08-30 unlock fix — import keeps its PIN-lock when saving;
 // v7 2026-08-30 tap-to-unlock badge + registration pinned sw.js?v=7 —
-// Cloudflare was edge-caching sw.js for 4h and holding old workers hostage).
+// Cloudflare was edge-caching sw.js for 4h and holding old workers hostage;
+// v8 2026-08-30 sign-message fix — loadCrypto() at boot so nacl is ready on
+// the reload+unlock path too).
 // Shell strategy is now stale-while-revalidate: serve cache instantly,
 // fetch the fresh copy in the background, and swap it in for next load.
-const CACHE_NAME = 'quartz-wallet-v7';
+const CACHE_NAME = 'quartz-wallet-v8';
 const ASSETS = [
     '/wallet/',
     '/wallet/manifest.json',

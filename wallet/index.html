@@ -1353,8 +1353,12 @@
             // ?v= pins the SW version — CDNs (Cloudflare) cache sw.js for
             // hours and would hold the old worker hostage. Bump with every
             // wallet deploy (must match CACHE_NAME in sw.js).
-            navigator.serviceWorker.register('sw.js?v=7').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=8').catch(() => {});
         }
+        // Load signing crypto (nacl + wordlist) on EVERY path — the
+        // reload-and-unlock journey never imported anything, so nacl stayed
+        // null and Sign/Verify/Send silently failed after unlocking.
+        loadCrypto().catch(() => {});
         loadWallet();
         renderWallet();
         renderKeys();
