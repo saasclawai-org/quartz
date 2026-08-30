@@ -17,6 +17,8 @@
 #include "quartz_qr.h"
 #include "quartz_display.h"
 #include "quartz_wifi.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +35,9 @@ static const char *TAG = "QZ.PAY";
 static qz_pay_request_t s_request;
 static char s_wallet_address[65] = {0};
 static bool s_initialized = false;
+/* v079: runtime overrides (NVS "qz_relay": pin u8, dur u32) */
+static uint8_t  s_relay_pin   = QZ_PAY_RELAY_PIN;
+static uint32_t s_duration_ms = QZ_PAY_RELAY_DURATION_MS;
 
 /* === Node API for payment checking === */
 /* The reference node exposes:
@@ -46,9 +51,17 @@ int quartz_pay_init(const char *wallet_address) {
     strncpy(s_wallet_address, wallet_address, sizeof(s_wallet_address) - 1);
 
 #ifdef ESP_PLATFORM
+    /* v079: load NVS overrides */
+    nvs_handle_t nh;
+    if (nvs_open("qz_relay", NVS_READONLY, &nh) == ESP_OK) {
+        uint8_t pin = 0; uint32_t dur = 0;
+        if (nvs_get_u8(nh, "pin", &pin) == ESP_OK && pin < 48) s_relay_pin = pin;
+        if (nvs_get_u32(nh, "dur", &dur) == ESP_OK && dur >= 100 && dur <= 600000) s_duration_ms = dur;
+        nvs_close(nh);
+    }
     /* Configure relay GPIO */
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << QZ_PAY_RELAY_PIN),
+        .pin_bit_mask = (1ULL << s_relay_pin),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_ENABLE,
@@ -58,9 +71,9 @@ int quartz_pay_init(const char *wallet_address) {
 
     /* Start with relay OFF */
     int level = QZ_PAY_RELAY_ACTIVE_LOW ? 1 : 0;
-    gpio_set_level(QZ_PAY_RELAY_PIN, level);
+    gpio_set_level(s_relay_pin, level);
 
-    ESP_LOGI(TAG, "Payment system ready, relay on GPIO%d", QZ_PAY_RELAY_PIN);
+    ESP_LOGI(TAG, "Payment system ready, relay on GPIO%d", s_relay_pin);
     ESP_LOGI(TAG, "Wallet: %s", s_wallet_address);
 #endif
 
@@ -181,14 +194,12 @@ qz_pay_state_t quartz_pay_poll(void) {
 
     /* Check node for incoming payment */
     /* Build API URL: /api/v1/address/<addr>/txs */
-    char url[256];
-    snprintf(url, sizeof(url), "http://%s/api/v1/address/%s/txs",
-             quartz_wifi_node_host(), s_request.address);
+    char path[192];
+    snprintf(path, sizeof(path), "/api/v1/address/%s/txs", s_request.address);
 
-    /* Use the WiFi HTTP client to check for payments */
-    /* For now, we do a simple GET and look for matching amount */
+    /* v079: use the shared HTTP client (same API on all builds) */
     char response[1024];
-    int rc = quartz_wifi_http_get(url, response, sizeof(response));
+    int rc = quartz_http_request("GET", path, NULL, response, sizeof(response));
 
     if (rc == 0) {
         /* Parse JSON response looking for amount */
@@ -236,7 +247,7 @@ qz_pay_state_t quartz_pay_poll(void) {
                         s_request.state = QZ_PAY_CONFIRMED;
 
                         /* Trigger relay! */
-                        quartz_pay_trigger_relay(QZ_PAY_RELAY_DURATION_MS);
+                        quartz_pay_trigger_relay(s_duration_ms);
 
                         /* Update display */
                         quartz_display_clear(0x0843);
@@ -268,22 +279,22 @@ qz_pay_state_t quartz_pay_poll(void) {
 }
 
 void quartz_pay_trigger_relay(uint32_t duration_ms) {
-    if (duration_ms == 0) duration_ms = QZ_PAY_RELAY_DURATION_MS;
+    if (duration_ms == 0) duration_ms = s_duration_ms;
 
 #ifdef ESP_PLATFORM
     int active_level = QZ_PAY_RELAY_ACTIVE_LOW ? 0 : 1;
     int inactive_level = QZ_PAY_RELAY_ACTIVE_LOW ? 1 : 0;
 
-    ESP_LOGI(TAG, "Triggering relay (GPIO%d) for %d ms", QZ_PAY_RELAY_PIN, duration_ms);
+    ESP_LOGI(TAG, "Triggering relay (GPIO%d) for %d ms", s_relay_pin, duration_ms);
 
-    gpio_set_level(QZ_PAY_RELAY_PIN, active_level);
+    gpio_set_level(s_relay_pin, active_level);
     s_request.relay_trigger_time = esp_timer_get_time() / 1000;
 
     /* Non-blocking: we set the relay on, main loop will turn it off */
     /* For simplicity, use a short blocking delay */
     vTaskDelay(pdMS_TO_TICKS(duration_ms));
 
-    gpio_set_level(QZ_PAY_RELAY_PIN, inactive_level);
+    gpio_set_level(s_relay_pin, inactive_level);
 
     ESP_LOGI(TAG, "Relay released");
 #endif
@@ -303,3 +314,19 @@ qz_pay_state_t quartz_pay_get_state(void) {
 const qz_pay_request_t *quartz_pay_get_request(void) {
     return &s_request;
 }
+
+
+/* ---- v079 additions ---- */
+void quartz_pay_set_duration_ms(uint32_t duration_ms) {
+    if (duration_ms < 100) duration_ms = QZ_PAY_RELAY_DURATION_MS;
+    if (duration_ms > 600000) duration_ms = 600000;
+    s_duration_ms = duration_ms;
+    nvs_handle_t h;
+    if (nvs_open("qz_relay", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u32(h, "dur", s_duration_ms);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+uint32_t quartz_pay_get_duration_ms(void) { return s_duration_ms; }
+uint8_t quartz_pay_get_pin(void) { return s_relay_pin; }

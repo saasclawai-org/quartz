@@ -108,6 +108,7 @@
       <a href="/mining.html">Mining</a>
       <a href="/energy.html">Energy</a>
       <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/meshtastic.html" style="color:#00d4aa;font-weight:600">Meshtastic</a>
           <a href="/tokenomics.html">Tokenomics</a>
       <a href="/agents.html">Agents</a>
       <a href="/security.html">Security</a>
@@ -129,11 +130,11 @@
     <div class="download-card">
         <div class="download-icon">🔧</div>
         <div class="download-info">
-            <h3>Quartz Miner v073</h3>
+            <h3>Quartz Miner v079</h3>
             <p>ESP32 firmware — M5Stack Core, WROOM, NodeMCU, all classic ESP32 boards</p>
-            <p style="font-size: 12px; margin-top: 4px;">1.4 MB · 42 QZ/block emission · SHA-256 + WOTS+ · BLE bonding · QR seed · BOOT-button confirm</p>
+            <p style="font-size: 12px; margin-top: 4px;">1.5 MB all-in-one image (bootloader + partitions + app) · 42 QZ/block emission · SHA-256 + WOTS+ · BLE bonding · QR seed · BOOT-button confirm</p>
         </div>
-        <a href="/firmware/quartz-app-v074.bin" download class="download-btn">Download</a>
+        <a href="/downloads/quartz-esp32-merged-v079.bin" download class="download-btn">Download (all-in-one)</a>
     </div>
 
     <div class="download-card">
@@ -152,11 +153,22 @@
     <div class="download-card">
         <div class="download-icon">📱</div>
         <div class="download-info">
-            <h3>Quartz Wallet v0.2.8</h3>
+            <h3>Quartz Wallet v0.2.10</h3>
             <p>Android 7.0+ · Seed-phrase software wallet · BLE pairing · Mining stats</p>
             <p style="font-size: 12px; margin-top: 4px;">22 MB · debug APK · 🏷 on-chain names: name your wallet, send to names</p>
         </div>
-        <a href="/firmware/quartz-wallet-v0.2.8.apk" download class="download-btn">Download APK</a>
+        <a href="/firmware/quartz-wallet-v0.2.10.apk" download class="download-btn">Download APK</a>
+    </div>
+
+    <div class="download-card">
+        <div class="download-icon">🖨️</div>
+        <div class="download-info">
+            <h3>Solar Miner Enclosure v1</h3>
+            <p>3D-printable off-grid miner shell — LilyGO T-Beam + 3× 18650 + solar panel on the lid</p>
+            <p style="font-size: 12px; margin-top: 4px;">Parametric OpenSCAD source included (Heltec V3 display variant = one flag) · PETG/ASA · no supports · MIT</p>
+            <img src="/images/quartz-solar-miner.png" alt="Quartz solar miner — assembled: printed case, tilted solar panel, LoRa antenna" style="max-width:100%;border-radius:10px;margin-top:12px;">
+        </div>
+        <a href="/downloads/quartz-solar-case-v1.zip" download class="download-btn">Download (STLs + source)</a>
     </div>
 
     <div class="section-title">🖥️ Supported Hardware</div>
@@ -192,10 +204,11 @@
     <p style="margin: 14px 0;"><a class="btn btn-primary" href="/flash.html" style="text-decoration:none; display:inline-block;">🚀 Open the Web Flasher</a></p>
     <div class="section-title">📜 Flash Command</div>
     <p style="color: var(--muted); font-size: 14px;">After downloading, flash with esptool:</p>
-    <div class="flash-cmd">python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x1000 bootloader-v066.bin 0x10000 partition-table-v066.bin 0x20000 quartz-app-v074.bin</div>
+    <div class="flash-cmd">Easiest: save <a href="/downloads/flash_esp32.py">flash_esp32.py</a> into the same folder as the bin, then run: python flash_esp32.py — unplug the board, plug it back in, and it flashes itself.</div>
+    <div class="flash-cmd">Manual: python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x0 quartz-esp32-merged-v079.bin</div>
     <div class="note">
         <strong>Already flashed before?</strong> Just flash the app binary:<br>
-        <code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x20000 quartz-app-v074.bin</code>
+        <code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x20000 quartz-app-v079.bin</code>
     </div>
     <div class="note" style="border-color: var(--accent);">
         Need help? Check the <a href="/setup.html" style="color:var(--accent)">Setup Guide</a> for step-by-step instructions.
@@ -203,8 +216,8 @@
 </div>
 
     <div class="download-card" style="margin-top:24px">
-        <h3>Quartz Miner v073 — ESP32-S3</h3>
-        <p style="font-size: 12px; margin-top: 4px;">OLED display support — device ID, battery status, animated mining indicator. USER button cycles screens (ID → Mining → Fleet → Payment). Heltec V3 + LilyGO T3 auto-detected.</p>
+        <h3>Quartz Miner v074 — ESP32-S3</h3>
+        <p style="font-size: 12px; margin-top: 4px;">OLED display support — device ID, battery status, animated mining indicator. USER button cycles screens (ID → Mining → Fleet → Payment). Heltec V3 + LilyGO T3 auto-detected. (v074 is the latest S3 build; v079 pending.)</p>
         <a href="/firmware/quartz-app-s3-v074.bin" download class="download-btn">Download App</a>
         <a href="/firmware/bootloader-s3-v066.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Bootloader</a>
         <a href="/firmware/partition-table-s3-v066.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Partitions</a>
@@ -213,13 +226,15 @@
     </div>
 
     <div class="download-card" style="margin-top:24px">
-        <h3>Quartz Miner v071 — ESP32-C3</h3>
-        <p style="font-size: 12px; margin-top: 4px;">For ESP32-C3 boards (C3 DevKitM, C3 SuperMini, etc. — headless, serial console). WiFi+BLE coex fix (MIN_MODEM) + wifi re-provision command.</p>
-        <a href="/firmware/quartz-app-v072-c3.bin" download class="download-btn">Download App</a>
+        <h3>Quartz Miner v079 — ESP32-C3</h3>
+        <p style="font-size: 12px; margin-top: 4px;">For ESP32-C3 boards (C3 DevKitM, C3 SuperMini, etc. — headless, serial console). v079: pay-to-trigger relay — the console command that turns a miner into a vending machine or door (⚡ relay <price>). Includes v078: mesh clock fix, HELLO heights, wifi/node console, seed-confirm banner.</p>
+        <a href="/downloads/quartz-c3-merged-v079.bin" download class="download-btn">Download (all-in-one)</a>
+        <a href="/firmware/quartz-app-v079-c3.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">App only</a>
         <a href="/firmware/bootloader-v066-c3.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Bootloader</a>
         <a href="/firmware/partition-table-v066-c3.bin" download class="download-btn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">Partitions</a>
-        <div class="flash-cmd" style="margin-top:10px">python -m esptool --chip esp32c3 --port COM6 --baud 460800 write_flash 0x0 bootloader-v066-c3.bin 0x10000 partition-table-v066-c3.bin 0x20000 quartz-app-v072-c3.bin</div>
-        <div class="flash-cmd" style="margin-top:6px;font-size:11px">Full reset (wipe, then re-flash): python -m esptool --chip esp32c3 --port COM6 erase_flash — then run the flash command above. Update (keep wallet): flash only 0x20000 quartz-app-v072-c3.bin</div>
+        <div class="flash-cmd" style="margin-top:10px">Easiest: save <a href="/downloads/flash_c3.py">flash_c3.py</a> into the same folder as the bin, then run: python flash_c3.py — unplug C3, hold BOOT, plug in, release.</div>
+        <div class="flash-cmd" style="margin-top:6px">Manual: python -m esptool --chip esp32c3 --port COM6 --baud 460800 write_flash 0x0 quartz-c3-merged-v079.bin</div>
+        <div class="flash-cmd" style="margin-top:6px;font-size:11px">Full reset (wipe, then re-flash): python -m esptool --chip esp32c3 --port COM6 erase_flash — then flash the all-in-one bin. Update (keep wallet): flash only 0x20000 quartz-app-v079-c3.bin</div>
     </div>
 </body>
 </html>

@@ -23,6 +23,7 @@ from .blockchain import (
     split_block_reward,
 )
 from .crystal_hash import crystal_hash_verify
+from .crypto import validate_address
 
 logger = logging.getLogger("quartz.consensus")
 
@@ -1028,7 +1029,7 @@ class ConsensusEngine:
         """
         try:
             s = script.decode('utf-8')
-            if len(s) >= 26 and s[0] in ('Q', 'T'):
+            if len(s) >= 26 and validate_address(s):
                 return s
         except (UnicodeDecodeError, ValueError):
             pass
@@ -1061,7 +1062,7 @@ class ConsensusEngine:
                         s = script.decode('utf-8')
                     except (UnicodeDecodeError, ValueError):
                         continue
-                    if len(s) >= 26 and s[0] in ('Q', 'T'):
+                    if len(s) >= 26 and validate_address(s):
                         self.balances[s] = self.balances.get(s, 0) + amount
 
         for tx in block.transactions[1:]:  # skip coinbase

@@ -24,7 +24,7 @@ extern "C" {
 /* === Configuration === */
 
 /* Relay GPIO pin (M5Stack Core: M5.Port B = GPIO36, or use internal pins) */
-#define QZ_PAY_RELAY_PIN        26      /* GPIO26 — M5Stack side port */
+#define QZ_PAY_RELAY_PIN        5       /* v079: GPIO26 does not exist on C3 */
 #define QZ_PAY_RELAY_ACTIVE_LOW  false   /* most relay modules are active-high */
 #define QZ_PAY_RELAY_DURATION_MS 3000    /* how long to trigger relay (0 = toggle) */
 
@@ -98,6 +98,11 @@ void quartz_pay_trigger_relay(uint32_t duration_ms);
  * Cancel current payment request.
  */
 void quartz_pay_cancel(void);
+/* v079: runtime overrides (NVS-persisted, applied at init) */
+void quartz_pay_set_duration_ms(uint32_t duration_ms);
+uint32_t quartz_pay_get_duration_ms(void);
+uint8_t quartz_pay_get_pin(void);
+
 
 /**
  * Get current payment state.

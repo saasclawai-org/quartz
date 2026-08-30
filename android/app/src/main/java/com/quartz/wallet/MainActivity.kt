@@ -25,18 +25,53 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Restore user-configured node URL (Settings → Node URL)
-        getSharedPreferences("quartz_wallet", Context.MODE_PRIVATE)
-            .getString("node_url", null)?.let { SoftwareWallet.setNodeUrl(it) }
+        // Restore user-configured node URL (Settings → Node URL).
+        // v0.2.9: lives in plain "quartz_settings" — a plain handle writing into the
+        // encrypted wallet file corrupted EncryptedSharedPreferences. Legacy fallback once.
+        val savedUrl = getSharedPreferences("quartz_settings", Context.MODE_PRIVATE)
+            .getString("node_url", null)
+            ?: getSharedPreferences("quartz_wallet", Context.MODE_PRIVATE)
+                .getString("node_url", null)
+        savedUrl?.let { SoftwareWallet.setNodeUrl(it) }
 
         // Request BLE permissions on startup
         if (!BLEPermissions.allGranted(this)) {
             permissionLauncher.launch(BLEPermissions.requiredPermissions())
         }
 
+        // v0.2.10: if the previous run crashed, show the recorded stack trace
+        val crashFile = java.io.File(filesDir, "last_crash.txt")
+        var lastCrash by androidx.compose.runtime.mutableStateOf(
+            crashFile.takeIf { it.exists() }?.readText()
+        )
+
         setContent {
             QuartzTheme {
                 QuartzWalletApp()
+                lastCrash?.let { trace ->
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("Previous run crashed") },
+                        text = { Text(trace.take(2000)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                @Suppress("DEPRECATION")
+                                val cm = getSystemService(Context.CLIPBOARD_SERVICE)
+                                        as android.content.ClipboardManager
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", trace))
+                                android.widget.Toast.makeText(
+                                    this, "Copied — send it to me",
+                                    android.widget.Toast.LENGTH_SHORT).show()
+                            }) { Text("Copy") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                crashFile.delete()
+                                lastCrash = null
+                            }) { Text("Dismiss") }
+                        }
+                    )
+                }
             }
         }
     }

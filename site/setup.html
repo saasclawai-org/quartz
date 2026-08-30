@@ -116,6 +116,13 @@ pre code { background: none; padding: 0; color: var(--text); }
   padding: 12px 16px; border-radius: 0 8px 8px 0;
   margin: 12px 0;
 }
+table.trouble {
+  width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px;
+}
+table.trouble th, table.trouble td {
+  border: 1px solid #2a2a3e; padding: 8px 10px; text-align: left; vertical-align: top;
+}
+table.trouble th { color: var(--accent2); background: #12121f; }
 ul, ol { padding-left: 20px; margin: 8px 0; }
 li { margin-bottom: 4px; }
 a { color: var(--accent); }
@@ -132,6 +139,7 @@ sup { color: var(--accent2); font-size: 12px; }
       <a href="/mining.html">Mining</a>
       <a href="/energy.html">Energy</a>
       <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/meshtastic.html" style="color:#00d4aa;font-weight:600">Meshtastic</a>
           <a href="/tokenomics.html">Tokenomics</a>
       <a href="/agents.html">Agents</a>
       <a href="/security.html">Security</a>
@@ -146,16 +154,16 @@ sup { color: var(--accent2); font-size: 12px; }
 
 <div class="container">
   <h1>🔮 Quartz Setup Guide</h1>
-  <p class="muted">Flash → Connect WiFi → Write down seed → Mine. About 5 minutes.</p>
+  <p class="muted">Flash → Connect WiFi → Write down seed → Confirm → Mine. About 10 minutes.</p>
 
   <div class="flow">
     <span class="flow-step">1. Flash firmware</span>
     <span class="flow-arrow">→</span>
-    <span class="flow-step">2. Connect WiFi</span>
+    <span class="flow-step">2. Connect WiFi + node</span>
     <span class="flow-arrow">→</span>
     <span class="flow-step">3. Write down seed</span>
     <span class="flow-arrow">→</span>
-    <span class="flow-step">4. Set PIN (optional)</span>
+    <span class="flow-step">4. Confirm (required!)</span>
     <span class="flow-arrow">→</span>
     <span class="flow-step">⛏️ Mining</span>
   </div>
@@ -164,12 +172,22 @@ sup { color: var(--accent2); font-size: 12px; }
   <div class="step">
     <span class="step-num">1</span><span class="step-title">Flash the Firmware</span>
 
-    <p>Download the firmware binaries from the <a href="/download.html">download page</a>. You need three files:</p>
+    <p>Get the files from the <a href="/download.html">download page</a>. You need <strong>one</strong> all-in-one image for your board:</p>
     <ul>
-      <li><code>bootloader-v063.bin</code></li>
-      <li><code>partition-table-v063.bin</code></li>
-      <li><code>quartz-app-v063.bin</code></li>
+      <li><strong>ESP32-C3</strong> (Super Mini, DevKitM): <code>quartz-c3-merged-v079.bin</code></li>
+      <li><strong>Classic ESP32</strong> (DevKit, WROOM, M5Stack, LilyGO T3): <code>quartz-esp32-merged-v079.bin</code></li>
+      <li><strong>ESP32-S3</strong> (Heltec V3): see the download page (build pending v079)</li>
     </ul>
+
+    <h3>⚡ Easiest — one-shot flasher scripts (recommended)</h3>
+    <p>Put the script next to the bin file, run it, plug the board in. It detects the port and flashes itself:</p>
+    <pre><code>cd %USERPROFILE%\Downloads
+curl -O https://quartzchain.net/downloads/flash_c3.py
+curl -O https://quartzchain.net/downloads/quartz-c3-merged-v079.bin
+python flash_c3.py</code></pre>
+    <p class="muted">For classic ESP32 boards use <a href="/downloads/flash_esp32.py">flash_esp32.py</a> + <code>quartz-esp32-merged-v079.bin</code>. On the C3 Super Mini, hold <strong>BOOT</strong> while plugging in if it won't connect — its auto-reset is finicky.</p>
+
+    <h3>🔧 Manual esptool</h3>
 
     <div class="tabs">
       <div class="tab active" onclick="showTab(event,'win')">Windows</div>
@@ -179,171 +197,130 @@ sup { color: var(--accent2); font-size: 12px; }
 
     <div id="win" class="tab-content active">
       <ol>
-        <li>Install <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers" target="_blank">CP210x USB driver</a> (or <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html" target="_blank">CH340 driver</a> for some boards)</li>
         <li>Install Python: <a href="https://www.python.org/downloads/" target="_blank">python.org</a> (check "Add to PATH")</li>
-        <li>Open Command Prompt, install esptool: <code>pip install esptool</code></li>
-        <li>Plug ESP32 into USB. Open Device Manager → Ports (COM & LPT) → find your COM port (e.g. <code>COM6</code>)</li>
-        <li>Flash all three partitions:</li>
+        <li>Open Command Prompt: <code>pip install esptool</code></li>
+        <li>Plug the board into USB. Open Device Manager → Ports → find your COM port (e.g. <code>COM5</code>)</li>
+        <li>Flash the all-in-one image (C3 example):</li>
       </ol>
-      <pre><code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash ^
-  0x1000 bootloader-v063.bin ^
-  0x10000 partition-table-v063.bin ^
-  0x20000 quartz-app-v063.bin</code></pre>
-      <p class="muted">Use <code>^</code> for line continuation on Windows (or put it all on one line).</p>
+      <pre><code>python -m esptool --chip esp32c3 --port COM5 --baud 115200 write_flash 0x0 quartz-c3-merged-v079.bin</code></pre>
+      <p class="muted">Classic ESP32: <code>--chip esp32 ... 0x0 quartz-esp32-merged-v079.bin</code></p>
     </div>
 
     <div id="mac" class="tab-content">
-      <ol>
-        <li>Install <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers" target="_blank">CP210x driver</a> if needed</li>
-        <li>Install Python and esptool: <code>pip install esptool</code></li>
-        <li>Plug ESP32 into USB. Find device: <code>ls /dev/cu.*</code></li>
-        <li>Look for <code>/dev/cu.SLAB_USBtoUART</code> or <code>/dev/cu.wchusbserial*</code></li>
-        <li>Flash:</li>
-      </ol>
-      <pre><code>python -m esptool --chip esp32 --port /dev/cu.SLAB_USBtoUART --baud 460800 write_flash \
-  0x1000 bootloader-v063.bin \
-  0x10000 partition-table-v063.bin \
-  0x20000 quartz-app-v063.bin</code></pre>
+      <pre><code>pip install esptool
+ls /dev/cu.*   # look for SLAB_USBtoUART or wchusbserial
+python -m esptool --chip esp32c3 --port /dev/cu.SLAB_USBtoUART --baud 115200 write_flash 0x0 quartz-c3-merged-v079.bin</code></pre>
     </div>
 
     <div id="linux" class="tab-content">
-      <ol>
-        <li>Install esptool: <code>pip install esptool</code></li>
-        <li>Plug ESP32 into USB. Find device: <code>ls /dev/ttyUSB*</code></li>
-        <li>If permission denied: <code>sudo usermod -aG dialout $USER</code> (log out/in)</li>
-        <li>Flash:</li>
-      </ol>
-      <pre><code>python -m esptool --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \
-  0x1000 bootloader-v063.bin \
-  0x10000 partition-table-v063.bin \
-  0x20000 quartz-app-v063.bin</code></pre>
+      <pre><code>pip install esptool
+ls /dev/ttyUSB*   # if permission denied: sudo usermod -aG dialout $USER
+python -m esptool --chip esp32c3 --port /dev/ttyUSB0 --baud 115200 write_flash 0x0 quartz-c3-merged-v079.bin</code></pre>
     </div>
 
-    <div class="note">
-      <strong>First-time setup vs updates:</strong>
+    <p>Wait for <code>Hash of data verified.</code> The board resets itself and boots into setup mode.</p>
+
+    <div class="danger">
+      <strong>⚠️ Flash doctrine — read this before your second flash:</strong>
       <ul>
-        <li><strong>First flash (new device):</strong> Use the three-part command above. This writes the bootloader, partition table, and app — fresh install.</li>
-        <li><strong>Update (keep wallet):</strong> Flash only the app at <code>0x20000</code> — your wallet and seed phrase survive the update:
-          <pre><code>python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash 0x20000 quartz-app-v063.bin</code></pre>
-        </li>
-        <li><strong>Full reset (wipe wallet):</strong> Erase everything first, then flash all three:
-          <pre><code>python -m esptool --chip esp32 --port COM6 erase_flash
-python -m esptool --chip esp32 --port COM6 --baud 460800 write_flash ^
-  0x1000 bootloader-v063.bin ^
-  0x10000 partition-table-v063.bin ^
-  0x20000 quartz-app-v063.bin</code></pre>
-        </li>
+        <li><strong>Updating a board that already works?</strong> Flash the <em>app-only</em> image at <code>0x20000</code> — it preserves your wallet, seed, PIN, WiFi and node settings:
+          <pre><code>python -m esptool --chip esp32c3 --port COM5 --baud 115200 write_flash 0x20000 quartz-app-v079-c3.bin</code></pre></li>
+        <li><strong>The all-in-one image (0x0)</strong> is for <em>new or bricked boards only</em>. It <strong>wipes WiFi settings and the wallet</strong> — the image's padding overlaps the settings partition. A board flashed this way comes up with a fresh wallet and needs full setup again.</li>
+        <li><strong>Bricked by the browser web flasher?</strong> (boot loop <code>invalid header: 0xffffffff</code>) — use the Python commands above instead. WebSerial can abort mid-write on some USB setups, leaving the flash half-erased. If the bootloader survived (the loop started right after an app-only update), the app-only command at <code>0x20000</code> revives it <em>and keeps your wallet</em>.</li>
       </ul>
     </div>
-
-    <p>Wait for <code>Hash of data verified.</code> for each segment. When done, press the <strong>RESET</strong> button on the ESP32 (or unplug/replug).</p>
   </div>
 
   <!-- =================== STEP 2 =================== -->
   <div class="step">
-    <span class="step-num">2</span><span class="step-title">Connect to WiFi</span>
-    <p>The ESP32 needs WiFi to reach the mining node. On first boot (or after a full erase), it creates a setup hotspot:</p>
+    <span class="step-num">2</span><span class="step-title">Connect WiFi + Node (Portal)</span>
+    <p>On first boot (or after a full flash), the board broadcasts a setup hotspot:</p>
     <ol>
       <li>On your phone or computer, go to WiFi settings</li>
-      <li>Connect to <code>Quartz-XXXX</code> (no password) — the last 4 characters are from the device's MAC address</li>
-      <li>A setup page should pop up automatically (captive portal)</li>
-      <li>If not, open a browser → go to <code>192.168.4.1</code></li>
-      <li>Enter your home WiFi name and password</li>
+      <li>Connect to <code>Quartz-XXXX</code> (no password)</li>
+      <li>A setup page pops up automatically — or browse to <code>192.168.4.1</code></li>
+      <li>Enter:
+        <ul>
+          <li><strong>WiFi name + password</strong> — your home network</li>
+          <li><strong>Node</strong> — where the board gets mining work:
+            <ul>
+              <li><code>quartzchain.net</code> — the reference node (default, works anywhere)</li>
+              <li><code>192.168.x.x</code> — a local <a href="/node.html">node on your LAN</a> (e.g. a Raspberry Pi) — faster work, no cloud dependency</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
       <li>Click <strong>"Start Mining ⚡"</strong></li>
     </ol>
-    <p>The device reboots, connects to your WiFi, and generates a new wallet. You'll see the connection status on the display (M5Stack) or in the serial log.</p>
 
     <div class="note">
-      <strong>WiFi is for mining only.</strong> Your seed phrase is never transmitted over WiFi — it's shown via serial console or BLE only.
+      <strong>Node typo?</strong> The board will print <code>Node unreachable, mining locally</code> and get no new work. On v078+, fix it from the serial console: type <code>node &lt;host&gt;</code> (e.g. <code>node 192.168.1.142</code> or <code>node quartzchain.net</code>) — the board saves the endpoint and reboots. On older firmware: settings erase + re-run this portal step.
     </div>
 
-    <p class="muted">If WiFi credentials are already saved in the device, it skips the hotspot and connects automatically on boot.</p>
+    <div class="note">
+      <strong>WiFi is for mining only.</strong> Your seed phrase is never transmitted over WiFi — it's shown via serial console or BLE only. No captive-portal seed exposure.
+    </div>
   </div>
 
   <!-- =================== STEP 3 =================== -->
   <div class="step">
     <span class="step-num">3</span><span class="step-title">Write Down Your Seed Phrase</span>
-    <p>On first boot with a new wallet, the device generates a 12-word BIP39 seed phrase. This is your wallet's master key — <strong>anyone with these words controls your wallet</strong>.</p>
-
-    <p>The seed is shown on the serial console. Open a serial terminal to see it:</p>
+    <p>With a new wallet, the device generates a 12-word BIP39 seed phrase. <strong>Anyone with these words controls your wallet.</strong> The seed is shown on the serial console:</p>
 
     <div class="tabs">
-      <div class="tab active" onclick="showTab(event,'putty')">Windows (PuTTY)</div>
+      <div class="tab active" onclick="showTab(event,'putty')">Windows</div>
       <div class="tab" onclick="showTab(event,'screen-mac')">macOS</div>
       <div class="tab" onclick="showTab(event,'screen-linux')">Linux</div>
     </div>
 
     <div id="putty" class="tab-content active">
-      <ol>
-        <li>Download <a href="https://www.putty.org/" target="_blank">PuTTY</a></li>
-        <li>Connection type: <strong>Serial</strong></li>
-        <li>Serial line: your COM port (e.g. <code>COM6</code>)</li>
-        <li>Speed: <strong>115200</strong></li>
-        <li>Click <strong>Open</strong></li>
-        <li>Press <strong>RESET</strong> on the ESP32</li>
-      </ol>
-      <pre><code># PuTTY settings:
-# Connection type: Serial
-# Serial line: COM6
-# Speed: 115200
-# Flow control: None
-# → Click Open
-# → Press RESET on ESP32</code></pre>
+      <pre><code>python -m serial.tools.miniterm COM5 115200
+# (or PuTTY: Serial / COM5 / 115200 / flow control None)
+# Press RESET on the board to see the full boot
+# Quit miniterm: Ctrl+]</code></pre>
     </div>
 
     <div id="screen-mac" class="tab-content">
       <pre><code>screen /dev/cu.SLAB_USBtoUART 115200
-# Press RESET on ESP32
 # Exit: Ctrl+A then Ctrl+\</code></pre>
     </div>
 
     <div id="screen-linux" class="tab-content">
       <pre><code>screen /dev/ttyUSB0 115200
-# Press RESET on ESP32
 # Exit: Ctrl+A then k then y</code></pre>
     </div>
 
-    <p>The serial output will show a table with your 12 words:</p>
+    <p>The serial output shows your words and address:</p>
     <pre><code>╔════════════════════════════════════════════╗
 ║   🔮 QUARTZ WALLET — SEED PHRASE           ║
 ║   WRITE DOWN THESE 12 WORDS                ║
 ╚════════════════════════════════════════════╝
 
 Address: QkYhsYVeBLb2rE16MPZBCwnDPDRTDahxt8
-
-  ┌─────────┬─────────────┐
-  │  Word   │   Value     │
-  ├─────────┼─────────────┤
-  │   1     │  capable    │
-  │   2     │  news       │
-  │   3     │  pyramid    │
-  │   4     │  suspect    │
-  │   5     │  pumpkin    │
-  │   6     │  improve    │
-  │   7     │  share      │
-  │   8     │  kiwi       │
-  │   9     │  praise     │
-  │  10     │  eight      │
-  │  11     │  food       │
-  │  12     │  knee       │
-  └─────────┴─────────────┘
+  1 capable    2 news       3 pyramid
+  4 suspect    5 pumpkin    6 improve
+  7 share      8 kiwi       9 praise
+  10 eight     11 food      12 knee
 
 Type 'confirm' + Enter after writing down your seed.</code></pre>
-
-    <p>Type <code>confirm</code> and press Enter. The device sets a backup flag so it won't show the seed again on every boot.</p>
 
     <div class="danger">
       <strong>⚠️ Write them on paper. Not a screenshot. Not a text file.</strong>
       <ul>
         <li>Order matters — word 1 is word 1</li>
-        <li>Keep the paper somewhere safe and offline</li>
         <li>Anyone with these 12 words can spend your coins</li>
-        <li>If you lose the paper, your coins are gone if the device breaks</li>
+        <li>If the device dies and the paper is gone, the coins are gone — <strong>there is no other copy</strong></li>
       </ul>
     </div>
 
+    <p>Then type <code>confirm</code> and press Enter (or hold the <strong>BOOT</strong> button ~3 seconds, or confirm in the Android app).</p>
+
+    <div class="danger">
+      <strong>⚠️ Mining does not start until you confirm.</strong> If the board seems up (WiFi connected, peers discovered) but you never see <code>Mining started!</code>, it is waiting for seed confirmation — <strong>forever, with no timeout</strong>. Type <code>confirm</code> + Enter in the serial console. This is the #1 "my board is half-alive" cause.
+    </div>
+
     <div class="note">
-      <strong>Lost your paper?</strong> Type <code>seed</code> in the serial console to re-display the 12 words (PIN-gated if a PIN is set — see step 4).
+      <strong>Lost the paper but still have the device?</strong> Type <code>seed</code> in the serial console to re-display the words (PIN-gated if a PIN is set — see step 4). Do it <em>before</em> anything happens to the device.
     </div>
   </div>
 
@@ -352,83 +329,152 @@ Type 'confirm' + Enter after writing down your seed.</code></pre>
     <span class="step-num">4</span><span class="step-title">Set a PIN (Recommended)</span>
     <p>A PIN protects the <code>seed</code> command — without a PIN, anyone with USB access can re-display your 12 words. With a PIN, they get 10 wrong guesses before the wallet is wiped.</p>
 
-    <p>In the serial console, type:</p>
-    <pre><code>setpin 1234</code></pre>
-    <p class="muted">Replace <code>1234</code> with your own 4-8 digit PIN.</p>
+    <pre><code>setpin 1234     ← set a 4-8 digit PIN
 
-    <p>You should see: <code>✅ PIN set</code></p>
-
-    <p>From now on, <code>seed</code> requires you to unlock first:</p>
-    <pre><code>pin 1234       ← unlock (resets after power cycle)
-seed           ← now shows your 12 words</code></pre>
+pin 1234        ← unlock (after each power cycle)
+seed            ← re-display your 12 words</code></pre>
 
     <div class="danger">
-      <strong>⚠️ 10 wrong PINs = wallet wiped.</strong> The counter persists across reboots — power-cycling does NOT reset it. If you forget your PIN, the only way to recover is your 12-word seed phrase (flash a new device, import words).
+      <strong>⚠️ 10 wrong PINs = wallet wiped.</strong> The counter persists across reboots — power-cycling does NOT reset it. If you forget your PIN, the only recovery is your 12-word seed phrase.
     </div>
   </div>
 
   <!-- =================== DONE =================== -->
   <div class="step" style="border-left-color: var(--accent2);">
     <span class="step-num" style="background: var(--accent2);">✓</span><span class="step-title">That's it. You're mining.</span>
-    <p>Your ESP32 is now mining Quartz. Check your balance at the <a href="/wallet/">web wallet</a> — import your 12 words to see your address and balance.</p>
+
+    <h3>What a healthy boot looks like</h3>
+    <pre><code>I (6310) QZ.PUF: PUF enrolled! Fingerprint: 0a14acca...
+I (6414) MAIN: Scratchpad allocated (16 KB)
+I (6420) MAIN: BLE off (seed confirmed) — radio dedicated to WiFi
+I (6438) MAIN: Mining started!
+I (7251) QZ.WIFI: Got work: height=7514 target=13        ← within ~1s on a local node
+I (807197) MAIN: Mining... 30 H/s, 56 total, nonce 55 [v079]
+I (807587) QZ.MESH: Peer discovered: 08f9e0f652bc (caps=0x03 height=0)</code></pre>
     <ul>
-      <li>📊 <strong>M5Stack (with screen):</strong> Stats on display — hash rate, blocks, uptime, device ID</li>
-      <li>📱 <strong>Android app:</strong> Connect via Bluetooth to see live stats and send transactions</li>
-      <li>💻 <strong>Serial console:</strong> Mining log (once per minute), block finds, commands</li>
+      <li><code>Mining started!</code> by ~7 seconds after reset — if it's not there, see the seed-confirm trap in step 3</li>
+      <li><code>Got work</code> fast = node URL is right (local node: under a second; quartzchain.net: up to ~35s)</li>
+      <li><code>[v079]</code> in mining lines = your firmware version</li>
+      <li><code>Peer discovered</code> = another Quartz board in radio range (~200m) — you're meshing</li>
     </ul>
+
+    <h3>Verify you're earning</h3>
+    <p>Watch your address on the <a href="/explorer/">explorer</a>, or import your 12 words in the <a href="/wallet/">web wallet</a>. Blocks pay 42 QZ straight to your address.</p>
   </div>
 
   <!-- =================== SERIAL COMMANDS =================== -->
   <h2>Serial Commands</h2>
-  <p>Available anytime while mining (type in the serial console, characters echo back):</p>
+  <p>Commands depend on the board's state (characters echo back):</p>
+
+  <h3>While mining</h3>
   <pre><code>help                  Show available commands
-setpin &lt;digits&gt;       Set a 4-8 digit PIN (first time) or change PIN (unlock first)
-pin &lt;digits&gt;          Unlock the serial session (required for 'seed' if PIN is set)
-seed                  Re-display your 12-word seed phrase (PIN-gated)
-pinstatus             Show PIN status, failed attempts, and lock state
-confirm               Acknowledge seed display on first boot</code></pre>
+address               Show your wallet address
+seed                  Re-display your 12-word seed (PIN-gated)
+pin / setpin / pinstatus    Unlock, set, or inspect PIN
+send &lt;addr&gt; &lt;amount&gt;  Send QZ (requires unlock)
+meshscan              List nearby WiFi networks + channels (mesh debugging)
+meshch &lt;1-13|0&gt;       Lock/clear the mesh radio channel (0 = auto)</code></pre>
+
+  <h3>While waiting for seed confirmation (before first mining)</h3>
+  <pre><code>confirm               Confirm you wrote down the seed — starts mining
+pin / setpin / pinstatus
+wifi                  Wipe WiFi + node settings, reboot into portal
+recover &lt;12 words&gt;    Restore a wallet from seed (v078)</code></pre>
+
+  <div class="note"><strong>Known gap (v078):</strong> <code>wifi</code> currently only works in the seed-confirmation state, not while mining. If you mistype your node URL on a running board, see Troubleshooting below.</div>
+
+  <!-- =================== TROUBLESHOOTING =================== -->
+  <h2>Troubleshooting</h2>
+  <p class="muted">Every row below was observed in the field on 2026-08-29 — three boards, five failures, all recovered.</p>
+
+  <table class="trouble">
+    <tr><th>Symptom</th><th>Meaning</th><th>Fix</th></tr>
+    <tr>
+      <td><code>invalid header: 0xffffffff</code> in a loop with <code>rst:0x10 ... boot:0x13</code></td>
+      <td>Bootloader region erased (brick)</td>
+      <td>Flash the all-in-one image at <code>0x0</code> (script or manual). Wallet is lost unless you have the seed</td>
+    </tr>
+    <tr>
+      <td><code>invalid header: 0xffffffff</code> repeating, started right after a flash aborted</td>
+      <td>App slot erased, bootloader intact</td>
+      <td>App-only flash at <code>0x20000</code> — <strong>revives the board AND keeps wallet + WiFi</strong></td>
+    </tr>
+    <tr>
+      <td>Bricked after using the browser web flasher</td>
+      <td>WebSerial aborted mid-write</td>
+      <td>Use the Python flasher (scripts above). On flaky USB setups, the browser flasher is a repeat offender</td>
+    </tr>
+    <tr>
+      <td>Board "up" — WiFi connected, peers discovered — but no <code>Mining started!</code></td>
+      <td>Waiting for seed confirmation (no timeout)</td>
+      <td>Type <code>confirm</code> + Enter (or hold BOOT 3s)</td>
+    </tr>
+    <tr>
+      <td><code>get_work HTTP failed (-2)</code> / <code>Node unreachable, mining locally</code></td>
+      <td>Wrong node URL</td>
+      <td>v078+: <code>node &lt;host&gt;</code> console command (no reflash, wallet safe). v077 and older: <code>esptool erase_region 0x11000 0x4000</code> then redo the portal (rolls the wallet — record any seed first)</td>
+    </tr>
+    <tr>
+      <td><code>Got work via mesh (pays us)</code></td>
+      <td>Working as designed — no-node board mining via a peer's radio</td>
+      <td>Nothing. Your blocks still pay your address</td>
+    </tr>
+    <tr>
+      <td><code>Peer discovered</code> → <code>Peer timed out</code> every couple seconds</td>
+      <td>Mesh beacon churn (cosmetic)</td>
+      <td>Nothing — blocks still relay through it. Improving in v078</td>
+    </tr>
+    <tr>
+      <td><code>Disconnected (reason 34)</code>, reconnects ~1s later</td>
+      <td>WiFi beacon timeout blip</td>
+      <td>Ignore</td>
+    </tr>
+    <tr>
+      <td>Wallet/WiFi gone after a flash</td>
+      <td>All-in-one image used on a running board</td>
+      <td>Recover funds by importing the 12 words in the <a href="/wallet/">web wallet</a>. Next time: app-only update</td>
+    </tr>
+    <tr>
+      <td>Garbage characters in serial output</td>
+      <td>Wrong baud or flow control</td>
+      <td><code>115200</code> 8N1, flow control None. A few garbled chars at boot handoff are normal</td>
+    </tr>
+  </table>
 
   <!-- =================== FAQ =================== -->
   <h2>FAQ</h2>
 
-  <h3>What's the difference between app-only flash and full flash?</h3>
-  <p><strong>App-only</strong> (<code>0x20000</code>): Updates firmware, keeps your wallet, seed, PIN, and WiFi settings. Use for updates.</p>
-  <p><strong>Full flash</strong> (all three partitions): Writes bootloader + partition table + app. Use for first install or if the partition table changed.</p>
-  <p><strong>Erase + flash</strong>: Wipes everything including NVS (wallet, seed, PIN, WiFi). Device generates a fresh wallet on next boot. Use to reset to factory state.</p>
-
-  <h3>I can't type in the serial console — nothing appears</h3>
-  <p>The firmware echoes characters back to the terminal. If you see nothing while typing:</p>
+  <h3>App-only vs all-in-one vs erase — what preserves what?</h3>
   <ul>
-    <li>Make sure PuTTY flow control is set to <strong>None</strong> (not XON/XOFF)</li>
-    <li>Check you're on the right COM port and baud rate (115200)</li>
-    <li>Press <strong>RESET</strong> on the ESP32 — you should see boot messages</li>
-    <li>Type <code>help</code> + Enter — you should see the command list</li>
+    <li><strong>App-only</strong> (<code>0x20000</code>): keeps wallet, seed, PIN, WiFi, node. Use for <em>every update on a working board</em>.</li>
+    <li><strong>All-in-one</strong> (<code>0x0</code>): bootloader + partitions + app in one file. New or bricked boards only — <strong>wipes WiFi + wallet</strong>.</li>
+    <li><strong><code>erase_flash</code></strong>: full factory wipe. Only when you want a clean slate.</li>
   </ul>
 
-  <h3>The mining log is too noisy — I can't see what I type</h3>
-  <p>The mining log prints once per minute. If you're seeing more frequent output, you may be on an older firmware. Update to the latest version.</p>
+  <h3>I can't type in the serial console — nothing appears</h3>
+  <ul>
+    <li>Check baud 115200 and flow control <strong>None</strong> (PuTTY default is XON/XOFF — change it)</li>
+    <li>Press <strong>RESET</strong> on the board — you should see boot messages</li>
+    <li>Type <code>help</code> + Enter — you should get a command list</li>
+  </ul>
 
   <h3>I missed the seed display — can I see it again?</h3>
-  <p>Yes. Type <code>seed</code> in the serial console. If a PIN is set, unlock first with <code>pin &lt;digits&gt;</code>.</p>
-  <p>If you haven't confirmed yet, power-cycle the device — the seed shows again on every boot until you type <code>confirm</code>.</p>
+  <p>Yes: type <code>seed</code> (PIN-gated). If you haven't confirmed yet, power-cycle — the seed shows again on every boot until you type <code>confirm</code>.</p>
 
-  <h3>What if I lose the paper with my seed phrase?</h3>
-  <p class="warn">Your funds are at risk. If you still have the device and know your PIN, type <code>seed</code> to re-display the words and write them down again. If the device is lost or the PIN is forgotten, the coins are gone.</p>
+  <h3>What does the mesh do? Do I need it?</h3>
+  <p>No setup needed — boards in radio range (~200m, same channel) find each other automatically. A board with no WiFi/node can mine through a connected peer, and blocks get relayed to the chain over whichever board has a link. Today it's a resilience layer; a future fork pays relayers 10% of block rewards.</p>
 
-  <h3>Can I use the same seed on multiple devices?</h3>
-  <p>Not recommended — each device should have its own wallet and mine to its own address. But for recovery: flash a new device, erase NVS, and the new device generates its own wallet. To restore a lost wallet, use the web wallet's Import feature with your 12 words.</p>
-
-  <h3>Are the 12 words compatible with other wallets?</h3>
-  <p>Yes. The firmware uses standard BIP39 + BIP44 (derivation path <code>m/44'/789'/0'/0'/0'</code>) with Ed25519 keys. Import the same 12 words in the <a href="/wallet/">web wallet</a> and you'll get the same address and key.</p>
-
-  <h3>Do I need to keep the ESP32 plugged in?</h3>
-  <p>For mining: yes (needs power + WiFi). For wallet recovery: no — import your 12 words in the web wallet to access your funds from any browser.</p>
-
-  <h3>What baud rate?</h3>
-  <p><code>115200</code> — 8 data bits, no parity, 1 stop bit (8N1). Flow control: None.</p>
+  <h3>My hashrate shows 0 H/s but it says "Got work via mesh"</h3>
+  <p>Cosmetic estimator quirk with mesh-sourced work (v078 fix). Hashing is happening — check that nonce counter increments.</p>
 
   <h3>What boards are supported?</h3>
-  <p>Any classic ESP32 with 4MB+ flash: M5Stack Core, Heltec V3, ESP32 DevKit, NodeMCU-32S, LOLIN D32, TTGO T-Display. ESP32-S3 and ESP32-C3 need separate builds (see <a href="/download.html">download page</a>).</p>
+  <p>ESP32-C3 (Super Mini — the $3 starter, headless/serial), any classic ESP32 with 4MB+ flash (DevKit, WROOM/WROVER, M5Stack Core, LilyGO T3), ESP32-S3 (Heltec V3 — beta build). ESP32-S2 is not supported (no Bluetooth).</p>
+
+  <h3>Do I need to keep it plugged in?</h3>
+  <p>For mining: yes (power + WiFi), or run it off a USB battery — a C3 draws well under a watt. For wallet recovery: no — import the 12 words in the web wallet from any browser.</p>
+
+  <h3>Are the 12 words compatible with other wallets?</h3>
+  <p>Yes — standard BIP39 + BIP44 (<code>m/44'/789'/0'/0'/0'</code>) with Ed25519 keys. Import the same words in the <a href="/wallet/">web wallet</a> to get the same address.</p>
 
 </div>
 
@@ -441,5 +487,18 @@ function showTab(evt, id) {
 }
 </script>
 
+
+    <!-- Pay-to-Trigger Relay (v079) -->
+    <section id="relay" style="max-width:840px;margin:0 auto;padding:0 20px 40px;">
+        <h2>&#9889; Pay-to-Trigger Relay (v079)</h2>
+        <p>Turn a miner into pay-per-use hardware: a payment to the board&rsquo;s own wallet fires a GPIO relay &mdash; vending machine, door latch, USB port, anything. Console commands (serial, while mining):</p>
+        <pre><code>relay 5          # watch for a 5 QZ payment, fire on confirm
+relay 5 30       # same, but hold the relay 30 s (saved for next time)
+relay test       # fire it right now &mdash; bench test, no payment
+relay            # show pin / pulse settings
+relay pin 5      # move the relay to GPIO5 (reboots)
+relay off        # cancel the watch</code></pre>
+        <p><strong>Wiring:</strong> any opto-isolated relay module (the common blue 5 V boards): VCC&rarr;5 V, GND&rarr;GND, IN&rarr;the relay GPIO. Default pin: <strong>GPIO26</strong> (classic ESP32 / M5Stack / LilyGO) or <strong>GPIO5</strong> (C3 Super Mini). The console prints a <code>quartz:</code> payment URI &mdash; pay it from the Android or web wallet and the relay fires when the transaction confirms (~30 s). Switch low-voltage loads only unless you know what you are doing &mdash; mains wiring is on you.</p>
+    </section>
 </body>
 </html>

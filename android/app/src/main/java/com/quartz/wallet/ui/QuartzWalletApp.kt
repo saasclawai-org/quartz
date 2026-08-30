@@ -431,6 +431,9 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
                             showRestore = false
                         } catch (e: IllegalArgumentException) {
                             restoreError = e.message
+                        } catch (e: Exception) {
+                            // v0.2.9: keystore/prefs failures must surface, not crash
+                            restoreError = "Restore failed: ${e.message ?: e.javaClass.simpleName}"
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
@@ -956,9 +959,12 @@ fun formatUptime(seconds: Long): String {
 fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { WalletStore(context) }
-    val prefs = remember { context.getSharedPreferences("quartz_wallet", Context.MODE_PRIVATE) }
+    // v0.2.9: node settings in plain "quartz_settings" (NOT the encrypted wallet file)
+    val prefs = remember { context.getSharedPreferences("quartz_settings", Context.MODE_PRIVATE) }
     var nodeUrl by remember {
-        mutableStateOf(prefs.getString("node_url", SoftwareWallet.DEFAULT_NODE_URL)!!)
+        val legacy = context.getSharedPreferences("quartz_wallet", Context.MODE_PRIVATE)
+            .getString("node_url", null)
+        mutableStateOf(prefs.getString("node_url", null) ?: legacy ?: SoftwareWallet.DEFAULT_NODE_URL)
     }
     var showConfirm by remember { mutableStateOf(false) }
     var confirmText by remember { mutableStateOf("") }
@@ -1058,11 +1064,20 @@ fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        store.deleteWallet()
-                        showConfirm = false
-                        confirmText = ""
-                        deleted = true
-                        onWalletDeleted()
+                        try {
+                            store.deleteWallet()
+                            deleted = true
+                            onWalletDeleted()
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Delete failed: ${e.message ?: e.javaClass.simpleName}",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } finally {
+                            showConfirm = false
+                            confirmText = ""
+                        }
                     },
                     enabled = confirmText.trim() == "DELETE"
                 ) { Text("Delete", color = QuartzOrange, fontWeight = FontWeight.Bold) }

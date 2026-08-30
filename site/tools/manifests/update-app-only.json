@@ -1,10 +1,26 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "new_install_prompt_erase": false,
   "builds": [
-    { "chipFamily": "ESP32", "parts": [{ "path": "../../firmware/quartz-app-v077.bin", "offset": 131072 }] },
-    { "chipFamily": "ESP32-C3", "parts": [{ "path": "../../firmware/quartz-app-v077-c3.bin", "offset": 131072 }] }
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "../../firmware/quartz-app-v079.bin",
+          "offset": 131072
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [
+        {
+          "path": "../../firmware/quartz-app-v079-c3.bin",
+          "offset": 131072
+        }
+      ]
+    }
   ],
-  "notes": "0.4.1 (v077): portal channel discovery — headless boards scan once and camp ESP-NOW on the strongest AP's channel so connected peers hear mesh work requests. New console: meshscan / meshch. App-only update preserving wallet + WiFi."
+  "notes": "0.4.3 (v079): pay-to-trigger relay console commands (relay <price_qz> [pulse_sec], relay test/off/pin). v078: mesh clock fix, HELLO heights, wifi/node console, seed-confirm banner. App-only update preserving wallet + WiFi."
 }

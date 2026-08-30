@@ -1,10 +1,35 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "builds": [
-    { "chipFamily": "ESP32", "parts": [{ "path": "../../downloads/quartz-esp32-merged.bin", "offset": 0 }] },
-    { "chipFamily": "ESP32-S3", "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }] },
-    { "chipFamily": "ESP32-C3", "parts": [{ "path": "../../downloads/quartz-c3-merged.bin", "offset": 0 }] }
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "../../downloads/quartz-esp32-merged.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "../../downloads/quartz-s3-merged.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [
+        {
+          "path": "../../downloads/quartz-c3-merged.bin",
+          "offset": 0
+        }
+      ]
+    }
   ],
-  "notes": "0.4.1 (v077): portal channel discovery — headless boards camp ESP-NOW on the strongest AP's channel so connected peers hear mesh work requests. Console: meshscan / meshch. ESP32 + C3 at v077; S3 still older (pending)."
+  "notes": "0.4.3 (v079): pay-to-trigger relay — one console command turns a miner into pay-per-use hardware (relay <price_qz>; GPIO configurable, default 26 classic / 5 C3). Includes v078: mesh peer-table clock fix, HELLO heights, wifi/node console, seed-confirm banner. ESP32 + C3 at v079; S3 still older (pending).",
+  "new_install_prompt_erase": false
 }

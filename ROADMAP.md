@@ -58,6 +58,42 @@
 - [ ] Checkpoints for deep reorg prevention
 - [ ] Mobile app (Android, BLE + QR scanner)
 
+## 📈 Scaling Ladder — If Quartz Catches On
+
+**The invariant that outranks TPS:** a $3 board must always be able to watch
+its own wallet directly. Every scaling decision gets tested against
+*"can a Super Mini still confirm its own payment without a server?"*
+
+The bottleneck is not the protocol — it is the node. Machine payments are
+~300 bytes; a 1MB block at 30s ≈ 3,000 txs ≈ 100+ TPS, and machine-economy
+UX tolerates seconds-level confirmation. The ladder, in order:
+
+### 1. Decentralize + real ledger model (trust work IS scaling work)
+- [ ] Postgres-backed address/tx index (retire the in-memory balances dict)
+- [ ] Multiple independent nodes with real p2p authority
+- [ ] Compiled reference node (Rust/Go port) when Python becomes the ceiling
+- **Goal:** no single process is the chain
+
+### 2. Protocol dials
+- [ ] Block size / cadence tuning (small txs make this cheap)
+- [ ] Mempool admission + fee policy under load
+- **Goal:** 100+ TPS without changing the device story
+
+### 3. Physical aggregation (the structural rung)
+- [ ] Gateway-batched swarms: N off-grid boards = one on-chain presence
+- [ ] Batched sensor logs + pooled mining payouts
+- [ ] Relayer Pool economics pay the batching layer
+- **Goal:** tx pressure grows slower than device count
+
+### 4. Light proofs for devices
+- [ ] Merkle-ized address/tx proofs (SPV-for-Quartz)
+- [ ] Headers-only device sync (last-N headers in flash — pairs with the light-client item in the build order)
+- **Goal:** a Super Mini VERIFIES its payment instead of trusting a node's JSON
+
+**Growth curve buys time:** adoption arrives as miners first (each adds
+hashrate, not transactions). Tx pressure comes from the use-cases — exactly
+the gateway-batchable kind.
+
 ## 🏗️ Architecture Summary
 
 ```

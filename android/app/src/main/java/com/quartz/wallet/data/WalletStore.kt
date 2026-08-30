@@ -25,19 +25,15 @@ import androidx.security.crypto.MasterKey
  *   - Both: enter seed phrase to restore on new device
  *   - Seed phrase stored NOWHERE on the phone after initial backup
  */
-class WalletStore(context: Context) {
+class WalletStore(private val context: Context) {
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    // v0.2.10: ONE EncryptedSharedPreferences instance app-wide. Multiple live
+    // instances of the same encrypted file (Settings + Wallet screens each built
+    // their own) cause Tink keyset contention — the delete-click crash.
+    private var prefs: android.content.SharedPreferences = sharedPrefs()
 
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        "quartz_wallet",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private fun sharedPrefs(): android.content.SharedPreferences =
+        Companion.getOrCreate(context.applicationContext)
 
     // --- Mode ---
     fun setMode(mode: WalletMode) {
@@ -88,7 +84,19 @@ class WalletStore(context: Context) {
     fun isSoftwareMode(): Boolean = getMode() == WalletMode.SOFTWARE
 
     fun deleteWallet() {
-        prefs.edit().clear().apply()
+        // v0.2.10: nuke the underlying files directly. clear() on
+        // EncryptedSharedPreferences throws inside the library (keyset contention
+        // with other live instances / corrupted entries) — that was the
+        // delete-click crash. Deleting the prefs file + Tink companions and
+        // rebuilding fresh is safe, total, and self-heals corrupted stores.
+        val ctx = context.applicationContext
+        runCatching { ctx.deleteSharedPreferences("quartz_wallet") }
+        runCatching {
+            java.io.File(ctx.applicationInfo.dataDir, "shared_prefs").listFiles()
+                ?.forEach { if (it.name.contains("quartz_wallet")) it.delete() }
+        }
+        Companion.reset()
+        prefs = sharedPrefs()
     }
 
     // --- Wallet PIN (gate for sending in software mode) ---
@@ -127,6 +135,35 @@ class WalletStore(context: Context) {
         hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     companion object {
+        // v0.2.10: app-wide single instance; plain-prefs fallback keeps the app
+        // alive on already-corrupted stores (delete then rebuilds a clean one).
+        @Volatile
+        private var shared: android.content.SharedPreferences? = null
+
+        @Synchronized
+        fun getOrCreate(ctx: android.content.Context): android.content.SharedPreferences {
+            shared?.let { return it }
+            val p: android.content.SharedPreferences = try {
+                val masterKey = MasterKey.Builder(ctx)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    ctx,
+                    "quartz_wallet",
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } catch (e: Exception) {
+                ctx.getSharedPreferences("quartz_wallet", android.content.Context.MODE_PRIVATE)
+            }
+            shared = p
+            return p
+        }
+
+        @Synchronized
+        fun reset() { shared = null }
+
         private const val KEY_MODE = "wallet_mode"
         private const val KEY_SEED = "seed_phrase"
         private const val KEY_PRIVKEY = "private_key"

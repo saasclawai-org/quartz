@@ -98,6 +98,11 @@ void quartz_pay_trigger_relay(uint32_t duration_ms);
  * Cancel current payment request.
  */
 void quartz_pay_cancel(void);
+/* v079: runtime overrides (NVS-persisted, applied at init) */
+void quartz_pay_set_duration_ms(uint32_t duration_ms);
+uint32_t quartz_pay_get_duration_ms(void);
+uint8_t quartz_pay_get_pin(void);
+
 
 /**
  * Get current payment state.

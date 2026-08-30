@@ -32,6 +32,7 @@ static const char *TAG = "QZ.MESH";
 static bool s_initialized = false;
 static uint8_t s_mymac[6];
 static uint8_t s_caps = 0;
+static uint32_t s_mesh_height = 0;   /* v078: chain height for HELLO */
 
 static qz_mesh_peer_t s_peers[QZ_MESH_MAX_PEERS];
 static int s_peer_count = 0;
@@ -187,7 +188,7 @@ static void send_hello(void) {
     hello.type = QZ_MESH_HELLO;
     memcpy(hello.mac, s_mymac, 6);
     hello.caps = s_caps;
-    /* height left as 0 for now — main.c can update via update_caps */
+    hello.height = s_mesh_height;   /* v078: real chain height in beacons */
     broadcast((uint8_t *)&hello, sizeof(hello));
 }
 
@@ -317,6 +318,10 @@ void quartz_mesh_update_caps(uint8_t caps) {
     if (s_initialized) send_hello();
 }
 
+void quartz_mesh_update_height(uint32_t height) {
+    s_mesh_height = height;
+}
+
 int quartz_mesh_get_peers(qz_mesh_peer_t *peers, int max_count) {
     if (!s_initialized || !peers) return 0;
     int n = (s_peer_count < max_count) ? s_peer_count : max_count;
@@ -330,6 +335,11 @@ bool quartz_mesh_is_active(void) {
 
 void quartz_mesh_step(uint32_t uptime_sec) {
     if (!s_initialized) return;
+
+    /* v078: single time base — last_seen is stamped from the tick counter
+     * in on_recv; mixing it with the caller's esp_timer-derived uptime
+     * caused spurious peer timeouts (see V078-FLEET-PLAN.md A5). */
+    uptime_sec = xTaskGetTickCount() / pdMS_TO_TICKS(1000);
 
     /* Prune stale peers */
     bool pruned = false;

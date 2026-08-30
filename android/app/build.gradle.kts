@@ -12,8 +12,8 @@ android {
         applicationId = "com.quartz.wallet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.2.8"
+        versionCode = 12
+        versionName = "0.2.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

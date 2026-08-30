@@ -152,6 +152,11 @@ int quartz_mesh_get_found(uint8_t header[80], uint64_t *nonce);
 void quartz_mesh_update_caps(uint8_t caps);
 
 /**
+ * Update our chain height (announced in HELLO beacons).
+ */
+void quartz_mesh_update_height(uint32_t height);
+
+/**
  * Get peer list for display/stats.
  * Returns peer count, fills peers array (max 8).
  */

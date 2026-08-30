@@ -500,6 +500,86 @@ static void quartz_serial_command(const char *cmd)
                 ESP_LOGI(TAG, "✅ Sent — pending in mempool, mined within ~30s");
             }
         }
+    } else if (strcasecmp(cmd, "wifi") == 0) {
+        /* v078: wipe WiFi + node settings, reboot into portal */
+        nvs_handle_t h;
+        if (nvs_open("qz_wifi", NVS_READWRITE, &h) == ESP_OK) {
+            nvs_erase_key(h, "ssid");
+            nvs_erase_key(h, "pass");
+            nvs_erase_key(h, "node");
+            nvs_commit(h);
+            nvs_close(h);
+        }
+        ESP_LOGI(TAG, "WiFi cleared — rebooting into portal (Quartz-XXXX AP)");
+        vTaskDelay(pdMS_TO_TICKS(500));
+        esp_restart();
+    } else if (strncasecmp(cmd, "node ", 5) == 0) {
+        /* v078: set node endpoint without wiping anything */
+        const char *spec = cmd + 5;
+        size_t slen = strlen(spec);
+        bool ok = (slen >= 7 && slen < 64);
+        for (size_t i = 0; ok && i < slen; i++) {
+            char cc = spec[i];
+            if (!((cc >= 'a' && cc <= 'z') || (cc >= 'A' && cc <= 'Z') ||
+                  (cc >= '0' && cc <= '9') ||
+                  cc == '.' || cc == ':' || cc == '-' || cc == '/'))
+                ok = false;
+        }
+        if (ok) {
+            nvs_handle_t h;
+            if (nvs_open("qz_wifi", NVS_READWRITE, &h) == ESP_OK) {
+                nvs_set_str(h, "node", spec);
+                nvs_commit(h);
+                nvs_close(h);
+                ESP_LOGI(TAG, "Node endpoint set to %s — rebooting…", spec);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                esp_restart();
+            }
+        } else {
+            ESP_LOGW(TAG, "Usage: node <host[:port]>  (e.g. node 192.168.1.142 or node quartzchain.net)");
+        }
+    } else if (strcasecmp(cmd, "node") == 0) {
+        ESP_LOGI(TAG, "Node endpoint: %s:%d", quartz_wifi_node_host(), quartz_wifi_node_port());
+    } else if (strncasecmp(cmd, "relay", 5) == 0) {
+        /* v079: pay-to-trigger relay */
+        const char *rarg = cmd + 5;
+        while (*rarg == ' ') rarg++;
+        quartz_pay_init(quartz_wallet_get_address());
+        if (*rarg == '\0') {
+            ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · 1 confirmation · 300s timeout",
+                     quartz_pay_get_pin(), (unsigned long) quartz_pay_get_duration_ms());
+            ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] | relay test [sec] | relay off | relay pin <gpio>");
+        } else if (strncasecmp(rarg, "test", 4) == 0) {
+            int rsec = atoi(rarg + 4);
+            ESP_LOGW(TAG, "\u26a1 Firing relay NOW (test, %ds)", rsec > 0 ? rsec : (int)(quartz_pay_get_duration_ms()/1000));
+            quartz_pay_trigger_relay(rsec > 0 ? (uint32_t)rsec * 1000 : 0);
+        } else if (strcasecmp(rarg, "off") == 0) {
+            quartz_pay_cancel();
+            ESP_LOGI(TAG, "Relay watch cancelled");
+        } else if (strncasecmp(rarg, "pin ", 4) == 0) {
+            int rp = atoi(rarg + 4);
+            if (rp >= 0 && rp <= 48) {
+                nvs_handle_t rh;
+                if (nvs_open("qz_relay", NVS_READWRITE, &rh) == ESP_OK) {
+                    nvs_set_u8(rh, "pin", (uint8_t)rp); nvs_commit(rh); nvs_close(rh);
+                    ESP_LOGI(TAG, "Relay pin set to GPIO%d — rebooting\u2026", rp);
+                    vTaskDelay(pdMS_TO_TICKS(500)); esp_restart();
+                }
+            } else ESP_LOGW(TAG, "Usage: relay pin <0-48>");
+        } else {
+            float price = strtof(rarg, NULL);
+            if (price <= 0.0f || price > 100000.0f) {
+                ESP_LOGW(TAG, "Usage: relay <price_qz> [pulse_sec]");
+            } else {
+                const char *rsp = strchr(rarg, ' ');
+                if (rsp) { int dsec = atoi(rsp); if (dsec > 0) quartz_pay_set_duration_ms((uint32_t)dsec * 1000); }
+                char ruri[256];
+                quartz_pay_build_qr_string(ruri, sizeof(ruri), quartz_wallet_get_address(), price, "relay");
+                ESP_LOGI(TAG, "\u26a1 Pay-to-trigger: %s", ruri);
+                ESP_LOGI(TAG, "   watching for %.2f QZ — relay fires on confirmation", price);
+                quartz_pay_request(price, "relay");
+            }
+        }
     } else if (strcasecmp(cmd, "help") == 0) {
         ESP_LOGI(TAG, "Commands:");
         ESP_LOGI(TAG, "  address              show wallet address");
@@ -508,6 +588,9 @@ static void quartz_serial_command(const char *cmd)
         ESP_LOGI(TAG, "  send <addr> <amount> sign + broadcast tx (e.g. send Qk... 1.5)");
         ESP_LOGI(TAG, "  setpin/pin <digits>  set or unlock PIN");
         ESP_LOGI(TAG, "  pinstatus            PIN state");
+        ESP_LOGI(TAG, "  node [host[:port]]   show/set node endpoint");
+        ESP_LOGI(TAG, "  wifi                 wipe WiFi + node, reboot to portal");
+        ESP_LOGI(TAG, "  relay [price_qz]      pay-to-trigger GPIO relay (bare 'relay' = help)");
     }
 }
 
@@ -723,6 +806,7 @@ static void mining_task(void *pvParameters) {
             };
             gpio_config(&boot_btn);
             int boot_hold_ms = 0;
+            int confirm_wait_ms = 0;   /* v078: repeating banner timer */
 
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
@@ -808,6 +892,14 @@ static void mining_task(void *pvParameters) {
                     }
                 } else {
                     boot_hold_ms = 0;
+                }
+
+                /* v078: unmissable repeating banner while unconfirmed */
+                confirm_wait_ms += 50;
+                if (confirm_wait_ms >= 10000) {
+                    confirm_wait_ms = 0;
+                    ESP_LOGW(TAG, "⏳ WALLET NOT CONFIRMED — MINING WILL NOT START");
+                    ESP_LOGW(TAG, "   → type 'confirm' + Enter   (or hold BOOT/PRG 3s)");
                 }
 
                 vTaskDelay(pdMS_TO_TICKS(50));
@@ -958,6 +1050,7 @@ static void mining_task(void *pvParameters) {
                 last_work_fetch = now;
                 ESP_LOGI(TAG, "📡 Got work: block %d, target %d",
                          tmpl.height, tmpl.target_bits);
+                quartz_mesh_update_height(tmpl.height);   /* v078 */
                 /* v076: no verbatim sharing — peers request work paying
                  * their own address instead (per-board payouts) */
             } else {
@@ -1087,6 +1180,16 @@ static void mining_task(void *pvParameters) {
             static uint32_t s_last_log_uptime = 0;
             if (uptime - s_last_log_uptime >= 60) {
                 s_last_log_uptime = uptime;
+                {   /* v079: pay-to-trigger watch (idle unless a request is active) */
+                    static bool s_pay_inited = false;
+                    static uint32_t s_last_pay_poll_s = 0;
+                    if (!s_pay_inited) { quartz_pay_init(quartz_wallet_get_address()); s_pay_inited = true; }
+                    uint32_t pay_now_s = xTaskGetTickCount() / pdMS_TO_TICKS(1000);
+                    if (pay_now_s - s_last_pay_poll_s >= 5) {
+                        s_last_pay_poll_s = pay_now_s;
+                        quartz_pay_poll();
+                    }
+                }
                 ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, uptime %luh%lum [%s]",
                          hps, s_hash_count, uptime / 3600, (uptime % 3600) / 60, FW_VERSION_STRING);
             }

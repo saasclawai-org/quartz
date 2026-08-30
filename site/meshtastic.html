@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz × Meshtastic — Your LoRa Board Can Earn</title>
+    <meta name="description" content="Own a Heltec V3 or LilyGO Meshtastic node? The same board mines Quartz off-grid — own radio channel, near-zero airtime, no internet needed. Helium economics without the $500 hotspot.">
+    <link rel="stylesheet" href="/css/quartz.css">
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/meshtastic.html" style="color:#00d4aa;font-weight:600">Meshtastic</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a><a href="/flash.html">Flasher</a><a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="hero">
+        <div class="hero-badge"><div class="dot"></div>Same boards · Own radio channel · No internet needed</div>
+        <div class="crystal">📡</div>
+        <h1>Meshtastic Hardware, Earning Its Keep</h1>
+        <p class="tagline">Your Heltec V3 already contains a $5 miner. Quartz puts it to work — without touching your mesh.</p>
+    </div>
+
+    <!-- Same Silicon -->
+    <section id="same-silicon">
+        <div class="container">
+            <h2>The Same Silicon</h2>
+            <p class="section-subtitle">Meshtastic nodes are ESP32 boards. So are Quartz miners. One flash command switches between them.</p>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="icon">🔆</div>
+                    <h3>Heltec V3</h3>
+                    <p>ESP32-S3 + SX1262 + display — the Meshtastic flagship. Runs the Quartz S3 build (v074 today, v078 in validation). Mine over WiFi now; the LoRa radio earns its keep when our radio transport ships.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">S3 build available</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🛰️</div>
+                    <h3>LilyGO T-Beam / T3</h3>
+                    <p>Classic ESP32 + GPS + radio — the workhorse of LoRa meshing. Fully supported on Quartz v078 today, mesh-mining in production over ESP-NOW.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">Supported today · v078</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🧊</div>
+                    <h3>Any ESP32</h3>
+                    <p>C3 Super Mini ($3), DevKit, WROOM, M5Stack — every mainstream variant mines Quartz out of the box. No radio required: the WiFi-band mesh already relays blocks between boards.</p>
+                    <p style="color:var(--accent);font-size:14px;font-weight:600;margin-top:12px;">From $3 · mining now</p>
+                </div>
+            </div>
+            <p style="text-align:center;margin-top:24px;"><a href="/download.html" class="btn btn-primary" style="text-decoration:none;">⬇ Download Firmware</a>&nbsp;&nbsp;<a href="/setup.html" class="btn btn-secondary" style="text-decoration:none;">📖 Setup Guide</a></p>
+        </div>
+    </section>
+
+    <!-- Radio Discipline -->
+    <section id="radio-discipline">
+        <div class="container">
+            <h2>Radio Discipline</h2>
+            <p class="section-subtitle">The Meshtastic community guards its airtime — a 230-byte packet at long-range settings costs seconds of it. We agree, and we designed around it.</p>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="icon">🔇</div>
+                    <h3>Own Channel, Own Sync Word</h3>
+                    <p>Quartz firmware never joins, hears, or transmits on Meshtastic channels. We use our own LoRa parameters when radio transport ships — your mesh and ours coexist without collision. Zero shared airtime, zero grievance.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">📉</div>
+                    <h3>Sparsity-First Protocol</h3>
+                    <p>Off-grid mining is designed to be nearly silent: a compact work beacon every ~10 minutes, mining itself completely silent, and a single packet transmitted only when a block is won. That's ~6–12 packets per hour for an entire swarm — comfortably inside EU 1% duty-cycle rules.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🤝</div>
+                    <h3>Hardware, Not Airtime</h3>
+                    <p>Meshtastic taught the world that mesh works without the internet — we're not going to repay that by flooding it. Quartz rides the boards, never the network. Flash back anytime; your node is still a node.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How Off-Grid Mining Works -->
+    <section id="off-grid-mining">
+        <div class="container">
+            <h2>How Off-Grid Mining Works</h2>
+            <p class="section-subtitle">Battery board. No WiFi, no node, no internet. It still earns.</p>
+            <p style="text-align:center;margin:8px 0 16px;"><img src="/images/quartz-solar-miner-side.png" alt="Quartz off-grid miner with solar panel" style="max-width:420px;width:100%;border-radius:10px;"></p>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="icon">1️⃣</div>
+                    <h3>Catch a Work Beacon</h3>
+                    <p>A gateway broadcasts the current block height and target — one tiny packet about every 10 minutes. Every board in radio range picks it up.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">2️⃣</div>
+                    <h3>Mine in Silence</h3>
+                    <p>Each board grinds SHA-256 proof-of-work on-device at ~1.2W. Wallet keys (quantum-safe WOTS+) never leave the chip. Radio stays off.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">3️⃣</div>
+                    <h3>Transmit on a Win</h3>
+                    <p>A solved block announces itself in a single packet. Any internet-connected board relays it to the chain — and the reward lands on the miner that found it. Gateway-relay economics ship with the Relayer Pool fork (roadmap).</p>
+                </div>
+            </div>
+            <p style="color:var(--muted, #8892b0);font-size:14px;margin-top:20px;">Today this loop runs in production on the ESP-NOW mesh (~200m, WiFi band) — work distribution and block relay are live on the testnet. LoRa transport extends the same pattern to kilometer range and is on the roadmap.</p>
+        </div>
+    </section>
+
+    <!-- The Landscape -->
+    <section id="landscape">
+        <div class="container">
+            <h2>The Landscape</h2>
+            <p class="section-subtitle">Three answers to "should my radio hardware earn?"</p>
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="icon">🎈</div>
+                    <h3>Helium</h3>
+                    <p>$200–500 hotspots proving coverage, not hashing. Requires internet backhaul and a phone-held wallet. Great idea, heavy economics.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🕸️</div>
+                    <h3>Meshtastic</h3>
+                    <p>$20–50 boards doing brilliant off-grid text and telemetry meshing. Deliberately no economic layer — and the community likes it that way.</p>
+                </div>
+                <div class="card">
+                    <div class="icon">🔮</div>
+                    <h3>Quartz</h3>
+                    <p>$3–5 boards doing real proof-of-work with the wallet on the device. Earns off-grid today over the WiFi-band mesh; LoRa range on the roadmap. No coverage games, no backhaul required to mine.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Honest Status -->
+    <section id="status">
+        <div class="container">
+            <h2>Status, Honestly</h2>
+            <div class="card" style="max-width:720px;margin:0 auto;">
+                <div class="icon">🧭</div>
+                <h3>What Exists vs. What's Promised</h3>
+                <p style="line-height:1.9;">
+                    ✅ Classic ESP32 + ESP32-C3 — v078 mining in production; mesh work distribution and block relay proven on-chain<br>
+                    ✅ Off-grid board → mesh → chain loop (ESP-NOW, ~200m)<br>
+                    🟡 Heltec V3 / S3 — v074 available, v078 in validation<br>
+                    🔜 LoRa radio transport (km-range, own channel) — roadmap, no dates<br>
+                    🔜 Relayer Pool (gateway operators earn) — roadmap fork; pre-fork miners keep 100%
+                </p>
+                <p style="color:var(--muted, #8892b0);font-size:13px;margin-top:16px;">Quartz is an independent project. Meshtastic is a trademark of the Meshtastic project — we're not affiliated with or endorsed by them. We're just customers of the same good hardware.</p>
+            </div>
+            <p style="text-align:center;margin-top:24px;"><a href="/download.html" class="btn btn-primary" style="text-decoration:none;">⬇ Download Firmware</a>&nbsp;&nbsp;<a href="/setup.html" class="btn btn-secondary" style="text-decoration:none;">📖 Setup Guide</a>&nbsp;&nbsp;<a href="/hardware.html" class="btn btn-secondary" style="text-decoration:none;">⚙️ Hardware</a></p>
+        </div>
+    </section>
+</body>
+</html>
