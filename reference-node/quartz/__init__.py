@@ -11,10 +11,17 @@ __version__ = "0.1.0"
 from .blockchain import Block, Transaction, BlockHeader
 from .crystal_hash import crystal_hash_verify, check_difficulty
 from .node import QuartzNode
-from .wallet import Wallet
+from .wallet import (
+    Wallet,
+    StreamWallet,
+    PaymentChannel,
+    ChannelBundle,
+    load_bundle,
+)
 
 __all__ = [
     "Block", "Transaction", "BlockHeader",
     "crystal_hash_verify", "check_difficulty",
     "QuartzNode", "Wallet",
+    "StreamWallet", "PaymentChannel", "ChannelBundle", "load_bundle",
 ]

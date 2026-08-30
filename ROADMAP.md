@@ -14,6 +14,7 @@
 - [x] **Real Ed25519** (orlp/ed25519 public domain impl + mbedtls SHA-512)
 - [x] Headless firmware for LilyGO T3 (no display dependency)
 - [x] PUF dev mode (warm boot re-enrollment, no cold boot needed for flashing)
+- [x] Payment privacy v1 (reference node) — address streams, payment-channel bundles, watch-only audit export
 
 ## 🔨 In Progress
 - [ ] Norman to flash Ed25519 build + erase flash for new wallets
@@ -93,6 +94,61 @@ UX tolerates seconds-level confirmation. The ladder, in order:
 **Growth curve buys time:** adoption arrives as miners first (each adds
 hashrate, not transactions). Tx pressure comes from the use-cases — exactly
 the gateway-batchable kind.
+
+## 🔐 Payment Privacy — Plain English
+
+**The rule: the chain is a notary, not a vault.** Use it to prove,
+timestamp, and trigger. Keep the secrets' bodies off it.
+
+### What's public — on purpose
+Every payment shows which-address-paid-which-address, how much, and when,
+forever. That's the price of a $3 Super Mini checking its own money without
+trusting anyone's server: what everyone can verify, everyone can see.
+Addresses are pseudonyms — but pseudonyms leak the moment they're reused.
+Reuse one twice and strangers start assembling your customer list, your
+price sheet, and your volume chart.
+
+### Move 1 — Never reuse an address (done)
+Every payment lands on a brand-new address that has nothing in common with
+any address you've used before. They all grow from one secret seed, so one
+backup still recovers everything — but on the public chain your payments
+look like strangers passing cash. The reference-node wallet now works this
+way (`StreamWallet`): fresh address on demand, rotation built in.
+
+### Move 2 — Payment lanes (address bundles)
+A utility paying 500 devices. A dairy paying a carrier every week. At
+enrollment — QR code, contract signing, device setup — the receiver hands
+the payer a list of future addresses, say the next 100. The payer works
+down the list in order. The list carries addresses only, no keys, so the
+payer can pay but can never steal. The world sees 100 unrelated addresses;
+the two parties see one relationship. Hand the same list to an accountant
+or insurer and they can watch every payment — and sign nothing. That's the
+whole view-key story: private to the world, transparent to whoever you
+choose.
+
+### Move 3 — Your own devices (shared-secret streams)
+When both ends are yours — sensor and your wallet — one shared secret
+derives the same address list on both ends. Great for your own hardware
+and for data commitments. Never for receiving from strangers: anyone
+holding the secret can spend from that stream. From strangers, accept
+bundles only.
+
+### What stays visible — deliberately
+Amounts and timing stay public. Hiding amounts ("confidential transactions")
+is heavy cryptography — the one thing most likely to break "$3 board watches
+its own wallet directly" — so it stays out until the hardware says otherwise.
+
+### Data on chain: anchor, don't store
+The 256-byte tx data field is for hashes, tiny commitments, short messages.
+A machine that must prove what happened without publishing it writes only a
+hash while things are quiet and reveals the real readings only if there's a
+dispute. Every stored byte is a byte every $3 board must sync past — and
+once written, it is there forever, unmoderatable. Keep payloads small and
+priced so abuse is uneconomical.
+
+**Status:** reference node done — `StreamWallet`, `PaymentChannel` bundles,
+watch-only audit export, 17 new tests. Next: same derivation in the web
+wallet, then bundle UX in the phone app and gateway APIs.
 
 ## 🏗️ Architecture Summary
 
