@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demos — Quartz (QZ)</title>
+    <meta name="description" content="Live Quartz machine-payment demos you can poke right now: pay-per-read sensors, pay-to-trigger relays, sign-in-with-quartz. Testnet QZ is free.">
+    <link rel="stylesheet" href="/css/quartz.css">
+    <style>
+        .demo-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; margin:24px 0; }
+        .demo-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:8px; transition:transform .15s, border-color .15s; }
+        .demo-card:hover { transform:translateY(-3px); border-color:var(--accent); }
+        .demo-card .icon { font-size:34px; }
+        .demo-card h3 { margin:0; font-size:17px; }
+        .demo-card p { margin:0; color:var(--muted); font-size:14px; flex:1; }
+        .demo-card .go { color:var(--accent); font-weight:600; font-size:14px; text-decoration:none; }
+        .live-pill { display:inline-flex; align-items:center; gap:6px; background:rgba(0,212,170,.12); border:1px solid #00d4aa; color:#00d4aa; border-radius:100px; padding:2px 10px; font-size:11px; font-weight:600; width:fit-content; }
+        .live-pill .pulse { width:6px; height:6px; border-radius:50%; background:#00d4aa; animation:dpulse 2s infinite; }
+        @keyframes dpulse { 0%{box-shadow:0 0 0 0 rgba(0,212,170,.6)} 70%{box-shadow:0 0 0 8px rgba(0,212,170,0)} 100%{box-shadow:0 0 0 0 rgba(0,212,170,0)} }
+        .section-title { font-size:20px; margin:36px 0 6px; }
+        .section-sub { color:var(--muted); font-size:14px; margin-bottom:12px; }
+        .script-list { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:6px 20px; }
+        .script-list .row { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; padding:12px 0; border-bottom:1px solid var(--border); }
+        .script-list .row:last-child { border-bottom:none; }
+        .script-list code { color:#00d4aa; font-size:13px; }
+        .script-list .what { color:var(--muted); font-size:14px; flex:1; min-width:200px; }
+        .tag-row { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+        .tag-row a { background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:8px 16px; font-size:14px; color:var(--text); text-decoration:none; }
+        .tag-row a:hover { border-color:var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="crystal-bg"></div>
+
+    <nav class="quartz-nav">
+      <div class="quartz-nav-inner">
+        <a href="/" class="quartz-nav-logo">🔮 Quartz</a>
+        <button class="quartz-nav-toggle" onclick="this.classList.toggle('open');this.parentElement.querySelector('.quartz-nav-links').classList.toggle('open')" aria-label="Menu"><span></span><span></span><span></span></button><div class="quartz-nav-links">
+          <a href="/hardware.html">Hardware</a>
+          <a href="/mining.html">Mining</a>
+          <a href="/energy.html">Energy</a>
+          <a href="/iot.html" style="color:#00d4aa;font-weight:600">IoT</a>
+          <a href="/meshtastic.html" style="color:#00d4aa;font-weight:600">Meshtastic</a>
+          <a href="/tokenomics.html">Tokenomics</a>
+          <a href="/architecture.html">Architecture</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/security.html">Security</a>
+          <a href="/bridge.html" style="color:#ff6b35;font-weight:600">Bridge</a>
+          <a href="/demos/">Demos</a><a href="/explorer/">Explorer</a><a href="/names.html">Names</a>
+          <a href="/wallet/">Wallet</a>
+          <a href="/download.html">Download</a><a href="/flash.html">Flasher</a><a href="/node.html">Node</a>
+      <a href="/setup.html" style="color:#00d4aa;font-weight:600">Setup</a>
+        </div>
+      </div>
+    </nav>
+
+    <div style="max-width:1000px;margin:0 auto;padding:40px 20px 20px;">
+      <h1 style="font-size:32px;margin-bottom:6px;">Demos</h1>
+      <p style="color:var(--muted);font-size:16px;">Machine payments you can poke right now — live on testnet, no signup.
+      Testnet QZ is free: grab some from the faucet inside the
+      <a href="/wallet/" style="color:var(--accent);">web wallet</a>, then pay a machine and watch the chain do the rest.</p>
+
+      <div class="demo-grid">
+        <a class="demo-card" href="/demos/paywall.html">
+          <div class="icon">🌡️</div>
+          <div><span class="live-pill"><span class="pulse"></span>LIVE DEMO</span></div>
+          <h3>Pay-per-Read Sensor</h3>
+          <p>A cold-chain sensor sells its data instead of publishing it. Pay 0.1 QZ and the temperature
+          reading is delivered on-chain to you — the payment itself is the auth. No accounts, no API keys.</p>
+          <span class="go">Try it →</span>
+        </a>
+        <a class="demo-card" href="/demos/relay.html">
+          <div class="icon">🔌</div>
+          <div><span class="live-pill"><span class="pulse"></span>LIVE DEMO</span></div>
+          <h3>Pay-to-Trigger Relay</h3>
+          <p>Coin-op for the physical world. Pay QZ and the relay clicks — gate, charger, water valve.
+          Watch it trip, run the session timer, and record the trigger on-chain. Same flow drives a
+          real GPIO relay on a Pi or ESP32.</p>
+          <span class="go">Try it →</span>
+        </a>
+        <a class="demo-card" href="/demos/login.html">
+          <div class="icon">🔐</div>
+          <div><span class="live-pill"><span class="pulse"></span>LIVE DEMO</span></div>
+          <h3>Sign in with Quartz</h3>
+          <p>Prove you own an address by signing a challenge — no passwords, no email.
+          The identity layer machines and humans share.</p>
+          <span class="go">Try it →</span>
+        </a>
+      </div>
+
+      <h2 class="section-title">Run them on real hardware</h2>
+      <p class="section-sub">The browser plays the device in the demos above. These scripts run the same
+      flows from a terminal or a Raspberry Pi — all on
+      <a href="https://github.com/saasclawai-org/quartz" style="color:var(--accent);">GitHub</a>.</p>
+      <div class="script-list">
+        <div class="row"><code>pay_demo.py</code><span class="what">Payment → GPIO relay (terminal mode or real Pi pin)</span></div>
+        <div class="row"><code>sensor_paywall.py</code><span class="what">Device-side sensor: posts readings, watches for paying customers</span></div>
+        <div class="row"><code>parking_demo.py</code><span class="what">Pay-per-session parking meter</span></div>
+        <div class="row"><code>ev_charging_demo.py</code><span class="what">Pay-per-minute EV charger controller</span></div>
+        <div class="row"><code>water_meter_demo.py</code><span class="what">Prepaid water valve with metering</span></div>
+      </div>
+
+      <h2 class="section-title">Use-case write-ups</h2>
+      <p class="section-sub">How these patterns become products.</p>
+      <div class="tag-row">
+        <a href="/parking.html">🅿️ Parking</a>
+        <a href="/ev-charging.html">⚡ EV Charging</a>
+        <a href="/cold-chain.html">❄️ Cold Chain</a>
+        <a href="/water-meter.html">💧 Water Metering</a>
+        <a href="/iot.html">📡 IoT Payments</a>
+        <a href="/explorer/">🔍 Explorer — watch it all confirm</a>
+      </div>
+    </div>
+
+    <footer style="border-top:1px solid var(--border);padding:30px 20px;text-align:center;color:var(--muted);font-size:14px;">
+      🔮 Quartz (QZ) — machine payments for hobby hardware ·
+      <a href="https://github.com/saasclawai-org/quartz" style="color:var(--accent);">GitHub</a>
+    </footer>
+</body>
+</html>

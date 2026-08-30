@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔌 Pay-to-Trigger Relay — Quartz Demo</title>
+<style>
+:root {
+  --bg: #0a0a0f; --card: #1a1a2e; --accent: #9933ff;
+  --accent2: #00d4aa; --text: #e4e4ef; --muted: #8888a0; --warn: #ff6b35;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); font-size: 26px; margin-bottom: 6px; }
+h2 { color: var(--accent2); font-size: 18px; margin: 20px 0 8px; }
+p { margin-bottom: 10px; }
+.muted { color: var(--muted); font-size: 14px; }
+.card { background: var(--card); border-radius: 12px; padding: 24px; margin: 16px 0; border: 1px solid #2a2a3e; text-align: center; }
+.btn { background: var(--accent); color: #fff; border: none; padding: 14px 28px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.ghost { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 8px 16px; font-size: 14px; font-weight: 500; margin: 4px; }
+code { background: #12121f; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: var(--accent2); word-break: break-all; }
+#qr-wrap { margin: 16px auto; width: 220px; background: #fff; padding: 10px; border-radius: 8px; display: none; }
+.state { font-size: 15px; margin-top: 8px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; animation: pulse 1.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+.wait .dot { background: var(--warn); } .paid .dot { background: var(--accent2); animation: none; }
+.steps { text-align: left; margin-top: 18px; font-size: 14px; color: var(--muted); }
+a { color: var(--accent); }
+footer { text-align: center; color: var(--muted); padding: 24px; border-top: 1px solid #2a2a3e; margin-top: 32px; font-size: 13px; }
+#panel { display: none; }
+.timer { font-size: 36px; font-weight: 700; color: var(--accent2); font-family: 'SF Mono', Consolas, monospace; margin: 8px 0; letter-spacing: 2px; }
+svg text { fill: var(--muted); font-size: 11px; font-family: system-ui, sans-serif; }
+#arm { transform: rotate(-9deg); transform-origin: 70px 75px; transition: transform .35s ease; }
+#panel.on #arm { transform: rotate(0deg); }
+#bulb { fill: #12121f; transition: fill .35s; }
+#filament { fill: #2a2a3e; transition: fill .35s; }
+#panel.on #bulb { fill: #ffd166; }
+#panel.on #filament { fill: #fff3c4; }
+#glow { opacity: 0; transition: opacity .35s; }
+#panel.on #glow { opacity: .55; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔌 Pay-to-Trigger Relay</h1>
+  <p class="muted">Coin-op for the physical world: pay testnet QZ and the relay clicks —
+  unlock a gate, start a charger, open a valve. No accounts and no API keys:
+  <b>the payment itself is the switch.</b></p>
+
+  <div class="card" id="main">
+    <div id="idle">
+      <h2 id="devname">relay-01</h2>
+      <p class="muted">Simulated relay — the browser plays the device. On real hardware an
+      ESP32 or Raspberry Pi drives the GPIO relay with
+      <a href="https://github.com/saasclawai-org/quartz" target="_blank">the same flow</a>.</p>
+      <button class="btn" id="buy">Energize — <span id="price">0.5</span> QZ / <span id="mins">10</span> min</button>
+    </div>
+    <div id="flow" style="display:none">
+      <div id="qr-wrap" style="display:none"><canvas id="qr" width="200" height="200"></canvas></div>
+      <code id="uri" style="font-size:12px"></code>
+      <div style="margin-top:12px">
+        <button class="btn ghost" id="copy-addr" style="display:none">📋 Copy address</button>
+        <button class="btn ghost" id="copy-uri" style="display:none">🔗 Copy payment link</button>
+      </div>
+      <div class="state wait" id="status"><span class="dot"></span>Waiting for payment…</div>
+      <div class="steps" id="steps">
+        <div>1. Scan / pay from the <a href="/wallet/" target="_blank">Quartz wallet</a> (testnet faucet inside)</div>
+        <div>2. Detection is on-chain — this page watches the block data</div>
+        <div>3. The relay trips and the session timer starts; the trigger is recorded on-chain to you</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="panel">
+    <div class="state paid" id="pstate"><span class="dot"></span>RELAY CLOSED — LOAD ENERGIZED</div>
+    <div class="timer" id="timer">10:00</div>
+    <svg width="250" height="112" viewBox="0 0 250 112" style="margin-top:6px">
+      <line x1="14" y1="75" x2="70" y2="75" stroke="#8888a0" stroke-width="3"/>
+      <line x1="70" y1="75" x2="119" y2="62" stroke="#2a2a3e" stroke-width="4"/>
+      <g id="arm"><line x1="70" y1="75" x2="119" y2="62" stroke="#9933ff" stroke-width="4"/></g>
+      <line x1="119" y1="62" x2="168" y2="62" stroke="#8888a0" stroke-width="3"/>
+      <circle id="glow" cx="200" cy="62" r="30" fill="#ffd166"/>
+      <circle id="bulb" cx="200" cy="62" r="18" stroke="#8888a0" stroke-width="3"/>
+      <path id="filament" d="M192 54 a11 11 0 0 1 16 0 l-8 10 z"/>
+      <text x="200" y="100" text-anchor="middle">LOAD</text>
+      <text x="58" y="100" text-anchor="middle">RELAY-01</text>
+    </svg>
+    <div class="steps" id="txline" style="display:none;text-align:center"></div>
+    <button class="btn ghost" id="extend" style="display:none;margin-top:10px">➕ Extend session (pay again)</button>
+  </div>
+
+  <p class="muted">Every device gets its own wallet — this relay's address is dedicated to it.
+  Real-hardware version: <code>demos/pay_demo.py</code> on GitHub (Raspberry Pi GPIO, no browser).</p>
+  <p style="text-align:center"><a href="/demos/">← All Quartz demos</a></p>
+
+  <footer>🔮 Quartz testnet demo — machine payments for hobby hardware</footer>
+</div>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const ADDRESS  = qs.get('address')  || 'Qqm9bbgCqB7HrQY92QV5PtbmFBYJ4g45wd'; // dedicated testnet relay wallet
+const PRICE    = parseFloat(qs.get('price') || '0.5');
+const DURATION = parseInt(qs.get('duration') || '600', 10);
+const DEVICE   = qs.get('device') || 'relay-01';
+const NODE     = location.origin;
+
+let reqTime = 0, seenTxids = new Set(), payTimer = null, tickTimer = null, remaining = 0;
+
+document.getElementById('price').textContent = PRICE;
+document.getElementById('devname').textContent = DEVICE;
+document.getElementById('mins').textContent = Math.round(DURATION / 60);
+
+async function api(path, opts) {
+  const r = await fetch(NODE + path, opts);
+  return r.json();
+}
+
+function wireCopy(id, getText) {
+  const b = document.getElementById(id);
+  b.onclick = async () => {
+    const t = getText();
+    try { await navigator.clipboard.writeText(t); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = t; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    const old = b.textContent;
+    b.textContent = '✅ Copied';
+    setTimeout(() => b.textContent = old, 1500);
+  };
+}
+
+async function prefillOld() {
+  // don't re-trigger on payments older than this page load
+  const d = await api('/api/v1/address/' + ADDRESS);
+  (d.transactions || []).forEach(t => { if (t.timestamp < reqTime) seenTxids.add(t.txid); });
+}
+
+function startFlow() {
+  document.getElementById('idle').style.display = 'none';
+  document.getElementById('flow').style.display = 'block';
+  document.getElementById('extend').style.display = 'none';
+  reqTime = Math.floor(Date.now() / 1000);
+  prefillOld();
+
+  const uri = `quartz:${ADDRESS}?amount=${PRICE.toFixed(8)}&label=${DEVICE}%20session`;
+  document.getElementById('uri').textContent = uri;
+  wireCopy('copy-addr', () => ADDRESS);
+  wireCopy('copy-uri', () => uri);
+  document.getElementById('copy-addr').style.display = 'inline-block';
+  document.getElementById('copy-uri').style.display = 'inline-block';
+  try {
+    const draw = () => QRCode.toCanvas(document.getElementById('qr'), uri,
+        { width: 200, margin: 1 },
+        err => { if (!err) document.getElementById('qr-wrap').style.display = 'block'; });
+    if (window.QRCode) draw();
+    else {
+      const s = document.createElement('script');
+      s.src = '/js/qrcode.min.js';   // self-hosted: CSP blocks CDNs
+      s.onload = draw;
+      s.onerror = () => console.warn('qrcode lib failed to load');
+      document.head.appendChild(s);
+    }
+  } catch (e) { console.warn(e); }
+
+  const st = document.getElementById('status');
+  st.className = 'state wait';
+  st.innerHTML = '<span class="dot"></span>Waiting for payment…';
+
+  clearInterval(payTimer);
+  payTimer = setInterval(watchPayments, 5000);
+  watchPayments();
+}
+
+document.getElementById('buy').onclick = startFlow;
+document.getElementById('extend').onclick = startFlow;
+
+async function watchPayments() {
+  const d = await api('/api/v1/address/' + ADDRESS);
+  for (const t of (d.transactions || [])) {
+    if (seenTxids.has(t.txid)) continue;
+    seenTxids.add(t.txid);
+    if (t.direction !== 'in' || t.timestamp < reqTime) continue;
+    if (!t.counterparty || t.amount_sats < PRICE * 1e8) continue;
+    gotPayment(t);
+    return;
+  }
+}
+
+function gotPayment(t) {
+  clearInterval(payTimer);
+  const st = document.getElementById('status');
+  st.className = 'state paid';
+  st.innerHTML = `<span class="dot"></span>Payment confirmed — ${t.amount_qz} QZ from ${t.counterparty.slice(0, 10)}…`;
+
+  // trip the relay and record the trigger on-chain to the payer
+  const text = `RELAY:ON|DEV:${DEVICE}|DUR:${DURATION}s|PAID:${t.amount_qz}QZ|TS:${Math.floor(Date.now()/1000)}`;
+  api('/api/v1/messages/send', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: DEVICE, to: t.counterparty, text })
+  }).then(r => {
+    const tx = document.getElementById('txline');
+    tx.style.display = 'block';
+    tx.innerHTML = `Trigger recorded on-chain to ${t.counterparty.slice(0, 14)}… (msg ${r.txid || '?'}) — ` +
+      `<a href="/explorer/" target="_blank">watch it confirm in the explorer</a>`;
+  });
+
+  document.getElementById('panel').style.display = 'block';
+  requestAnimationFrame(() => document.getElementById('panel').classList.add('on'));
+  document.getElementById('pstate').innerHTML = '<span class="dot"></span>RELAY CLOSED — LOAD ENERGIZED';
+  remaining = DURATION;
+  renderTimer();
+  clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) { sessionEnd(); return; }
+    renderTimer();
+  }, 1000);
+}
+
+function renderTimer() {
+  const m = Math.floor(remaining / 60), s = remaining % 60;
+  document.getElementById('timer').textContent = `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function sessionEnd() {
+  clearInterval(tickTimer);
+  document.getElementById('timer').textContent = '0:00';
+  document.getElementById('panel').classList.remove('on');
+  document.getElementById('pstate').innerHTML = '⏱ SESSION COMPLETE — RELAY OPEN';
+  document.getElementById('extend').style.display = 'inline-block';
+}
+</script>
+</body>
+</html>
