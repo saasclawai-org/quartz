@@ -2,10 +2,12 @@
 // CACHE_NAME MUST be bumped on every deploy (v1 froze stale shells on
 // clients — bumped to v3 2026-08-22 after the Jan-1970 tx date bug;
 // v5 2026-08-30 payment streams + lanes release;
-// v6 2026-08-30 unlock fix — import keeps its PIN-lock when saving).
+// v6 2026-08-30 unlock fix — import keeps its PIN-lock when saving;
+// v7 2026-08-30 tap-to-unlock badge + registration pinned sw.js?v=7 —
+// Cloudflare was edge-caching sw.js for 4h and holding old workers hostage).
 // Shell strategy is now stale-while-revalidate: serve cache instantly,
 // fetch the fresh copy in the background, and swap it in for next load.
-const CACHE_NAME = 'quartz-wallet-v6';
+const CACHE_NAME = 'quartz-wallet-v7';
 const ASSETS = [
     '/wallet/',
     '/wallet/manifest.json',

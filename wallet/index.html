@@ -796,6 +796,18 @@
             } catch { wallet = null; }
         }
 
+        function lockBadgeClick() {
+            if (!wallet) return;
+            if (wallet.encrypted_seed) {
+                showModal('modal-unlock');
+            } else {
+                alert('This wallet has no PIN-lock saved — an older bug wiped it.\n\n' +
+                      'Re-import your seed phrase once (you will set a PIN), and ' +
+                      'unlocking will work from then on.');
+                showModal('modal-import');
+            }
+        }
+
         async function unlockWallet() {
             const pin = document.getElementById('unlock-pin').value.trim();
             if (!pin || !wallet.encrypted_seed) return;
@@ -1217,12 +1229,16 @@
                 }
             });
 
-            // Show lock status
+            // Show lock status (clickable — leads to unlock or repair)
             const lockEl = document.getElementById('lock-status');
             if (wallet.locked || !wallet.privateKey) {
-                lockEl.textContent = '🔒 Locked';
+                lockEl.textContent = '🔒 Locked — tap to unlock';
+                lockEl.style.cursor = 'pointer';
+                lockEl.onclick = lockBadgeClick;
             } else {
                 lockEl.textContent = '🔓 Unlocked';
+                lockEl.style.cursor = 'default';
+                lockEl.onclick = null;
             }
 
             const txList = document.getElementById('tx-list');
@@ -1334,7 +1350,10 @@
 
         // --- Init ---
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(() => {});
+            // ?v= pins the SW version — CDNs (Cloudflare) cache sw.js for
+            // hours and would hold the old worker hostage. Bump with every
+            // wallet deploy (must match CACHE_NAME in sw.js).
+            navigator.serviceWorker.register('sw.js?v=7').catch(() => {});
         }
         loadWallet();
         renderWallet();
