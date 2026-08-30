@@ -129,6 +129,27 @@ class Transaction:
         """Transaction hash."""
         return hashlib.sha256(self.serialize()).digest()
 
+    @property
+    def sighash(self) -> bytes:
+        """Hash of the transaction with signature fields cleared.
+
+        This is what signatures commit to: the whole payment (inputs,
+        outputs, amounts, data) — but never the signatures themselves,
+        which would be circular. Add a placeholder signature first and
+        replace it after signing; the sighash stays unchanged.
+        """
+        parts = [struct.pack('B', self.version)]
+        parts.append(struct.pack('B', len(self.inputs)))
+        for prev_hash, idx, _sig, pubkey in self.inputs:
+            parts.append(prev_hash + struct.pack('B', idx) + pubkey)
+        parts.append(struct.pack('B', len(self.outputs)))
+        for amount, script in self.outputs:
+            parts.append(struct.pack('<Q', amount) + script)
+        parts.append(struct.pack('<I', self.locktime))
+        parts.append(struct.pack('<H', len(self.data)))
+        parts.append(self.data)
+        return hashlib.sha256(b''.join(parts)).digest()
+
     @classmethod
     def coinbase(cls, miner_id: bytes, reward: int, height: int,
              payout_addr: str = None, dev_reward: int = 0,

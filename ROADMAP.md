@@ -15,6 +15,7 @@
 - [x] Headless firmware for LilyGO T3 (no display dependency)
 - [x] PUF dev mode (warm boot re-enrollment, no cold boot needed for flashing)
 - [x] Payment privacy v1 (reference node) — address streams, payment-channel bundles, watch-only audit export
+- [x] OTS slot-reuse rejection + real WOTS+ verification in consensus tx validation
 
 ## 🔨 In Progress
 - [ ] Norman to flash Ed25519 build + erase flash for new wallets

@@ -10,6 +10,7 @@ Spec: CONSENSUS.md
 
 import hashlib
 import logging
+import struct
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
@@ -23,7 +24,13 @@ from .blockchain import (
     split_block_reward,
 )
 from .crystal_hash import crystal_hash_verify
-from .crypto import validate_address
+from .crypto import validate_address, public_key_to_address
+from .quantum_crypto import (
+    MERKLE_AUTH_SIZE,
+    QSIG_SIZE,
+    WOTS_SIG_SIZE,
+    verify_quantum_signature,
+)
 
 logger = logging.getLogger("quartz.consensus")
 
@@ -318,9 +325,15 @@ class Mempool:
 
 def validate_transaction(tx: Transaction, utxo_set: UTXOSet,
                         is_coinbase: bool = False,
-                        height: int = 0) -> Tuple[bool, int, Set, List, str]:
+                        height: int = 0,
+                        ots_used: Optional[Dict[str, int]] = None,
+                        ) -> Tuple[bool, int, Set, List, str]:
     """
     Validate a transaction against the current UTXO set.
+
+    If `ots_used` is provided (address → highest burned WOTS+ slot + 1),
+    one-time slots are tracked in it and any reuse of a burned slot is
+    rejected — reusing a one-time key is a catastrophic forgery risk.
 
     Returns:
         (is_valid, fee_sats, spends, creates, reason)
@@ -404,21 +417,37 @@ def validate_transaction(tx: Transaction, utxo_set: UTXOSet,
             # coinbase-derived UTXOs explicitly.
             pass  # Coinbase maturity enforced at block validation level
 
-        # Verify signature: Ed25519 over (txid || input_index)
-        # For the reference implementation, we accept well-formed signatures
-        # since real signature verification requires PyNaCl and proper key management.
-        # The attestation.py module handles device-level signatures.
-        if len(sig) != 64:
+        # Signature verification — two accepted forms:
+        #   1. Ed25519-style: 64-byte signature + 32-byte pubkey.
+        #      The reference implementation accepts well-formed signatures
+        #      (real verification requires PyNaCl; attestation.py handles
+        #      device-level signatures).
+        #   2. WOTS+ quantum: QSIG_SIZE-byte signature + 32-byte Merkle-root
+        #      pubkey. Fully verified here, and the one-time slot it burns
+        #      is checked against `ots_used` so it can never be reused.
+        if len(sig) == 64:
+            if len(pubkey) != 32:
+                return (False, 0, spends, creates, f"input {i}: invalid pubkey length")
+        elif len(sig) == QSIG_SIZE:
+            if len(pubkey) != 32:
+                return (False, 0, spends, creates, f"input {i}: invalid pubkey length")
+            if not verify_quantum_signature(pubkey, tx.sighash, sig):
+                return (False, 0, spends, creates, f"input {i}: invalid WOTS+ signature")
+            ots_idx = struct.unpack('<I', sig[WOTS_SIG_SIZE + MERKLE_AUTH_SIZE:])[0]
+            if ots_used is not None:
+                spender = public_key_to_address(pubkey)
+                if ots_idx < ots_used.get(spender, 0):
+                    return (False, 0, spends, creates,
+                            f"input {i}: OTS slot {ots_idx} already used for {spender}")
+                ots_used[spender] = ots_idx + 1
+        else:
             return (False, 0, spends, creates, f"input {i}: invalid signature length")
-        if len(pubkey) != 32:
-            return (False, 0, spends, creates, f"input {i}: invalid pubkey length")
 
         # Script check — the script_pubkey must bind the spender's key.
         # Accepted forms (testnet reference):
         #   1. sha256(pubkey)                 — standard hash-lock
         #   2. pubkey[:32]                    — raw pubkey lock (compat)
         #   3. address bytes derived from key — faucet-style address lock
-        from .crypto import public_key_to_address
         expected_script = hashlib.sha256(pubkey).digest()
         if utxo.script_pubkey != expected_script:
             if utxo.script_pubkey != pubkey[:32]:
@@ -462,7 +491,9 @@ def validate_transaction(tx: Transaction, utxo_set: UTXOSet,
 def validate_block(block: Block, height: int, prev_block: Optional[Block],
                   utxo_set: UTXOSet, current_difficulty: int,
                   expected_difficulty: int,
-                  skip_tx_validation: bool = False) -> Tuple[bool, str, int]:
+                  skip_tx_validation: bool = False,
+                  ots_used: Optional[Dict[str, int]] = None,
+                  ) -> Tuple[bool, str, int]:
     """
     Validate a block against consensus rules.
 
@@ -527,6 +558,10 @@ def validate_block(block: Block, height: int, prev_block: Optional[Block],
     # those checks run with the correct UTXO view during reorg)
     total_fees = 0
     if not skip_tx_validation:
+        # One-time-signature view for this block: seeded from caller state
+        # (catches cross-block slot reuse) and extended as txs validate
+        # (catches reuse within the same block).
+        block_ots = ots_used if ots_used is not None else {}
         # 7. Coinbase validation
         coinbase = block.transactions[0]
         is_valid, _, _, _, reason = validate_transaction(coinbase, utxo_set,
@@ -540,7 +575,8 @@ def validate_block(block: Block, height: int, prev_block: Optional[Block],
         # Validate each non-coinbase tx
         for i, tx in enumerate(block.transactions[1:], start=1):
             is_valid, fee, spends, _, reason = validate_transaction(tx, utxo_set,
-                                                                     height=height)
+                                                                     height=height,
+                                                                     ots_used=block_ots)
             if not is_valid:
                 return (False, f"tx {i} invalid: {reason}", 0)
 
@@ -580,12 +616,15 @@ def validate_block(block: Block, height: int, prev_block: Optional[Block],
 # ============================================================
 
 def apply_block(block: Block, height: int, utxo_set: UTXOSet,
-                spent_log: list = None) -> List[Tuple[bytes, int]]:
+                spent_log: list = None,
+                storage=None) -> List[Tuple[bytes, int]]:
     """
     Apply a validated block to the UTXO set.
 
     - Removes spent inputs (from non-coinbase txs)
     - Adds new outputs (from all txs)
+    - Records burned WOTS+ one-time slots in `storage` (if given) so
+      future validation can reject slot reuse
 
     If `spent_log` is a list, removed UTXO objects are appended to it
     (undo log for reorgs).
@@ -614,6 +653,22 @@ def apply_block(block: Block, height: int, utxo_set: UTXOSet,
             removed = utxo_set.remove(prev_hash, idx)
             if removed is not None and spent_log is not None:
                 spent_log.append(removed)
+
+    # Record burned WOTS+ one-time slots. Persistence detail — recording
+    # must never break block application.
+    if storage is not None:
+        for tx in block.transactions[1:]:
+            for prev_hash, idx, sig, pubkey in tx.inputs:
+                if len(sig) == QSIG_SIZE:
+                    try:
+                        ots_idx = struct.unpack(
+                            '<I', sig[WOTS_SIG_SIZE + MERKLE_AUTH_SIZE:])[0]
+                        storage.record_signature(
+                            public_key_to_address(pubkey), ots_idx,
+                            tx.txid, height)
+                    except Exception:
+                        logger.warning("failed to record OTS usage for tx %s",
+                                       tx.txid.hex())
 
     return confirmed_txids
 
@@ -672,7 +727,7 @@ class ConsensusEngine:
 
     def __init__(self, blocks: List[Block], balances: Dict[str, int],
                  current_difficulty: int, block_time: int = 30,
-                 retarget_period: int = 144):
+                 retarget_period: int = 144, storage=None):
         self.blocks = blocks
         self.utxo_set = UTXOSet()
         self.mempool = Mempool()
@@ -680,6 +735,7 @@ class ConsensusEngine:
         self.block_time = block_time
         self.retarget_period = retarget_period
         self.balances = balances  # legacy balance dict (for compatibility)
+        self.storage = storage  # optional persistence (OTS slot tracking)
         self._orphan_blocks: Dict[bytes, List[Block]] = {}  # prev_hash → orphans
 
         # Fork-tracking structures:
@@ -754,6 +810,19 @@ class ConsensusEngine:
         height = len(self.blocks)
         expected_diff = self.get_expected_difficulty(height)
 
+        # Seed the one-time-slot view from storage so slots burned in
+        # earlier blocks can never be reused (cross-block WOTS+ rule).
+        ots_seed: Dict[str, int] = {}
+        if self.storage is not None:
+            for tx in block.transactions:
+                for _, _, sig, pubkey in tx.inputs:
+                    if len(sig) == QSIG_SIZE:
+                        addr = public_key_to_address(pubkey)
+                        if addr not in ots_seed:
+                            state = self.storage.get_address_state(addr)
+                            if state is not None:
+                                ots_seed[addr] = state.wots_used
+
         return validate_block(
             block=block,
             height=height,
@@ -761,6 +830,7 @@ class ConsensusEngine:
             utxo_set=self.utxo_set,
             current_difficulty=self.current_difficulty,
             expected_difficulty=expected_diff,
+            ots_used=ots_seed,
         )
 
     def accept_block(self, block: Block) -> Tuple[bool, str]:
@@ -787,7 +857,8 @@ class ConsensusEngine:
 
             height = len(self.blocks)
             spent_log = []
-            confirmed_txids = apply_block(block, height, self.utxo_set, spent_log)
+            confirmed_txids = apply_block(block, height, self.utxo_set, spent_log,
+                                          storage=self.storage)
             self._undo_log[block.header.hash] = spent_log
 
             # Remove confirmed txs from mempool
@@ -988,7 +1059,8 @@ class ConsensusEngine:
                 return rollback(f"branch block invalid at height {height}: {reason}")
 
             spent_log = []
-            confirmed = apply_block(b, height, self.utxo_set, spent_log)
+            confirmed = apply_block(b, height, self.utxo_set, spent_log,
+                                    storage=self.storage)
             self._undo_log[b.header.hash] = spent_log
             self.mempool.remove_batch(confirmed)
             self._update_balances(b, height, spent_utxos=spent_log)
