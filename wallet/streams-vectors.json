@@ -1,0 +1,56 @@
+{
+ "seed_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+ "account_seed_0": "9d58abd7395900bce925eafc28c8912c3a819895ca89d7c631ec8b7d24454432",
+ "root_0": "5c9c60fdb844353ad4758f531a8b8e4ae0d3cdba24028cb27f786eaed3b604e2",
+ "stream_addresses": [
+  "Qr3CyjrBcJrSfQ8hMYpnjLHqk5CVP9mJFV",
+  "R7frDxt3yUkMow75Y838Jm1q1KUxrzKg5i",
+  "Qo8HX1Y14rWvmR36Eqdqphy62TG96AwcMi"
+ ],
+ "channel_41": {
+  "id": 41,
+  "stream_seed_0": "5b636180b65492d4a66071177b20bc802c1934a89adf519dd72082ec8eaf7571",
+  "addresses": [
+   "Qk5pfar2asP2MNSoHrJTQLz28cE3rb3QQm",
+   "QmngtZNSxpnmeU6FrZvSeg5L6Mnu1FcB6Z",
+   "QpVXqqGs1AEDmw2da7cts9HcWAadsNhPn1"
+  ]
+ },
+ "shared": {
+  "secret": "s3cret",
+  "addresses": [
+   "R7eU74UPVtKQt15oyg9Hc2ajcMa67jhtZk",
+   "R2cixoy9ssU8eQb5zrdPhXhcUeBUicYpck"
+  ]
+ },
+ "mnemonic": {
+  "words": [
+   "abandon",
+   "amount",
+   "liar",
+   "amount",
+   "expire",
+   "adjust",
+   "cage",
+   "candy",
+   "arch",
+   "gather",
+   "drum",
+   "buyer"
+  ],
+  "stream_seed": "564bef8f3ed790521e420d888a1ce174e9cf26624dc8fd79796336884e72b53e",
+  "address_0": "QpqVgF34P3fyEBtqt1DUWogEyQfHjvzRTA"
+ },
+ "bundle": {
+  "v": 1,
+  "type": "quartz/payment-bundle",
+  "channel": 41,
+  "net": "main",
+  "count": 3,
+  "addresses": [
+   "Qk5pfar2asP2MNSoHrJTQLz28cE3rb3QQm",
+   "QmngtZNSxpnmeU6FrZvSeg5L6Mnu1FcB6Z",
+   "QpVXqqGs1AEDmw2da7cts9HcWAadsNhPn1"
+  ]
+ }
+}

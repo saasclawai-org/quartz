@@ -16,6 +16,7 @@
 - [x] PUF dev mode (warm boot re-enrollment, no cold boot needed for flashing)
 - [x] Payment privacy v1 (reference node) — address streams, payment-channel bundles, watch-only audit export
 - [x] OTS slot-reuse rejection + real WOTS+ verification in consensus tx validation
+- [x] Payment streams + lanes in web wallet & Android app (ports cross-validated against the reference node)
 
 ## 🔨 In Progress
 - [ ] Norman to flash Ed25519 build + erase flash for new wallets
@@ -147,9 +148,12 @@ dispute. Every stored byte is a byte every $3 board must sync past — and
 once written, it is there forever, unmoderatable. Keep payloads small and
 priced so abuse is uneconomical.
 
-**Status:** reference node done — `StreamWallet`, `PaymentChannel` bundles,
-watch-only audit export, 17 new tests. Next: same derivation in the web
-wallet, then bundle UX in the phone app and gateway APIs.
+**Status:** reference node, web wallet, and Android app all speak the same
+stream/lane derivation — addresses match byte-for-byte across Python, JS,
+and Kotlin (cross-validation vectors in `wallet/streams-vectors.json`).
+The web wallet now shows a rotating receive address (one QR per request)
+and can create/watch lane bundles. Next: balance aggregation across stream
+addresses, gateway APIs, firmware adoption.
 
 ## 🏗️ Architecture Summary
 

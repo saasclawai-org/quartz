@@ -205,6 +205,10 @@
                     <span class="icon">📤</span>
                     Send
                 </div>
+                <div class="action-btn" onclick="showLanes()">
+                    <span class="icon">🛣️</span>
+                    Lanes
+                </div>
             </div>
 
             <h3 style="font-size: 16px; margin-bottom: 12px;">Transactions</h3>
@@ -325,10 +329,44 @@
             <h3>Receive QZ</h3>
             <div class="qr-container"><canvas id="qr-canvas"></canvas></div>
             <div class="form-group">
-                <label>Your Address</label>
+                <label>Your Address <span id="receive-mode" style="font-weight:400;color:var(--muted);font-size:11px;"></span></label>
                 <input type="text" id="receive-address" readonly>
             </div>
+            <div id="receive-extra" style="margin-top:10px;font-size:11px;color:var(--muted);"></div>
             <button class="btn btn-primary" onclick="copyAddress()">Copy Address</button>
+            <button class="btn btn-secondary" id="receive-rotate" onclick="rotateReceiveAddress()" style="margin-left:8px;display:none;">🆕 New Address</button>
+        </div>
+    </div>
+
+    <!-- Payment Lanes Modal -->
+    <div class="modal-overlay" id="modal-lanes">
+        <div class="modal">
+            <span class="close" onclick="closeModal('modal-lanes')">×</span>
+            <h3>🛣️ Payment Lanes</h3>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+                A lane is a private payment list between you and one partner.
+                Hand them a bundle of your future addresses — they can pay you
+                (or watch you), never rob you. The chain sees unrelated addresses.
+            </div>
+            <div class="form-group">
+                <label>Create a lane (safe to share — addresses only, no keys)</label>
+                <select id="lane-count" style="width:100%;background:var(--card);color:inherit;border:1px solid var(--border);border-radius:8px;padding:10px;">
+                    <option value="5">5 future addresses</option>
+                    <option value="10" selected>10 future addresses</option>
+                    <option value="20">20 future addresses</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" id="lane-create-btn" onclick="createLane()">Create Lane Bundle</button>
+            <div id="lane-progress" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;"></div>
+            <textarea id="lane-bundle" readonly placeholder="Your bundle appears here — copy and send it to your payer or accountant." style="width:100%;height:110px;margin-top:12px;background:var(--card);color:inherit;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;font-family:monospace;"></textarea>
+            <button class="btn btn-secondary" style="margin-top:8px;" onclick="copyLaneBundle()">📋 Copy Bundle</button>
+            <hr style="border-color:var(--border);margin:16px 0;">
+            <div class="form-group">
+                <label>Watch / pay a lane (paste a bundle)</label>
+                <textarea id="lane-watch-input" placeholder='Paste a quartz/payment-bundle here…' style="width:100%;height:80px;background:var(--card);color:inherit;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;font-family:monospace;"></textarea>
+            </div>
+            <button class="btn btn-secondary" onclick="watchLane()">Watch Lane</button>
+            <div id="lane-watch-result" style="margin-top:10px;font-size:13px;word-break:break-all;"></div>
         </div>
     </div>
 
@@ -458,6 +496,7 @@
 
     <script src="nacl.min.js"></script>
     <script src="crypto.js"></script>
+    <script src="streams.js"></script>
     <script src="hardware-wallet.js"></script>
     <script>
         // --- Hardware Wallet (ESP32 BLE) ---
@@ -780,6 +819,7 @@
             wallet.words = null;
             wallet.privateKey = null;
             wallet.locked = true;
+            streamWallet = null;
             closeModal('modal-unlock');
             renderWallet();
             renderKeys();
@@ -788,6 +828,7 @@
         function deleteWallet() {
             if (!confirm('Delete wallet? Make sure you have your seed phrase!')) return;
             wallet = null;
+            streamWallet = null;
             localStorage.removeItem(STORAGE_KEY);
             renderWallet();
             renderKeys();
@@ -817,11 +858,116 @@
         function showModal(id) { document.getElementById(id).classList.add('show'); }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
-        function showReceive() {
+        // --- Payment streams (privacy) ---
+        // Plain English: fresh address for every request, lanes for partners.
+        let streamWallet = null;
+        let currentBundle = null;
+
+        function streamStateKey() {
+            return 'quartz-stream-' + (wallet && wallet.address ? wallet.address.slice(0, 8) : 'x');
+        }
+
+        async function ensureStreamWallet() {
+            if (streamWallet || !wallet || !wallet.words) return streamWallet;
+            try {
+                const seed = await QuartzStreams.streamsSeedFromMnemonicWords(wallet.words);
+                const saved = JSON.parse(localStorage.getItem(streamStateKey()) || '{"cursor":0}');
+                streamWallet = new QuartzStreams.StreamWallet(seed, { cursor: saved.cursor || 0 });
+            } catch (e) {
+                console.error('stream init failed', e);
+            }
+            return streamWallet;
+        }
+
+        function saveStreamCursor() {
+            if (!streamWallet) return;
+            localStorage.setItem(streamStateKey(), JSON.stringify({ cursor: streamWallet.cursor }));
+        }
+
+        async function showReceive() {
             if (!wallet) return;
+            showModal('modal-receive');
             document.getElementById('receive-address').value = wallet.address;
             drawQR(wallet.address);
-            showModal('modal-receive');
+            document.getElementById('receive-rotate').style.display = 'none';
+            document.getElementById('receive-mode').textContent = '';
+            document.getElementById('receive-extra').textContent = '';
+
+            const sw = await ensureStreamWallet();
+            if (!sw) {
+                document.getElementById('receive-mode').textContent =
+                    wallet.locked ? '(locked — unlock for private addresses)' : '(hardware wallet — device address)';
+                return;
+            }
+            if (sw.cursor === 0) { await sw.nextAddressFresh(); saveStreamCursor(); }
+            const addr = await sw.currentAddressFresh();
+            document.getElementById('receive-address').value = addr;
+            drawQR(addr);
+            document.getElementById('receive-rotate').style.display = 'inline-block';
+            document.getElementById('receive-mode').textContent = '(private — #' + sw.cursor + ' in your stream)';
+            document.getElementById('receive-extra').textContent =
+                'Every request uses a fresh address. Nobody reading the chain can link your payments — and one seed phrase still recovers everything.';
+        }
+
+        async function rotateReceiveAddress() {
+            const sw = await ensureStreamWallet();
+            if (!sw) return;
+            const addr = await sw.nextAddressFresh();
+            saveStreamCursor();
+            document.getElementById('receive-address').value = addr;
+            drawQR(addr);
+            document.getElementById('receive-mode').textContent = '(private — #' + sw.cursor + ' in your stream)';
+        }
+
+        function showLanes() {
+            if (!wallet) { alert('Import or create a wallet first.'); return; }
+            showModal('modal-lanes');
+        }
+
+        async function createLane() {
+            const sw = await ensureStreamWallet();
+            if (!sw) { alert('Unlock your wallet first — a lane needs your seed phrase.'); return; }
+            const n = parseInt(document.getElementById('lane-count').value, 10);
+            const btn = document.getElementById('lane-create-btn');
+            const prog = document.getElementById('lane-progress');
+            btn.disabled = true;
+            prog.style.display = 'block';
+            try {
+                const nextId = parseInt(localStorage.getItem('quartz-lane-seq') || '0', 10);
+                localStorage.setItem('quartz-lane-seq', String(nextId + 1));
+                const lane = QuartzStreams.PaymentChannel.fromWallet(sw.seed, nextId, true);
+                currentBundle = await lane.exportBundle(n, (done, total) => {
+                    prog.textContent = 'Deriving addresses… ' + done + '/' + total;
+                });
+                document.getElementById('lane-bundle').value = JSON.stringify(currentBundle, null, 2);
+            } catch (e) {
+                alert('Lane creation failed: ' + e.message);
+            }
+            btn.disabled = false;
+            prog.style.display = 'none';
+        }
+
+        function copyLaneBundle() {
+            const v = document.getElementById('lane-bundle').value;
+            if (!v) { alert('Create a lane first.'); return; }
+            navigator.clipboard.writeText(v);
+        }
+
+        function watchLane() {
+            const raw = document.getElementById('lane-watch-input').value.trim();
+            const out = document.getElementById('lane-watch-result');
+            if (!raw) { out.textContent = ''; return; }
+            try {
+                const bundle = QuartzStreams.loadBundle(raw);
+                const next = bundle.addresses[0];
+                out.innerHTML =
+                    '<div style="font-weight:600;">Lane #' + bundle.channelId + ' — ' + bundle.addresses.length +
+                    ' addresses (' + (bundle.mainnet ? 'mainnet' : 'testnet') + ')</div>' +
+                    '<div style="margin-top:6px;">Pay next: <b>' + next + '</b></div>' +
+                    '<button class="btn btn-secondary" style="margin-top:8px;" onclick="navigator.clipboard.writeText(\'' + next + '\')">📋 Copy Next Address</button>';
+            } catch (e) {
+                out.innerHTML = '<span style="color:#e74c3c;">' + e.message + '</span>';
+            }
         }
 
         function showSend() { showModal('modal-send'); }
