@@ -1092,6 +1092,17 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                             'pending': False,
                         })
 
+                # v080 follow-up (2026-08-31 evening): boards have ~2 KB HTTP
+                # buffers — a fat history overflowed them (block rewards ≥
+                # min_amount all count) and the firmware polled blind.
+                # Newest-first, capped, so watch responses stay compact.
+                # Pending (0-conf) entries are appended after this cap, so
+                # fresh payments are always present.
+                # Keep the newest 4 confirmed, oldest-first order preserved —
+                # the firmware's arm snapshot takes the LAST txid in the
+                # response, so the final entry must be the newest existing tx.
+                matching_txs = matching_txs[-4:]
+
                 # 0-conf: include mempool txs paying this address the moment
                 # /send validates them — watchers (paywall page, ESP32 relay)
                 # can trigger instantly instead of waiting for block inclusion.
