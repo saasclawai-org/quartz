@@ -499,6 +499,7 @@ relay            # show pin / pulse settings
 relay pin 5      # move the relay to GPIO5 (reboots)
 relay off        # cancel the watch</code></pre>
         <p><strong>Wiring:</strong> any opto-isolated relay module (the common blue 5 V boards): VCC&rarr;5 V, GND&rarr;GND, IN&rarr;the relay GPIO. Default pin: <strong>GPIO26</strong> (classic ESP32 / M5Stack / LilyGO) or <strong>GPIO5</strong> (C3 Super Mini). The console prints a <code>quartz:</code> payment URI &mdash; pay it from the Android or web wallet and the relay fires when the transaction confirms (~30 s). Switch low-voltage loads only unless you know what you are doing &mdash; mains wiring is on you.</p>
+        <p><strong>Sticker:</strong> print a pay-QR card for the machine itself with the <a href="/qr.html">sticker generator</a> &mdash; customers scan it with the <a href="/download.html">wallet</a>, no board screen needed.</p>
     </section>
 </body>
 </html>

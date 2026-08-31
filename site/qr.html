@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Generate printable Quartz payment QR stickers for machines: washer, arcade cabinet, EV plug, door latch.">
+<title>🖨 Quartz Pay Sticker Generator</title>
+<style>
+:root{--bg:#0a0a0f;--card:#1a1a2e;--accent:#9933ff;--accent2:#00d4aa;--text:#e4e4ef;--muted:#8888a0;--warn:#ff6b35}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+.wrap{max-width:920px;margin:0 auto;padding:32px 20px}
+h1{color:var(--accent);font-size:24px;margin-bottom:6px}
+a{color:var(--accent2)}
+.muted{color:var(--muted);font-size:14px}
+.card{background:var(--card);border:1px solid #2a2a3e;border-radius:12px;padding:20px;margin:16px 0}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+input[type=text],input[type=number]{width:100%;background:#12121f;border:1px solid #2a2a3e;color:var(--text);border-radius:8px;padding:10px 12px;font-size:15px}
+input:focus{outline:1px solid var(--accent)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>div{flex:1;min-width:120px}
+.chk{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--text)}
+.chk input{width:auto}
+.btn{background:var(--accent);color:#fff;border:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:16px}
+.btn:disabled{opacity:.4;cursor:default}
+.err{color:var(--warn);font-size:13px;margin-top:8px;min-height:20px}
+.uri{font-family:'SF Mono',Consolas,monospace;font-size:12px;color:var(--accent2);word-break:break-all;background:#12121f;padding:8px 10px;border-radius:6px;margin-top:12px;display:none;cursor:pointer}
+.uri:hover{text-decoration:underline}
+#sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:20px}
+.sticker{background:#fff;color:#000;border-radius:10px;padding:16px 16px 10px;text-align:center;break-inside:avoid;page-break-inside:avoid;outline:2px dashed #bbb;outline-offset:-6px}
+.sticker canvas{width:100%;max-width:200px;height:auto;image-rendering:pixelated}
+.sticker .amt{font-size:20px;font-weight:800;margin-top:8px}
+.sticker .lbl{font-size:13px;color:#333;margin-top:2px}
+.sticker .addr{font-family:monospace;font-size:9px;word-break:break-all;color:#555;margin-top:6px}
+.sticker .foot{font-size:10px;color:#777;margin-top:6px}
+@media print{
+  body{background:#fff}
+  .no-print{display:none !important}
+  .wrap{max-width:none;padding:0}
+  #sheet{grid-template-columns:repeat(3,1fr);gap:10px}
+  .sticker{outline:none;border-radius:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="no-print">
+    <h1>🖨 Quartz Pay Sticker Generator</h1>
+    <p class="muted">Print a pay-QR sticker for any machine — washer, dryer, arcade cabinet, EV plug, door latch.
+    Customers scan with the <a href="/download.html">Quartz Wallet</a>, pay, and the board&rsquo;s relay fires.
+    Tip: you can paste a <code>quartz:&hellip;</code> URI straight from the board&rsquo;s console.</p>
+  </header>
+
+  <section class="card no-print">
+    <label for="addr">Recipient address (the machine&rsquo;s wallet) — or paste a quartz: URI</label>
+    <input id="addr" type="text" placeholder="QszCPh9z…" spellcheck="false" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="amt">Price (QZ)</label>
+        <input id="amt" type="text" inputmode="decimal" placeholder="5">
+      </div>
+      <div>
+        <label for="label">Label (optional)</label>
+        <input id="label" type="text" placeholder="Washer 3" maxlength="40">
+      </div>
+      <div style="max-width:100px">
+        <label for="copies">Copies</label>
+        <input id="copies" type="number" min="1" max="24" value="6">
+      </div>
+    </div>
+    <label class="chk"><input id="open" type="checkbox"> No fixed price — payer chooses the amount</label>
+    <div class="err" id="err"></div>
+    <div class="uri" id="uri" title="Click to copy"></div>
+    <button class="btn" id="print">🖨 Print stickers</button>
+  </section>
+
+  <section id="sheet" aria-live="polite"></section>
+  <p class="muted no-print" style="margin-top:14px">Cut along the dotted edges · QR error correction H (survives wear)
+  · Always test-scan one sticker with the wallet before taping it to the machine.</p>
+</div>
+
+<script src="/js/qrcode.min.js"></script>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var addrEl=$('addr'),amtEl=$('amt'),lblEl=$('label'),copiesEl=$('copies'),openEl=$('open'),
+      errEl=$('err'),uriEl=$('uri'),sheet=$('sheet'),printBtn=$('print');
+  var B58=/^[1-9A-HJ-NP-Za-km-z]{20,45}$/;
+
+  function fmt(n){return n.toFixed(8).replace(/0+$/,'').replace(/\.$/,'')}
+
+  /* If the user pasted a full quartz: URI, unwrap it into the form fields. */
+  function maybeUnwrap(){
+    var v=addrEl.value.trim();
+    if(!/^quartz:/i.test(v))return;
+    var body=v.slice(v.indexOf(':')+1);
+    var qi=body.indexOf('?');
+    var a=(qi<0?body:body.slice(0,qi)).trim();
+    if(!B58.test(a))return;                       /* partial paste — wait for more */
+    addrEl.value=a;
+    if(qi>=0){
+      var params=new URLSearchParams(body.slice(qi+1));
+      var am=params.get('amount');
+      if(am&&am>0&&!amtEl.value)amtEl.value=am;
+      var lb=params.get('label');
+      if(lb&&!lblEl.value)lblEl.value=lb;
+    }
+  }
+
+  function buildUri(){
+    var a=addrEl.value.trim();
+    if(!B58.test(a))return null;
+    var uri='quartz:'+a,parts=[];
+    if(!openEl.checked){
+      var n=parseFloat(amtEl.value);
+      if(!isNaN(n)&&n>0)parts.push('amount='+fmt(n));
+    }
+    var l=lblEl.value.trim();
+    if(l)parts.push('label='+encodeURIComponent(l));
+    if(parts.length)uri+='?'+parts.join('&');
+    var price=null;
+    if(!openEl.checked){var p=parseFloat(amtEl.value);if(!isNaN(p)&&p>0)price=fmt(p)}
+    return{uri:uri,a:a,price:price,label:l};
+  }
+
+  function render(){
+    sheet.innerHTML='';errEl.textContent='';uriEl.style.display='none';uriEl.textContent='';
+    printBtn.disabled=true;
+    if(!addrEl.value.trim())return;
+    var r=buildUri();
+    if(!r){
+      errEl.textContent='Enter a valid Quartz address (base58, ~34 characters, starts with Q)';
+      return;
+    }
+    if(r.a.charAt(0)!=='Q')errEl.textContent='Heads up: address doesn\u2019t start with Q — double-check it\u2019s a Quartz address.';
+    if(!window.QRCode){errEl.textContent='QR library failed to load (/js/qrcode.min.js)';return}
+    printBtn.disabled=false;
+    uriEl.dataset.uri=r.uri;
+    uriEl.textContent=r.uri+'  ·  click to copy';
+    uriEl.style.display='block';
+    var n=Math.max(1,Math.min(24,parseInt(copiesEl.value,10)||1));
+    for(var i=0;i<n;i++){
+      var d=document.createElement('div');d.className='sticker';
+      var c=document.createElement('canvas');d.appendChild(c);
+      var amt=document.createElement('div');amt.className='amt';
+      amt.textContent=r.price?('Pay '+r.price+' QZ'):'Scan to pay';d.appendChild(amt);
+      if(r.label){var l=document.createElement('div');l.className='lbl';l.textContent=r.label;d.appendChild(l)}
+      var ad=document.createElement('div');ad.className='addr';ad.textContent=r.a;d.appendChild(ad);
+      var f=document.createElement('div');f.className='foot';f.textContent='\uD83D\uDD2E Quartz Wallet \u00B7 quartzchain.net';d.appendChild(f);
+      sheet.appendChild(d);
+      (function(canvas){
+        QRCode.toCanvas(canvas,r.uri,{errorCorrectionLevel:'H',margin:2,width:640,color:{dark:'#000000ff',light:'#ffffffff'}},
+          function(e){if(e)errEl.textContent='QR error: '+e});
+      })(c);
+    }
+  }
+
+  [addrEl,amtEl,lblEl,copiesEl].forEach(function(el){el.addEventListener('input',function(){maybeUnwrap();render()})});
+  openEl.addEventListener('change',render);
+  uriEl.addEventListener('click',function(){
+    if(!uriEl.dataset.uri)return;
+    var t=uriEl.textContent;
+    try{navigator.clipboard.writeText(uriEl.dataset.uri);uriEl.textContent='Copied!'}catch(e){}
+    setTimeout(function(){uriEl.textContent=t},900);
+  });
+  printBtn.addEventListener('click',function(){window.print()});
+  render();
+})();
+</script>
+</body>
+</html>
