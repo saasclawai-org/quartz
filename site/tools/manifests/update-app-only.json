@@ -1,13 +1,13 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v080.bin",
+          "path": "../../firmware/quartz-app-v081.bin",
           "offset": 131072
         }
       ]
@@ -16,11 +16,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v080-c3.bin",
+          "path": "../../firmware/quartz-app-v081-c3.bin",
           "offset": 131072
         }
       ]
     }
   ],
-  "notes": "0.4.4 (v080): 0-conf relay fire (fast/safe), holds to 24 h non-blocking, relay invert, hardened payment watch. App-only update preserving wallet + WiFi."
+  "notes": "0.4.5 (v081): 0-conf relay fire (fast/safe), holds to 24 h, relay invert — v081 fixes the inverted HTTP return check that killed payment detection. App-only update preserving wallet + WiFi."
 }

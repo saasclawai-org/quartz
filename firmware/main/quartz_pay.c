@@ -151,27 +151,39 @@ static void copy_txid16(char dst[17], const char *v, const char *end) {
     dst[i] = '\0';
 }
 
-/* Remember the newest txid already on-chain when a request is armed — only
- * payments NEWER than this will trigger. Runs before state=WAITING so the
- * mining-loop poll can't race the snapshot. */
+/* Remember every txid in the arm-time response — only payments NOT already
+ * known will trigger. Runs before state=WAITING so the mining-loop poll
+ * can't race the snapshot. v081: http_request returns body length (>0) on
+ * success — the v079/v080 checks were inverted and never parsed anything. */
 static void quartz_pay_snapshot_known_txid(void) {
-    s_request.known_txid[0] = '\0';
+    s_request.known_txid_count = 0;
+    memset(s_request.known_txids, 0, sizeof(s_request.known_txids));
 #ifdef ESP_PLATFORM
     char path[192];
     snprintf(path, sizeof(path), "/api/v1/address/%s/txs?min_amount=%llu",
              s_request.address, (unsigned long long)s_request.amount_satoshis);
-    if (quartz_http_request("GET", path, NULL, s_http_buf, sizeof(s_http_buf)) != 0) {
-        ESP_LOGW(TAG, "Arm snapshot failed — any qualifying tx will fire");
+    int rc = quartz_http_request("GET", path, NULL, s_http_buf, sizeof(s_http_buf));
+    if (rc <= 0) {
+        ESP_LOGW(TAG, "Arm snapshot HTTP failed (rc=%d) — any qualifying tx will fire", rc);
         return;
     }
-    const char *last = NULL, *p = strstr(s_http_buf, "\"txid\"");
-    while (p) { last = p; p = strstr(p + 6, "\"txid\""); }
-    if (last) {
-        const char *v = strchr(last + 6, '"');
-        if (v) copy_txid16(s_request.known_txid, v + 1, s_http_buf + strlen(s_http_buf));
+    const char *p = strstr(s_http_buf, "\"txid\"");
+    while (p && s_request.known_txid_count < 6) {
+        const char *v = strchr(p + 6, '"');
+        if (!v) break;
+        v++;
+        int i = 0;
+        while (v[i] && v[i] != '"' && i < 16) {
+            s_request.known_txids[s_request.known_txid_count][i] = v[i];
+            i++;
+        }
+        s_request.known_txids[s_request.known_txid_count][i] = '\0';
+        s_request.known_txid_count++;
+        p = strstr(v, "\"txid\"");
     }
-    ESP_LOGI(TAG, "Arm snapshot: newest known txid %.16s",
-             s_request.known_txid[0] ? s_request.known_txid : "(none)");
+    ESP_LOGI(TAG, "Arm snapshot: %d known txids (newest %.16s)",
+             s_request.known_txid_count,
+             s_request.known_txid_count ? s_request.known_txids[s_request.known_txid_count - 1] : "(none)");
 #endif
 }
 
@@ -276,7 +288,13 @@ qz_pay_state_t quartz_pay_poll(void) {
     /* v080: shared buffer (see s_http_buf note) */
     int rc = quartz_http_request("GET", path, NULL, s_http_buf, sizeof(s_http_buf));
 
-    if (rc == 0) {
+    if (rc <= 0) {
+        /* v081: http_request returns body length (>0) on success. v079/v080
+         * checked == 0 — i.e. only parsed when the node returned NOTHING.
+         * Payment detection has been dead since v079 shipped. */
+        ESP_LOGW(TAG, "Payment poll HTTP failed (rc=%d)", rc);
+    }
+    if (rc > 0) {
         /* v080: per-entry walk. Confirmed entries arrive oldest-first, then
          * pending (0-conf) last. Fire on any NEW qualifying tx:
          *   fast mode (default): pending or confirmed — fires in ~1 poll
@@ -316,7 +334,10 @@ qz_pay_state_t quartz_pay_poll(void) {
                 }
             }
 
-            bool is_new = strncmp(txid16, s_request.known_txid, 16) != 0;
+            bool is_new = true;
+            for (int k = 0; k < s_request.known_txid_count; k++) {
+                if (strncmp(txid16, s_request.known_txids[k], 16) == 0) { is_new = false; break; }
+            }
             bool policy_ok = s_fast_mode ? true : (confirmations >= QZ_PAY_CONFIRMATIONS);
 
             if (is_new && amount >= s_request.amount_satoshis && policy_ok) {

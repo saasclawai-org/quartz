@@ -59,7 +59,8 @@ typedef struct {
     uint32_t expires_time;    /* when it expires */
     char tx_hash[65];         /* hash of received payment tx */
     uint32_t relay_trigger_time; /* when relay was activated */
-    char known_txid[17];      /* v080: newest txid at arm time — only NEW payments fire */
+    char known_txids[6][17];  /* v081: all txids seen at arm time — only NEW payments fire */
+    int  known_txid_count;
 } qz_pay_request_t;
 
 /* === API === */
