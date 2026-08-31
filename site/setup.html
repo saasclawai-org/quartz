@@ -492,13 +492,15 @@ function showTab(evt, id) {
     <section id="relay" style="max-width:840px;margin:0 auto;padding:0 20px 40px;">
         <h2>&#9889; Pay-to-Trigger Relay (v079)</h2>
         <p>Turn a miner into pay-per-use hardware: a payment to the board&rsquo;s own wallet fires a GPIO relay &mdash; vending machine, door latch, USB port, anything. Console commands (serial, while mining):</p>
-        <pre><code>relay 5          # watch for a 5 QZ payment, fire on confirm
+        <pre><code>relay 5          # arm: 5 QZ, fires the moment the node sees it (0-conf, ~2 s)
 relay 5 30       # same, but hold the relay 30 s (saved for next time)
+relay 5 30 safe  # safe mode: wait for block confirmation (~30 s)
 relay test       # fire it right now &mdash; bench test, no payment
-relay            # show pin / pulse settings
+relay invert     # active-LOW module? (clicks on and stays on &mdash; run this)
+relay            # show pin / pulse / mode settings
 relay pin 5      # move the relay to GPIO5 (reboots)
 relay off        # cancel the watch</code></pre>
-        <p><strong>Wiring:</strong> any opto-isolated relay module (the common blue 5 V boards): VCC&rarr;5 V, GND&rarr;GND, IN&rarr;the relay GPIO. Default pin: <strong>GPIO26</strong> (classic ESP32 / M5Stack / LilyGO) or <strong>GPIO5</strong> (C3 Super Mini). The console prints a <code>quartz:</code> payment URI &mdash; pay it from the Android or web wallet and the relay fires when the transaction confirms (~30 s). Switch low-voltage loads only unless you know what you are doing &mdash; mains wiring is on you.</p>
+        <p><strong>Wiring:</strong> any opto-isolated relay module (the common blue 5 V boards): VCC&rarr;5 V, GND&rarr;GND, IN&rarr;the relay GPIO. Default pin: <strong>GPIO26</strong> (classic ESP32 / M5Stack / LilyGO) or <strong>GPIO5</strong> (C3 Super Mini). The console prints a <code>quartz:</code> payment URI &mdash; pay it from the Android or web wallet and the relay fires as soon as the node sees the payment (~2 s, 0-conf; <code>safe</code> mode waits ~30 s for the block). Hold length: 1 s&ndash;24 h &mdash; pulse a credit line, or hold a dumb load through a whole dryer cycle. Switch low-voltage loads only unless you know what you are doing &mdash; mains wiring is on you.</p>
         <p><strong>Sticker:</strong> print a pay-QR card for the machine itself with the <a href="/qr.html">sticker generator</a> &mdash; customers scan it with the <a href="/download.html">wallet</a>, no board screen needed.</p>
     </section>
 </body>

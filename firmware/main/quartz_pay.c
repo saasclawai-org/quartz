@@ -28,6 +28,7 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
 
 static const char *TAG = "QZ.PAY";
 #endif
@@ -38,6 +39,41 @@ static bool s_initialized = false;
 /* v079: runtime overrides (NVS "qz_relay": pin u8, dur u32) */
 static uint8_t  s_relay_pin   = QZ_PAY_RELAY_PIN;
 static uint32_t s_duration_ms = QZ_PAY_RELAY_DURATION_MS;
+
+/* v080: 0-conf fire mode + polarity invert */
+static bool s_fast_mode = true;     /* true = fire on pending (0-conf) */
+static bool s_invert    = false;    /* swap active/idle GPIO levels */
+
+#define QZ_PAY_MAX_DURATION_MS 86400000UL   /* v080: 24 h hold cap */
+
+/* Shared HTTP response buffer — the arm-time snapshot (console task) finishes
+ * before state becomes QZ_PAY_WAITING, so it never overlaps the poll (mining
+ * loop). One writer at a time. */
+static char s_http_buf[2048];
+
+static int relay_active_level(void) {
+    int lvl = QZ_PAY_RELAY_ACTIVE_LOW ? 0 : 1;
+    return s_invert ? (lvl ? 0 : 1) : lvl;
+}
+static void relay_write(bool on) {
+#ifdef ESP_PLATFORM
+    gpio_set_level(s_relay_pin, on ? relay_active_level() : (relay_active_level() ? 0 : 1));
+#else
+    (void)on;
+#endif
+}
+
+#ifdef ESP_PLATFORM
+/* esp_timer — already linked & running (WiFi/system use it). FreeRTOS timers
+ * would drag ~1.4 KB of IRAM-resident API into the image and overflow the
+ * classic ESP32's IRAM. */
+static esp_timer_handle_t s_relay_timer = NULL;
+static void relay_off_cb(void *arg) {
+    (void)arg;
+    relay_write(false);
+    ESP_LOGI(TAG, "Relay released");
+}
+#endif
 
 /* === Node API for payment checking === */
 /* The reference node exposes:
@@ -51,12 +87,14 @@ int quartz_pay_init(const char *wallet_address) {
     strncpy(s_wallet_address, wallet_address, sizeof(s_wallet_address) - 1);
 
 #ifdef ESP_PLATFORM
-    /* v079: load NVS overrides */
+    /* v079/v080: load NVS overrides */
     nvs_handle_t nh;
     if (nvs_open("qz_relay", NVS_READONLY, &nh) == ESP_OK) {
-        uint8_t pin = 0; uint32_t dur = 0;
+        uint8_t pin = 0; uint32_t dur = 0; uint8_t mode = 0, inv = 0;
         if (nvs_get_u8(nh, "pin", &pin) == ESP_OK && pin < 48) s_relay_pin = pin;
-        if (nvs_get_u32(nh, "dur", &dur) == ESP_OK && dur >= 100 && dur <= 600000) s_duration_ms = dur;
+        if (nvs_get_u32(nh, "dur", &dur) == ESP_OK && dur >= 100 && dur <= QZ_PAY_MAX_DURATION_MS) s_duration_ms = dur;
+        if (nvs_get_u8(nh, "mode", &mode) == ESP_OK) s_fast_mode = (mode == 0);
+        if (nvs_get_u8(nh, "inv", &inv) == ESP_OK) s_invert = (inv != 0);
         nvs_close(nh);
     }
     /* Configure relay GPIO */
@@ -70,10 +108,12 @@ int quartz_pay_init(const char *wallet_address) {
     gpio_config(&io_conf);
 
     /* Start with relay OFF */
-    int level = QZ_PAY_RELAY_ACTIVE_LOW ? 1 : 0;
-    gpio_set_level(s_relay_pin, level);
+    relay_write(false);
 
-    ESP_LOGI(TAG, "Payment system ready, relay on GPIO%d", s_relay_pin);
+    ESP_LOGI(TAG, "Payment system ready, relay on GPIO%d · %s · invert %s",
+             s_relay_pin,
+             s_fast_mode ? "fast (0-conf)" : "safe (1 conf)",
+             s_invert ? "on" : "off");
     ESP_LOGI(TAG, "Wallet: %s", s_wallet_address);
 #endif
 
@@ -102,6 +142,39 @@ int quartz_pay_build_qr_string(
     return offset;
 }
 
+/* ---- v080: per-entry JSON helpers ----
+ * Node /txs lists confirmed entries (oldest first) then pending (0-conf)
+ * last. Each entry: {"txid": "…", "amount": N, "confirmations": n, "pending": bool} */
+static void copy_txid16(char dst[17], const char *v, const char *end) {
+    int i = 0;
+    while (v + i < end && v[i] != '"' && i < 16) { dst[i] = v[i]; i++; }
+    dst[i] = '\0';
+}
+
+/* Remember the newest txid already on-chain when a request is armed — only
+ * payments NEWER than this will trigger. Runs before state=WAITING so the
+ * mining-loop poll can't race the snapshot. */
+static void quartz_pay_snapshot_known_txid(void) {
+    s_request.known_txid[0] = '\0';
+#ifdef ESP_PLATFORM
+    char path[192];
+    snprintf(path, sizeof(path), "/api/v1/address/%s/txs?min_amount=%llu",
+             s_request.address, (unsigned long long)s_request.amount_satoshis);
+    if (quartz_http_request("GET", path, NULL, s_http_buf, sizeof(s_http_buf)) != 0) {
+        ESP_LOGW(TAG, "Arm snapshot failed — any qualifying tx will fire");
+        return;
+    }
+    const char *last = NULL, *p = strstr(s_http_buf, "\"txid\"");
+    while (p) { last = p; p = strstr(p + 6, "\"txid\""); }
+    if (last) {
+        const char *v = strchr(last + 6, '"');
+        if (v) copy_txid16(s_request.known_txid, v + 1, s_http_buf + strlen(s_http_buf));
+    }
+    ESP_LOGI(TAG, "Arm snapshot: newest known txid %.16s",
+             s_request.known_txid[0] ? s_request.known_txid : "(none)");
+#endif
+}
+
 int quartz_pay_request(float amount_qz, const char *label) {
     if (!s_initialized) return -1;
 
@@ -118,7 +191,6 @@ int quartz_pay_request(float amount_qz, const char *label) {
 
     /* Set up request state */
     memset(&s_request, 0, sizeof(s_request));
-    s_request.state = QZ_PAY_WAITING;
     strncpy(s_request.address, s_wallet_address, sizeof(s_request.address) - 1);
     s_request.amount_satoshis = (uint64_t)(amount_qz * 1e8);
 
@@ -175,6 +247,10 @@ int quartz_pay_request(float amount_qz, const char *label) {
     ESP_LOGI(TAG, "QR displayed: %s", qr_str);
 #endif
 
+    /* v080: snapshot existing txs, THEN arm — only new payments fire */
+    quartz_pay_snapshot_known_txid();
+    s_request.state = QZ_PAY_WAITING;
+
     return 0;
 }
 
@@ -192,85 +268,88 @@ qz_pay_state_t quartz_pay_poll(void) {
         return s_request.state;
     }
 
-    /* Check node for incoming payment */
-    /* Build API URL: /api/v1/address/<addr>/txs */
+    /* Check node for incoming payment — v080: ask only for relevant amounts */
     char path[192];
-    snprintf(path, sizeof(path), "/api/v1/address/%s/txs", s_request.address);
+    snprintf(path, sizeof(path), "/api/v1/address/%s/txs?min_amount=%llu",
+             s_request.address, (unsigned long long)s_request.amount_satoshis);
 
-    /* v079: use the shared HTTP client (same API on all builds) */
-    char response[1024];
-    int rc = quartz_http_request("GET", path, NULL, response, sizeof(response));
+    /* v080: shared buffer (see s_http_buf note) */
+    int rc = quartz_http_request("GET", path, NULL, s_http_buf, sizeof(s_http_buf));
 
     if (rc == 0) {
-        /* Parse JSON response looking for amount */
-        /* Simple string search for "amount" field */
-        char *p = strstr(response, "\"amount\"");
-        if (p) {
-            /* Extract amount value */
-            p = strchr(p + 8, ':');
-            if (p) {
-                p++;
-                uint64_t amount = strtoull(p, NULL, 10);
+        /* v080: per-entry walk. Confirmed entries arrive oldest-first, then
+         * pending (0-conf) last. Fire on any NEW qualifying tx:
+         *   fast mode (default): pending or confirmed — fires in ~1 poll
+         *   safe mode:           confirmations >= QZ_PAY_CONFIRMATIONS      */
+        const char *e = strstr(s_http_buf, "\"txs\"");
+        if (!e) e = s_http_buf;
+        while ((e = strstr(e, "\"txid\"")) != NULL) {
+            const char *v = strchr(e + 6, '"');
+            if (!v) break;
+            v++;                                        /* first char of txid */
+            const char *next = strstr(v, "\"txid\"");   /* next entry start */
+            const char *end  = next ? next : (s_http_buf + strlen(s_http_buf));
 
-                if (amount >= s_request.amount_satoshis) {
-                    /* Payment received! */
-                    ESP_LOGI(TAG, "Payment received: %llu sats (needed %llu)",
-                             amount, s_request.amount_satoshis);
+            char txid16[17];
+            copy_txid16(txid16, v, end);
 
-                    /* Extract tx hash */
-                    char *txid = strstr(response, "\"txid\"");
-                    if (txid) {
-                        txid = strchr(txid + 6, '"');
-                        if (txid) {
-                            txid++;
-                            char *end = strchr(txid, '"');
-                            int len = end - txid;
-                            if (len > 0 && len < 64) {
-                                memcpy(s_request.tx_hash, txid, len);
-                                s_request.tx_hash[len] = '\0';
-                            }
-                        }
-                    }
-
-                    /* Check confirmations */
-                    char *conf = strstr(response, "\"confirmations\"");
-                    int confirmations = 0;
-                    if (conf) {
-                        conf = strchr(conf + 15, ':');
-                        if (conf) {
-                            confirmations = atoi(conf + 1);
-                        }
-                    }
-
-                    if (confirmations >= QZ_PAY_CONFIRMATIONS) {
-                        ESP_LOGI(TAG, "Payment confirmed (%d confirmations)", confirmations);
-                        s_request.state = QZ_PAY_CONFIRMED;
-
-                        /* Trigger relay! */
-                        quartz_pay_trigger_relay(s_duration_ms);
-
-                        /* Update display */
-                        quartz_display_clear(0x0843);
-                        quartz_display_fill_rect(0, 0, 320, 22, 0x04E0);  /* green */
-                        quartz_display_draw_text(8, 3, "PAID - Thank you!", 0x0000, 0x04E0);
-
-                        char amt_str[32];
-                        snprintf(amt_str, sizeof(amt_str), "%.2f QZ received",
-                                 (float)s_request.amount_satoshis / 1e8);
-                        quartz_display_draw_text(8, 40, amt_str, 0x04E0, 0x0843);
-
-                        quartz_display_draw_text(8, 70, "Relay activated!", 0xFFFF, 0x0843);
-
-                        char tx_str[40];
-                        snprintf(tx_str, sizeof(tx_str), "TX: %.36s...", s_request.tx_hash);
-                        quartz_display_draw_text(8, 100, tx_str, 0x8888, 0x0843);
-                    } else {
-                        ESP_LOGI(TAG, "Payment detected, %d/%d confirmations",
-                                 confirmations, QZ_PAY_CONFIRMATIONS);
-                        s_request.state = QZ_PAY_RECEIVED;
-                    }
+            uint64_t amount = 0;
+            const char *pa = strstr(v, "\"amount\"");
+            if (pa && pa < end) {
+                pa = strchr(pa + 8, ':');
+                if (pa && pa < end) amount = strtoull(pa + 1, NULL, 10);
+            }
+            int confirmations = 0;
+            const char *pc = strstr(v, "\"confirmations\"");
+            if (pc && pc < end) {
+                pc = strchr(pc + 15, ':');
+                if (pc && pc < end) confirmations = atoi(pc + 1);
+            }
+            bool pending = false;
+            const char *pp = strstr(v, "\"pending\"");
+            if (pp && pp < end) {
+                pp = strchr(pp + 9, ':');
+                if (pp && pp < end) {
+                    pp++;
+                    while (*pp == ' ') pp++;
+                    pending = (*pp == 't');
                 }
             }
+
+            bool is_new = strncmp(txid16, s_request.known_txid, 16) != 0;
+            bool policy_ok = s_fast_mode ? true : (confirmations >= QZ_PAY_CONFIRMATIONS);
+
+            if (is_new && amount >= s_request.amount_satoshis && policy_ok) {
+                ESP_LOGI(TAG, "Payment received: %llu sats (needed %llu) %s txid %.16s",
+                         (unsigned long long)amount,
+                         (unsigned long long)s_request.amount_satoshis,
+                         pending ? "[0-conf]" : "[confirmed]", txid16);
+                strncpy(s_request.tx_hash, txid16, sizeof(s_request.tx_hash) - 1);
+                s_request.tx_hash[sizeof(s_request.tx_hash) - 1] = '\0';
+                s_request.state = QZ_PAY_CONFIRMED;
+
+                /* Trigger relay! (non-blocking — timer releases it) */
+                quartz_pay_trigger_relay(s_duration_ms);
+
+                /* Update display */
+                quartz_display_clear(0x0843);
+                quartz_display_fill_rect(0, 0, 320, 22, 0x04E0);  /* green */
+                quartz_display_draw_text(8, 3, "PAID - Thank you!", 0x0000, 0x04E0);
+
+                char amt_str[32];
+                snprintf(amt_str, sizeof(amt_str), "%.2f QZ received",
+                         (float)s_request.amount_satoshis / 1e8);
+                quartz_display_draw_text(8, 40, amt_str, 0x04E0, 0x0843);
+
+                quartz_display_draw_text(8, 70, "Relay activated!", 0xFFFF, 0x0843);
+
+                char tx_str[40];
+                snprintf(tx_str, sizeof(tx_str), "TX: %.36s...", s_request.tx_hash);
+                quartz_display_draw_text(8, 100, tx_str, 0x8888, 0x0843);
+                break;
+            }
+            if (!next) break;
+            e = next;
         }
     }
 #endif
@@ -282,21 +361,24 @@ void quartz_pay_trigger_relay(uint32_t duration_ms) {
     if (duration_ms == 0) duration_ms = s_duration_ms;
 
 #ifdef ESP_PLATFORM
-    int active_level = QZ_PAY_RELAY_ACTIVE_LOW ? 0 : 1;
-    int inactive_level = QZ_PAY_RELAY_ACTIVE_LOW ? 1 : 0;
+    ESP_LOGI(TAG, "Triggering relay (GPIO%d) for %llu ms (non-blocking)",
+             s_relay_pin, (unsigned long long)duration_ms);
 
-    ESP_LOGI(TAG, "Triggering relay (GPIO%d) for %d ms", s_relay_pin, duration_ms);
-
-    gpio_set_level(s_relay_pin, active_level);
+    relay_write(true);
     s_request.relay_trigger_time = esp_timer_get_time() / 1000;
 
-    /* Non-blocking: we set the relay on, main loop will turn it off */
-    /* For simplicity, use a short blocking delay */
-    vTaskDelay(pdMS_TO_TICKS(duration_ms));
-
-    gpio_set_level(s_relay_pin, inactive_level);
-
-    ESP_LOGI(TAG, "Relay released");
+    /* v080: one-shot esp_timer releases the relay — works whether or not the
+     * mining loop is running, and long holds no longer block it */
+    if (!s_relay_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = relay_off_cb,
+            .name = "qz_relay",
+        };
+        esp_timer_create(&args, &s_relay_timer);
+    }
+    if (s_relay_timer) {
+        esp_timer_start_once(s_relay_timer, (uint64_t)duration_ms * 1000ULL);
+    }
 #endif
 }
 
@@ -319,7 +401,7 @@ const qz_pay_request_t *quartz_pay_get_request(void) {
 /* ---- v079 additions ---- */
 void quartz_pay_set_duration_ms(uint32_t duration_ms) {
     if (duration_ms < 100) duration_ms = QZ_PAY_RELAY_DURATION_MS;
-    if (duration_ms > 600000) duration_ms = 600000;
+    if (duration_ms > QZ_PAY_MAX_DURATION_MS) duration_ms = QZ_PAY_MAX_DURATION_MS;
     s_duration_ms = duration_ms;
     nvs_handle_t h;
     if (nvs_open("qz_relay", NVS_READWRITE, &h) == ESP_OK) {
@@ -330,3 +412,27 @@ void quartz_pay_set_duration_ms(uint32_t duration_ms) {
 }
 uint32_t quartz_pay_get_duration_ms(void) { return s_duration_ms; }
 uint8_t quartz_pay_get_pin(void) { return s_relay_pin; }
+
+/* ---- v080 additions ---- */
+void quartz_pay_set_fast(bool fast) {
+    s_fast_mode = fast;
+    nvs_handle_t h;
+    if (nvs_open("qz_relay", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "mode", fast ? 0 : 1);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+bool quartz_pay_get_fast(void) { return s_fast_mode; }
+
+void quartz_pay_toggle_invert(void) {
+    s_invert = !s_invert;
+    nvs_handle_t h;
+    if (nvs_open("qz_relay", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "inv", s_invert ? 1 : 0);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    relay_write(false);   /* re-apply idle level immediately */
+}
+bool quartz_pay_get_invert(void) { return s_invert; }

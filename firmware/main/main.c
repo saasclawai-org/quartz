@@ -545,18 +545,29 @@ static void quartz_serial_command(const char *cmd)
         const char *rarg = cmd + 5;
         while (*rarg == ' ') rarg++;
         quartz_pay_init(quartz_wallet_get_address());
-        if (*rarg == '\0') {
-            ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · 1 confirmation · 300s timeout",
-                     quartz_pay_get_pin(), (unsigned long) quartz_pay_get_duration_ms());
-            ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] | relay test [sec] | relay off | relay pin <gpio>");
+            if (*rarg == '\0') {
+                ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · %s · invert %s · 300s timeout",
+                         quartz_pay_get_pin(), (unsigned long) quartz_pay_get_duration_ms(),
+                         quartz_pay_get_fast() ? "fast (0-conf)" : "safe (1 conf)",
+                         quartz_pay_get_invert() ? "on" : "off");
+                ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] [fast|safe] | relay test [sec] | relay fast | relay safe | relay invert | relay off | relay pin <gpio>");
         } else if (strncasecmp(rarg, "test", 4) == 0) {
             int rsec = atoi(rarg + 4);
             ESP_LOGW(TAG, "\u26a1 Firing relay NOW (test, %ds)", rsec > 0 ? rsec : (int)(quartz_pay_get_duration_ms()/1000));
             quartz_pay_trigger_relay(rsec > 0 ? (uint32_t)rsec * 1000 : 0);
-        } else if (strcasecmp(rarg, "off") == 0) {
-            quartz_pay_cancel();
-            ESP_LOGI(TAG, "Relay watch cancelled");
-        } else if (strncasecmp(rarg, "pin ", 4) == 0) {
+            } else if (strcasecmp(rarg, "off") == 0) {
+                quartz_pay_cancel();
+                ESP_LOGI(TAG, "Relay watch cancelled");
+            } else if (strcasecmp(rarg, "fast") == 0 || strcasecmp(rarg, "safe") == 0) {
+                quartz_pay_set_fast(strcasecmp(rarg, "fast") == 0);
+                ESP_LOGI(TAG, "Relay mode: %s", quartz_pay_get_fast()
+                         ? "fast — fire on 0-conf (~2s)" : "safe — wait 1 block confirmation");
+            } else if (strcasecmp(rarg, "invert") == 0) {
+                quartz_pay_toggle_invert();
+                ESP_LOGI(TAG, "Relay invert %s — module treated as active-%s",
+                         quartz_pay_get_invert() ? "ON" : "OFF",
+                         quartz_pay_get_invert() ? "LOW" : "HIGH");
+            } else if (strncasecmp(rarg, "pin ", 4) == 0) {
             int rp = atoi(rarg + 4);
             if (rp >= 0 && rp <= 48) {
                 nvs_handle_t rh;
@@ -571,9 +582,19 @@ static void quartz_serial_command(const char *cmd)
             if (price <= 0.0f || price > 100000.0f) {
                 ESP_LOGW(TAG, "Usage: relay <price_qz> [pulse_sec]");
             } else {
-                const char *rsp = strchr(rarg, ' ');
-                if (rsp) { int dsec = atoi(rsp); if (dsec > 0) quartz_pay_set_duration_ms((uint32_t)dsec * 1000); }
-                char ruri[256];
+                    const char *rsp = strchr(rarg, ' ');
+                    if (rsp) {
+                        int dsec = atoi(rsp);
+                        if (dsec > 0) quartz_pay_set_duration_ms((uint32_t)dsec * 1000);
+                        /* v080: optional [fast|safe] after the seconds */
+                        const char *tok = dsec > 0 ? strchr(rsp + 1, ' ') : rsp;
+                        if (tok) {
+                            while (*tok == ' ') tok++;
+                            if ((tok[0]=='f'||tok[0]=='F') && (tok[1]=='a'||tok[1]=='A')) quartz_pay_set_fast(true);
+                            else if ((tok[0]=='s'||tok[0]=='S') && (tok[1]=='a'||tok[1]=='A')) quartz_pay_set_fast(false);
+                        }
+                    }
+                    char ruri[256];
                 quartz_pay_build_qr_string(ruri, sizeof(ruri), quartz_wallet_get_address(), price, "relay");
                 ESP_LOGI(TAG, "\u26a1 Pay-to-trigger: %s", ruri);
                 ESP_LOGI(TAG, "   watching for %.2f QZ — relay fires on confirmation", price);
@@ -590,7 +611,7 @@ static void quartz_serial_command(const char *cmd)
         ESP_LOGI(TAG, "  pinstatus            PIN state");
         ESP_LOGI(TAG, "  node [host[:port]]   show/set node endpoint");
         ESP_LOGI(TAG, "  wifi                 wipe WiFi + node, reboot to portal");
-        ESP_LOGI(TAG, "  relay [price_qz]      pay-to-trigger GPIO relay (bare 'relay' = help)");
+        ESP_LOGI(TAG, "  relay [price_qz [sec] [fast|safe]]  pay-to-trigger GPIO relay (0-conf default)");
     }
 }
 
@@ -1177,19 +1198,20 @@ static void mining_task(void *pvParameters) {
             g_last_hps = hps;
             /* Serial log once a minute — display keeps refreshing every pass,
              * but the console no longer drowns out typed commands */
+            {   /* v079/v080: pay-to-trigger watch — v080 fix: hoisted out of
+                 * the once-a-minute log gate so the 5 s poll cadence is real */
+                static bool s_pay_inited = false;
+                static uint32_t s_last_pay_poll_s = 0;
+                if (!s_pay_inited) { quartz_pay_init(quartz_wallet_get_address()); s_pay_inited = true; }
+                uint32_t pay_now_s = xTaskGetTickCount() / pdMS_TO_TICKS(1000);
+                if (pay_now_s - s_last_pay_poll_s >= 5) {
+                    s_last_pay_poll_s = pay_now_s;
+                    quartz_pay_poll();
+                }
+            }
             static uint32_t s_last_log_uptime = 0;
             if (uptime - s_last_log_uptime >= 60) {
                 s_last_log_uptime = uptime;
-                {   /* v079: pay-to-trigger watch (idle unless a request is active) */
-                    static bool s_pay_inited = false;
-                    static uint32_t s_last_pay_poll_s = 0;
-                    if (!s_pay_inited) { quartz_pay_init(quartz_wallet_get_address()); s_pay_inited = true; }
-                    uint32_t pay_now_s = xTaskGetTickCount() / pdMS_TO_TICKS(1000);
-                    if (pay_now_s - s_last_pay_poll_s >= 5) {
-                        s_last_pay_poll_s = pay_now_s;
-                        quartz_pay_poll();
-                    }
-                }
                 ESP_LOGI(TAG, "Mining... %lu H/s, %lu total, uptime %luh%lum [%s]",
                          hps, s_hash_count, uptime / 3600, (uptime % 3600) / 60, FW_VERSION_STRING);
             }

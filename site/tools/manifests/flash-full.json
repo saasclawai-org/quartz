@@ -1,6 +1,6 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "builds": [
     {
       "chipFamily": "ESP32",
@@ -30,6 +30,6 @@
       ]
     }
   ],
-  "notes": "0.4.3 (v079): pay-to-trigger relay — one console command turns a miner into pay-per-use hardware (relay <price_qz>; GPIO configurable, default 26 classic / 5 C3). Includes v078: mesh peer-table clock fix, HELLO heights, wifi/node console, seed-confirm banner. ESP32 + C3 at v079; S3 still older (pending).",
+  "notes": "0.4.4 (v080): relay fires on 0-conf (~2 s) by default — fast/safe per machine; non-blocking holds 1 s–24 h; relay invert for active-low modules; hardened payment watch (txid dedupe, min_amount filter). ESP32 + C3 at v080; S3 still older (pending).",
   "new_install_prompt_erase": false
 }

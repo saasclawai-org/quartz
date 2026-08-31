@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,6 +59,7 @@ typedef struct {
     uint32_t expires_time;    /* when it expires */
     char tx_hash[65];         /* hash of received payment tx */
     uint32_t relay_trigger_time; /* when relay was activated */
+    char known_txid[17];      /* v080: newest txid at arm time — only NEW payments fire */
 } qz_pay_request_t;
 
 /* === API === */
@@ -102,6 +104,11 @@ void quartz_pay_cancel(void);
 void quartz_pay_set_duration_ms(uint32_t duration_ms);
 uint32_t quartz_pay_get_duration_ms(void);
 uint8_t quartz_pay_get_pin(void);
+/* v080: 0-conf fire mode + relay polarity invert (NVS-persisted) */
+void quartz_pay_set_fast(bool fast);
+bool quartz_pay_get_fast(void);
+void quartz_pay_toggle_invert(void);
+bool quartz_pay_get_invert(void);
 
 
 /**
