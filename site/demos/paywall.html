@@ -104,8 +104,8 @@ function wireCopy(id, getText) {
 
 async function prefillOld() {
   // don't re-serve payments older than this page load
-  const d = await api('/api/v1/address/' + ADDRESS);
-  (d.transactions || []).forEach(t => { if (t.timestamp < reqTime) seenTxids.add(t.txid); });
+  const d = await api('/api/v1/address/' + ADDRESS + '/txs');
+  (d.txs || []).forEach(t => { if (t.timestamp < reqTime) seenTxids.add(t.txid); });
 }
 
 document.getElementById('buy').onclick = async () => {
@@ -136,17 +136,19 @@ document.getElementById('buy').onclick = async () => {
     }
   } catch (e) { console.warn(e); }
 
-  payTimer = setInterval(watchPayments, 5000);
+  payTimer = setInterval(watchPayments, 2000);
   watchPayments();
 };
 
 async function watchPayments() {
-  const d = await api('/api/v1/address/' + ADDRESS);
-  for (const t of (d.transactions || [])) {
+  // /txs includes 0-conf mempool payments (pending: true) — the reading
+  // unlocks within ~2 s of the wallet broadcasting; no 30 s block wait
+  const d = await api('/api/v1/address/' + ADDRESS + '/txs?min_amount=' + Math.round(PRICE * 1e8));
+  for (const t of (d.txs || [])) {
     if (seenTxids.has(t.txid)) continue;
     seenTxids.add(t.txid);
-    if (t.direction !== 'in' || t.timestamp < reqTime) continue;
-    if (!t.counterparty || t.amount_sats < PRICE * 1e8) continue;
+    if (t.timestamp < reqTime) continue;
+    if (!t.counterparty || t.amount < PRICE * 1e8) continue;
     gotPayment(t);
     return;
   }
@@ -156,7 +158,9 @@ function gotPayment(t) {
   clearInterval(payTimer);
   const st = document.getElementById('status');
   st.className = 'state paid';
-  st.innerHTML = `<span class="dot"></span>Payment confirmed — ${t.amount_qz} QZ from ${t.counterparty.slice(0, 10)}…`;
+  st.innerHTML = t.pending
+    ? `<span class="dot"></span>Payment seen (0-conf) — ${t.amount_qz} QZ from ${t.counterparty.slice(0, 10)}…`
+    : `<span class="dot"></span>Payment confirmed — ${t.amount_qz} QZ from ${t.counterparty.slice(0, 10)}…`;
 
   // read the "sensor" and deliver on-chain to the payer
   const temp = (3.5 + (Math.random() - 0.5) * 2).toFixed(1);

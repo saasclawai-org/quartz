@@ -1061,10 +1061,51 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                         matching_txs.append({
                             'txid': tx['txid'],
                             'amount': tx['amount_sats'],
+                            'amount_qz': tx.get('amount_qz', tx['amount_sats'] / 1e8),
                             'confirmations': max(1, len(self.chain.blocks) - tx.get('block', 0)),
                             'timestamp': tx.get('timestamp', 0),
                             'block': tx.get('block', 0),
+                            'counterparty': tx.get('counterparty', ''),
+                            'pending': False,
                         })
+
+                # 0-conf: include mempool txs paying this address the moment
+                # /send validates them — watchers (paywall page, ESP32 relay)
+                # can trigger instantly instead of waiting for block inclusion.
+                # Entries carry confirmations: 0 + pending: true; v079 firmware
+                # ignores them (needs >= 1), so this changes nothing for boards
+                # until firmware opts in.
+                try:
+                    from quartz.crypto import public_key_to_address as _pk2a
+                    cons = getattr(self.chain, 'consensus', None)
+                    if cons is not None and hasattr(getattr(cons, 'mempool', None), 'list_txs'):
+                        pending_txs = [(e.tx, int(getattr(e, 'received_at', 0) or 0))
+                                       for e in cons.mempool.list_txs()]
+                    else:
+                        pending_txs = [(t, int(time.time()))
+                                       for t in getattr(self.chain, 'mempool', [])]
+                    for tx, ts in pending_txs:
+                        try:
+                            sender = _pk2a(tx.inputs[0][3])
+                        except Exception:
+                            sender = ''
+                        for amt, addr_b in tx.outputs:
+                            if addr_b.decode(errors='ignore') != address:
+                                continue
+                            if amt < min_amount:
+                                continue
+                            matching_txs.append({
+                                'txid': tx.txid.hex(),
+                                'amount': amt,
+                                'amount_qz': amt / 1e8,
+                                'confirmations': 0,
+                                'timestamp': ts,
+                                'block': -1,
+                                'counterparty': sender,
+                                'pending': True,
+                            })
+                except Exception:
+                    pass
 
                 self.json_response({
                     'address': address,
