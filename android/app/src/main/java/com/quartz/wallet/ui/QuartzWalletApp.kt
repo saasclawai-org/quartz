@@ -1,9 +1,14 @@
 package com.quartz.wallet.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,6 +26,10 @@ import com.quartz.wallet.data.WalletStore
 import com.quartz.wallet.wallet.SoftwareWallet
 import com.quartz.wallet.crypto.QuartzCrypto
 import com.quartz.wallet.ui.theme.*
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanIntentResult
+import com.journeyapps.barcodescanner.ScanOptions
+import com.quartz.wallet.util.PaymentUriParser
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.AnnotatedString
@@ -663,6 +672,25 @@ private fun SendDialog(
     var sending by remember { mutableStateOf(false) }
     var resolvedHint by remember { mutableStateOf<String?>(null) }
 
+    // ── QR scan: recipient address or quartz: payment URI ──
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result: ScanIntentResult ->
+        val contents = result.contents ?: return@rememberLauncherForActivityResult  // user cancelled
+        when (val p = PaymentUriParser.parse(contents)) {
+            null -> error = "QR is not a Quartz address or payment request"
+            else -> {
+                toAddress = p.address
+                p.amountQz?.let { amount = formatScannedAmount(it) }
+                error = null
+            }
+        }
+    }
+    val scanPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) scanLauncher.launch(scanOptions())
+        else error = "Camera permission required to scan QR"
+    }
+
     // Live on-chain name resolution while typing a recipient that isn't an address
     LaunchedEffect(toAddress) {
         val t = toAddress.trim()
@@ -742,6 +770,18 @@ private fun SendDialog(
                         onValueChange = { toAddress = it.trim() },
                         label = { Text("Recipient address or name") },
                         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                                    == PackageManager.PERMISSION_GRANTED) {
+                                    scanLauncher.launch(scanOptions())
+                                } else {
+                                    scanPermLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            }) {
+                                Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan QR")
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -821,6 +861,19 @@ private fun formatQz(sats: Long): String {
     val s = String.format(java.util.Locale.US, if (qz == Math.floor(qz) && qz < 1e9) "%.0f" else "%.8f", qz)
     return s.trimEnd('0').trimEnd('.')
 }
+
+/** ZXing scanner config for the Send dialog (mirrors the seed-provisioning scan). */
+private fun scanOptions(): ScanOptions = ScanOptions().apply {
+    setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+    setPrompt("Scan a Quartz address or payment QR")
+    setBeepEnabled(true)
+    setOrientationLocked(false)
+    setTimeout(30000L)
+}
+
+/** 5.0 → "5", 0.50000000 → "0.5" — prefill the amount field without trailing zeros. */
+private fun formatScannedAmount(qz: Double): String =
+    String.format(java.util.Locale.US, "%.8f", qz).trimEnd('0').trimEnd('.')
 @Composable
 fun MinerScreen(bleManager: QuartzBLEManager) {
     var isScanning by remember { mutableStateOf(false) }
