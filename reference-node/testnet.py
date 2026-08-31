@@ -16,6 +16,10 @@ import os
 import struct
 import time
 import threading
+
+# 2026-08-31: serialize /send — ThreadingHTTPServer lets concurrent payments
+# race on UTXO selection and mint conflicting transactions.
+_SEND_LOCK = threading.Lock()
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -369,6 +373,25 @@ class QuartzChain:
         is_valid, reason = self.consensus.accept_block(block)
         if not is_valid:
             print(f"❌ Block REJECTED by consensus: {reason}")
+            # 2026-08-31 stall fix: a single invalid tx must never wedge the
+            # block pipeline forever. If consensus pins a specific tx
+            # ("tx N: ..."), evict it from the mempool so the next template
+            # builds without it. (Incident: 7-min chain stall, block 13799.)
+            try:
+                import re as _re
+                m = _re.match(r"tx (\d+)", str(reason))
+                if m:
+                    idx = int(m.group(1))
+                    btxs = getattr(block, 'transactions', None) or getattr(block, 'txs', None) or []
+                    if 0 <= idx < len(btxs):
+                        bad_txid = btxs[idx].txid
+                        self.consensus.mempool.remove(bad_txid)
+                        self.mempool = [t for t in self.mempool
+                                        if getattr(t, 'txid', None) != bad_txid]
+                        self.save()
+                        print(f"🧹 Evicted poison tx {bad_txid.hex()[:16]} from mempool — next block skips it")
+            except Exception as ev:
+                print(f"🧹 Poison-tx eviction failed: {ev}")
             return block  # return the block anyway for API compat
 
         # Balance credits: v2 coinbases (any payout_addr) were already
@@ -1431,80 +1454,87 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 self.json_error(400, f"Signature verification failed: {e}")
                 return
 
-            # Build a real UTXO-spending transaction.
-            # The signature above authorizes the spend; the inputs reference
-            # UTXOs locked to this address, and outputs pay the recipient
-            # (plus change back to the sender).
-            utxo_set = self.chain.consensus.utxo_set
-            sender_utxos = sorted(
-                utxo_set.get_utxos_for(from_addr.encode()),
-                key=lambda u: u.amount,
-            )
-
-            # Testnet convenience: legacy balances (pre-consensus) have no
-            # UTXOs behind them. Auto-mint one so old balances stay spendable.
-            available = sum(u.amount for u in sender_utxos)
-            if available < amount_sats and sender_balance >= amount_sats:
-                mint_amt = sender_balance - available
-                mint_tx = Transaction(
-                    version=1,
-                    inputs=[(b'\x00' * 32, 2, b'\x00' * 64, b'\x00' * 32)],
-                    outputs=[(mint_amt, from_addr.encode())],
-                    data=b'legacy-balance-mint',
-                )
-                utxo_set.add(UTXO(
-                    txid=mint_tx.txid, index=0, amount=mint_amt,
-                    script_pubkey=from_addr.encode(),
-                    created_height=len(self.chain.blocks) - 1,
-                ))
-                if not hasattr(self.chain, 'synthetic_utxos'):
-                    self.chain.synthetic_utxos = []
-                self.chain.synthetic_utxos.append({
-                    'txid': mint_tx.txid.hex(), 'index': 0,
-                    'amount': mint_amt, 'script': from_addr.encode().hex(),
-                    'created_height': len(self.chain.blocks) - 1,
-                })
+            # 2026-08-31: serialize build+submit — concurrent /send calls
+            # (ThreadingHTTPServer) raced UTXO selection and could mint
+            # conflicting transactions.
+            with _SEND_LOCK:
+                # Build a real UTXO-spending transaction.
+                # The signature above authorizes the spend; the inputs reference
+                # UTXOs locked to this address, and outputs pay the recipient
+                # (plus change back to the sender).
+                utxo_set = self.chain.consensus.utxo_set
                 sender_utxos = sorted(
                     utxo_set.get_utxos_for(from_addr.encode()),
                     key=lambda u: u.amount,
                 )
+
+                # Testnet convenience: legacy balances (pre-consensus) have no
+                # UTXOs behind them. Auto-mint one so old balances stay spendable.
                 available = sum(u.amount for u in sender_utxos)
-                print(f"🪙 Minted legacy-balance UTXO for {from_addr[:12]}…: {mint_amt / 1e8} QZ")
+                if available < amount_sats and sender_balance >= amount_sats:
+                    mint_amt = sender_balance - available
+                    mint_tx = Transaction(
+                        version=1,
+                        inputs=[(b'\x00' * 32, 2, b'\x00' * 64, b'\x00' * 32)],
+                        outputs=[(mint_amt, from_addr.encode())],
+                        data=b'legacy-balance-mint',
+                    )
+                    utxo_set.add(UTXO(
+                        txid=mint_tx.txid, index=0, amount=mint_amt,
+                        script_pubkey=from_addr.encode(),
+                        created_height=len(self.chain.blocks) - 1,
+                    ))
+                    if not hasattr(self.chain, 'synthetic_utxos'):
+                        self.chain.synthetic_utxos = []
+                    self.chain.synthetic_utxos.append({
+                        'txid': mint_tx.txid.hex(), 'index': 0,
+                        'amount': mint_amt, 'script': from_addr.encode().hex(),
+                        'created_height': len(self.chain.blocks) - 1,
+                    })
+                    sender_utxos = sorted(
+                        utxo_set.get_utxos_for(from_addr.encode()),
+                        key=lambda u: u.amount,
+                    )
+                    available = sum(u.amount for u in sender_utxos)
+                    print(f"🪙 Minted legacy-balance UTXO for {from_addr[:12]}…: {mint_amt / 1e8} QZ")
 
-            if available < amount_sats:
-                self.json_error(400, f"Insufficient UTXOs: {available / 1e8} QZ < {amount_qz} QZ")
-                return
+                if available < amount_sats:
+                    self.json_error(400, f"Insufficient UTXOs: {available / 1e8} QZ < {amount_qz} QZ")
+                    return
 
-            # Select UTXOs (smallest first) until the amount is covered
-            selected, covered = [], 0
-            for u in sender_utxos:
-                selected.append(u)
-                covered += u.amount
-                if covered >= amount_sats:
-                    break
+                # Select UTXOs (smallest first) until the amount is covered
+                selected, covered = [], 0
+                for u in sender_utxos:
+                    selected.append(u)
+                    covered += u.amount
+                    if covered >= amount_sats:
+                        break
 
-            change = covered - amount_sats - 1000  # fee: 1000 sats (> min relay for ~222-byte tx)
-            outputs = [(amount_sats, to_addr.encode())]
-            if change > 0:
-                outputs.append((change, from_addr.encode()))
+                change = covered - amount_sats - 1000  # fee: 1000 sats (> min relay for ~222-byte tx)
+                outputs = [(amount_sats, to_addr.encode())]
+                if change > 0:
+                    outputs.append((change, from_addr.encode()))
 
-            tx = Transaction(
-                version=1,
-                inputs=[(u.txid, u.index, sig, pub_key) for u in selected],
-                outputs=outputs,
-            )
+                tx = Transaction(
+                    version=1,
+                    inputs=[(u.txid, u.index, sig, pub_key) for u in selected],
+                    outputs=outputs,
+                )
 
-            # Submit to the consensus mempool — mined in the next block
-            ok, mempool_reason = self.chain.consensus.mempool.add(tx, utxo_set)
-            if not ok:
-                self.json_error(400, f"Transaction rejected: {mempool_reason}")
-                return
+                # Submit to the consensus mempool — mined in the next block
+                ok, mempool_reason = self.chain.consensus.mempool.add(tx, utxo_set)
+                if not ok:
+                    if 'double-spend' in str(mempool_reason).lower():
+                        self.json_error(409, "Previous payment is still confirming — wait ~30 s and try again")
+                    else:
+                        self.json_error(400, f"Transaction rejected: {mempool_reason}")
+                    return
 
-            # Also track in legacy mempool for restart persistence
-            self.chain.mempool.append(tx)
+                # Also track in legacy mempool for restart persistence
+                self.chain.mempool.append(tx)
 
-            # Save state
-            self.chain.save()
+                # Save state
+                self.chain.save()
 
             self.json_response({
                 "status": "sent",
