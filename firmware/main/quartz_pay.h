@@ -110,6 +110,11 @@ void quartz_pay_set_fast(bool fast);
 bool quartz_pay_get_fast(void);
 void quartz_pay_toggle_invert(void);
 bool quartz_pay_get_invert(void);
+/* v082: auto re-arm (vending mode) — after firing, re-request the same
+ * amount with a fresh arm snapshot. Coinbase txs (counterparty null —
+ * mining rewards) never fire the relay. */
+void quartz_pay_set_auto(bool auto_rearm);
+bool quartz_pay_get_auto(void);
 
 
 /**

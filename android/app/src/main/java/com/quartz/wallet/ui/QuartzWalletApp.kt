@@ -707,10 +707,23 @@ private fun SendDialog(
     val pinStore = remember { WalletStore(context) }
     var pinGate by remember { mutableStateOf<WalletPinMode?>(null) }
 
+    // v2026-09-02: one pending send at a time — a second send before the
+    // previous tx confirms double-spends the same UTXO and the whole block
+    // gets rejected (nothing confirms). Mirrors the web wallet guard; the
+    // node also refuses these with 409 since 2026-09-02.
+    val pendingSendUntil = remember { mutableStateOf(0L) }
+
     val doSend: () -> Unit = {
         sending = true
         scope.launch {
             try {
+                if (System.currentTimeMillis() < pendingSendUntil.value) {
+                    error = "⏳ Previous send is still confirming (~" +
+                        ((pendingSendUntil.value - System.currentTimeMillis() + 999) / 1000) +
+                        "s) — wait for the next block"
+                    sending = false
+                    return@launch
+                }
                 val keysLocal = keys
                 if (keysLocal == null) {
                     error = "Wallet keys not loaded — re-import your seed"
@@ -742,7 +755,10 @@ private fun SendDialog(
                     target = hit.first
                 }
                 SoftwareWallet.send(priv, from, target, sats)
-                    .onSuccess { onSent("✅ Sent $amount QZ — txid $it") }
+                    .onSuccess {
+                        pendingSendUntil.value = System.currentTimeMillis() + 40_000L
+                        onSent("✅ Sent $amount QZ — txid $it\nConfirms in ~30s — further sends unlock after confirmation")
+                    }
                     .onFailure { e ->
                         error = e.message ?: e.toString()
                         sending = false

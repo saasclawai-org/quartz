@@ -25,7 +25,7 @@ extern "C" {
 /* === Configuration === */
 
 /* Relay GPIO pin (M5Stack Core: M5.Port B = GPIO36, or use internal pins) */
-#define QZ_PAY_RELAY_PIN        5       /* v079: GPIO26 does not exist on C3 */
+#define QZ_PAY_RELAY_PIN        26      /* GPIO26 — M5Stack side port */
 #define QZ_PAY_RELAY_ACTIVE_LOW  false   /* most relay modules are active-high */
 #define QZ_PAY_RELAY_DURATION_MS 3000    /* how long to trigger relay (0 = toggle) */
 
@@ -110,6 +110,11 @@ void quartz_pay_set_fast(bool fast);
 bool quartz_pay_get_fast(void);
 void quartz_pay_toggle_invert(void);
 bool quartz_pay_get_invert(void);
+/* v082: auto re-arm (vending mode) — after firing, re-request the same
+ * amount with a fresh arm snapshot. Coinbase txs (counterparty null —
+ * mining rewards) never fire the relay. */
+void quartz_pay_set_auto(bool auto_rearm);
+bool quartz_pay_get_auto(void);
 
 
 /**

@@ -384,12 +384,26 @@ class QuartzChain:
                     idx = int(m.group(1))
                     btxs = getattr(block, 'transactions', None) or getattr(block, 'txs', None) or []
                     if 0 <= idx < len(btxs):
-                        bad_txid = btxs[idx].txid
-                        self.consensus.mempool.remove(bad_txid)
+                        # v2026-09-02: evict the flagged tx AND every pool tx
+                        # spending the same outpoints. Evicting only
+                        # block.transactions[idx] deterministic­ally picked the
+                        # same victim every time (equal fees) while its
+                        # conflicting sibling stayed in the pool — the
+                        # reject/evict loop then repeated for every re-broadcast
+                        # (9 consecutive rejections, 2026-09-02 03:44–03:56).
+                        bad_tx = btxs[idx]
+                        bad_outpoints = {(ph, i2) for ph, i2, _s, _p in bad_tx.inputs}
+                        evicted = []
+                        for entry in self.consensus.mempool.list_txs():
+                            if entry.tx.txid == bad_tx.txid or (entry.spends & bad_outpoints):
+                                evicted.append(entry.tx.txid)
+                        for t_txid in evicted:
+                            self.consensus.mempool.remove(t_txid)
+                        evict_set = set(evicted)
                         self.mempool = [t for t in self.mempool
-                                        if getattr(t, 'txid', None) != bad_txid]
+                                        if getattr(t, 'txid', None) not in evict_set]
                         self.save()
-                        print(f"🧹 Evicted poison tx {bad_txid.hex()[:16]} from mempool — next block skips it")
+                        print(f"🧹 Evicted {len(evicted)} poison tx(s) from mempool — next block skips them")
             except Exception as ev:
                 print(f"🧹 Poison-tx eviction failed: {ev}")
             return block  # return the block anyway for API compat
@@ -1520,6 +1534,21 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                     covered += u.amount
                     if covered >= amount_sats:
                         break
+
+                # v2026-09-02: wallets with stale UTXO state re-send a NEW tx
+                # spending the same outpoint while the first is still pending.
+                # mempool.add() catches some of these, but the eviction loop
+                # (block template with conflicting pair → whole-block reject →
+                # evict-one) kept resurrecting them — every retry returned 200
+                # while nothing ever confirmed (10 dead sends, 2026-09-02
+                # 03:44–03:56). Refuse the conflict up front, at selection.
+                pending_spends = set()
+                for entry in self.chain.consensus.mempool.list_txs():
+                    pending_spends |= entry.spends
+                if any((u.txid, u.index) in pending_spends for u in selected):
+                    self.json_error(409, "Previous payment is still confirming — "
+                                         "wait ~30 s for the next block, then try again")
+                    return
 
                 change = covered - amount_sats - 1000  # fee: 1000 sats (> min relay for ~222-byte tx)
                 outputs = [(amount_sats, to_addr.encode())]

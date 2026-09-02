@@ -530,11 +530,12 @@ static void console_task(void *pvParameters) {
             while (*rarg == ' ') rarg++;
             quartz_pay_init(quartz_wallet_get_address());
             if (*rarg == '\0') {
-                ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · %s · invert %s · 300s timeout",
+                ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · %s · invert %s · auto %s · 300s timeout",
                          quartz_pay_get_pin(), (unsigned long) quartz_pay_get_duration_ms(),
                          quartz_pay_get_fast() ? "fast (0-conf)" : "safe (1 conf)",
-                         quartz_pay_get_invert() ? "on" : "off");
-                ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] [fast|safe] | relay test [sec] | relay fast | relay safe | relay invert | relay off | relay pin <gpio>");
+                         quartz_pay_get_invert() ? "on" : "off",
+                         quartz_pay_get_auto() ? "on" : "off");
+                ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] [fast|safe] | relay test [sec] | relay fast | relay safe | relay invert | relay auto | relay off | relay pin <gpio>");
             } else if (strncasecmp(rarg, "test", 4) == 0) {
                 int rsec = atoi(rarg + 4);
                 ESP_LOGW(TAG, "\u26a1 Firing relay NOW (test, %ds)", rsec > 0 ? rsec : (int)(quartz_pay_get_duration_ms()/1000));
@@ -546,6 +547,13 @@ static void console_task(void *pvParameters) {
                 quartz_pay_set_fast(strcasecmp(rarg, "fast") == 0);
                 ESP_LOGI(TAG, "Relay mode: %s", quartz_pay_get_fast()
                          ? "fast — fire on 0-conf (~2s)" : "safe — wait 1 block confirmation");
+            } else if (strcasecmp(rarg, "auto") == 0) {
+                quartz_pay_set_auto(!quartz_pay_get_auto());
+                ESP_LOGI(TAG, "Relay auto re-arm %s — %s",
+                         quartz_pay_get_auto() ? "ON" : "OFF",
+                         quartz_pay_get_auto()
+                             ? "re-arms after every payment, never expires; mining rewards ignored"
+                             : "one-shot per arming (300s timeout)");
             } else if (strcasecmp(rarg, "invert") == 0) {
                 quartz_pay_toggle_invert();
                 ESP_LOGI(TAG, "Relay invert %s — module treated as active-%s",

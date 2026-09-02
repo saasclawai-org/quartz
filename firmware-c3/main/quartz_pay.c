@@ -43,6 +43,7 @@ static uint32_t s_duration_ms = QZ_PAY_RELAY_DURATION_MS;
 /* v080: 0-conf fire mode + polarity invert */
 static bool s_fast_mode = true;     /* true = fire on pending (0-conf) */
 static bool s_invert    = false;    /* swap active/idle GPIO levels */
+static bool s_auto_rearm = false;   /* v082: vending mode — re-arm after each fire */
 
 #define QZ_PAY_MAX_DURATION_MS 86400000UL   /* v080: 24 h hold cap */
 
@@ -90,11 +91,12 @@ int quartz_pay_init(const char *wallet_address) {
     /* v079/v080: load NVS overrides */
     nvs_handle_t nh;
     if (nvs_open("qz_relay", NVS_READONLY, &nh) == ESP_OK) {
-        uint8_t pin = 0; uint32_t dur = 0; uint8_t mode = 0, inv = 0;
+        uint8_t pin = 0; uint32_t dur = 0; uint8_t mode = 0, inv = 0, aut = 0;
         if (nvs_get_u8(nh, "pin", &pin) == ESP_OK && pin < 48) s_relay_pin = pin;
         if (nvs_get_u32(nh, "dur", &dur) == ESP_OK && dur >= 100 && dur <= QZ_PAY_MAX_DURATION_MS) s_duration_ms = dur;
         if (nvs_get_u8(nh, "mode", &mode) == ESP_OK) s_fast_mode = (mode == 0);
         if (nvs_get_u8(nh, "inv", &inv) == ESP_OK) s_invert = (inv != 0);
+        if (nvs_get_u8(nh, "auto", &aut) == ESP_OK) s_auto_rearm = (aut != 0);
         nvs_close(nh);
     }
     /* Configure relay GPIO */
@@ -110,10 +112,11 @@ int quartz_pay_init(const char *wallet_address) {
     /* Start with relay OFF */
     relay_write(false);
 
-    ESP_LOGI(TAG, "Payment system ready, relay on GPIO%d · %s · invert %s",
+    ESP_LOGI(TAG, "Payment system ready, relay on GPIO%d · %s · invert %s · auto %s",
              s_relay_pin,
              s_fast_mode ? "fast (0-conf)" : "safe (1 conf)",
-             s_invert ? "on" : "off");
+             s_invert ? "on" : "off",
+             s_auto_rearm ? "on" : "off");
     ESP_LOGI(TAG, "Wallet: %s", s_wallet_address);
 #endif
 
@@ -274,7 +277,8 @@ qz_pay_state_t quartz_pay_poll(void) {
 #ifdef ESP_PLATFORM
     /* Check timeout */
     uint32_t now = esp_timer_get_time() / 1000000;
-    if (now > s_request.expires_time) {
+    /* v082: vending mode never expires — it re-arms after every payment */
+    if (!s_auto_rearm && now > s_request.expires_time) {
         ESP_LOGW(TAG, "Payment request expired");
         s_request.state = QZ_PAY_EXPIRED;
         return s_request.state;
@@ -334,20 +338,34 @@ qz_pay_state_t quartz_pay_poll(void) {
                 }
             }
 
+            /* v082: coinbase filter — mining rewards to our own address carry
+             * "counterparty": null and must never fire the relay (otherwise
+             * auto mode self-triggers on every block we mine). Real incoming
+             * payments carry the sender's address string. */
+            bool is_coinbase = false;
+            const char *pcp = strstr(v, "\"counterparty\"");
+            if (pcp && pcp < end) {
+                const char *cc = strchr(pcp + 14, ':');
+                if (cc && cc < end) {
+                    cc++;
+                    while (*cc == ' ') cc++;
+                    is_coinbase = (strncmp(cc, "null", 4) == 0);
+                }
+            }
+
             bool is_new = true;
             for (int k = 0; k < s_request.known_txid_count; k++) {
                 if (strncmp(txid16, s_request.known_txids[k], 16) == 0) { is_new = false; break; }
             }
             bool policy_ok = s_fast_mode ? true : (confirmations >= QZ_PAY_CONFIRMATIONS);
 
-            if (is_new && amount >= s_request.amount_satoshis && policy_ok) {
+            if (!is_coinbase && is_new && amount >= s_request.amount_satoshis && policy_ok) {
                 ESP_LOGI(TAG, "Payment received: %llu sats (needed %llu) %s txid %.16s",
                          (unsigned long long)amount,
                          (unsigned long long)s_request.amount_satoshis,
                          pending ? "[0-conf]" : "[confirmed]", txid16);
                 strncpy(s_request.tx_hash, txid16, sizeof(s_request.tx_hash) - 1);
                 s_request.tx_hash[sizeof(s_request.tx_hash) - 1] = '\0';
-                s_request.state = QZ_PAY_CONFIRMED;
 
                 /* Trigger relay! (non-blocking — timer releases it) */
                 quartz_pay_trigger_relay(s_duration_ms);
@@ -367,6 +385,22 @@ qz_pay_state_t quartz_pay_poll(void) {
                 char tx_str[40];
                 snprintf(tx_str, sizeof(tx_str), "TX: %.36s...", s_request.tx_hash);
                 quartz_display_draw_text(8, 100, tx_str, 0x8888, 0x0843);
+
+                if (s_auto_rearm) {
+                    /* v082: vending mode — re-arm for the next customer.
+                     * request() memsets s_request (save amount/label first)
+                     * and takes a fresh arm snapshot; the payment that just
+                     * fired is in that snapshot, so it can't double-fire. */
+                    uint64_t amt = s_request.amount_satoshis;
+                    char lbl[33];
+                    strncpy(lbl, s_request.label, sizeof(lbl) - 1);
+                    lbl[sizeof(lbl) - 1] = '\0';
+                    quartz_pay_request((float)amt / 1e8, lbl);
+                    ESP_LOGI(TAG, "⚡ Auto re-armed — watching for %.2f QZ (mining rewards ignored)",
+                             (float)amt / 1e8);
+                } else {
+                    s_request.state = QZ_PAY_CONFIRMED;
+                }
                 break;
             }
             if (!next) break;
@@ -445,6 +479,18 @@ void quartz_pay_set_fast(bool fast) {
     }
 }
 bool quartz_pay_get_fast(void) { return s_fast_mode; }
+
+/* v082: auto re-arm (vending mode) */
+void quartz_pay_set_auto(bool auto_rearm) {
+    s_auto_rearm = auto_rearm;
+    nvs_handle_t h;
+    if (nvs_open("qz_relay", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "auto", auto_rearm ? 1 : 0);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+bool quartz_pay_get_auto(void) { return s_auto_rearm; }
 
 void quartz_pay_toggle_invert(void) {
     s_invert = !s_invert;

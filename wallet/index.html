@@ -564,6 +564,11 @@
 
         // --- State ---
         let wallet = null;
+        // v9 2026-09-02: one pending send at a time. Re-sending while the
+        // previous tx is unconfirmed double-spends the same UTXO — the node
+        // rejects the whole block and NOTHING confirms (10 dead sends,
+        // 2026-09-02 03:44–03:56). Cooldown until the next block lands.
+        let pendingSendUntil = 0;
         let pendingSeed = null;
         const STORAGE_KEY = 'quartz-wallet-v2';
         const NODE_URL = 'https://quartzchain.net';
@@ -995,6 +1000,12 @@
             const amount = parseFloat(document.getElementById('send-amount').value);
             if (!to || !amount || amount <= 0) { alert('Enter valid address and amount'); return; }
             if (!wallet) { alert('No wallet loaded'); return; }
+            if (Date.now() < pendingSendUntil) {
+                alert('⏳ Your previous send is still confirming (' +
+                      Math.ceil((pendingSendUntil - Date.now()) / 1000) +
+                      's).\nOne payment at a time — the next block lands in ~30s.');
+                return;
+            }
             if (!wallet.privateKey) {
                 if (wallet.locked) {
                     showModal('modal-unlock');
@@ -1048,13 +1059,16 @@
                     public_key: pubHex
                 });
 
-                alert(`✅ Sent ${amount} QZ!\nTXID: ${result.txid}\nConfirms in ~30s`);
+                pendingSendUntil = Date.now() + 40000;
+                alert(`✅ Sent ${amount} QZ!\nTXID: ${result.txid}\nConfirms in the next block (~30s).\n\nNew sends unlock once it confirms — sending again right now would double-spend the same coin.`);
                 closeModal('modal-send');
                 document.getElementById('send-to').value = '';
                 document.getElementById('send-amount').value = '';
 
                 // Refresh balance after a delay
                 setTimeout(() => refreshBalance(), 5000);
+                // ... and re-enable sending once the block has confirmed
+                setTimeout(() => { pendingSendUntil = 0; refreshBalance(); }, 40000);
             } catch (err) {
                 alert('Send failed: ' + (err.message || err) + '\nType: ' + (err.name || 'unknown'));
                 console.error('sendTx error:', err);
@@ -1353,7 +1367,7 @@
             // ?v= pins the SW version — CDNs (Cloudflare) cache sw.js for
             // hours and would hold the old worker hostage. Bump with every
             // wallet deploy (must match CACHE_NAME in sw.js).
-            navigator.serviceWorker.register('sw.js?v=8').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=9').catch(() => {});
         }
         // Load signing crypto (nacl + wordlist) on EVERY path — the
         // reload-and-unlock journey never imported anything, so nacl stayed
