@@ -584,7 +584,7 @@ def validate_block(block: Block, height: int, prev_block: Optional[Block],
             for spend in spends:
                 if spend in spent_in_block:
                     return (False, f"tx {i}: double-spend within block", 0)
-                spent_in_block |= spends
+            spent_in_block |= spends
 
             total_fees += fee
 
