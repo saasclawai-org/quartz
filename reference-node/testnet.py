@@ -20,6 +20,41 @@ import threading
 # 2026-08-31: serialize /send — ThreadingHTTPServer lets concurrent payments
 # race on UTXO selection and mint conflicting transactions.
 _SEND_LOCK = threading.Lock()
+
+
+class FaucetRateLimiter:
+    """Testnet faucet limits: 1 drip per address per 24h, 5 per source IP per
+    hour. allow() is check-only; commit() records AFTER a successful drip so
+    transient failures never burn quota. In-memory (resets on restart — fine
+    for a testnet faucet)."""
+    ADDR_WINDOW_S = 86400
+    IP_WINDOW_S = 3600
+    IP_MAX = 5
+
+    def __init__(self):
+        self._by_addr = {}   # address -> last drip ts
+        self._by_ip = {}     # ip -> [drip ts, ...]
+        self._lock = threading.Lock()
+
+    def allow(self, address, ip):
+        now = time.time()
+        with self._lock:
+            last = self._by_addr.get(address)
+            if last is not None and now - last < self.ADDR_WINDOW_S:
+                return False, int(self.ADDR_WINDOW_S - (now - last)), '1 per address / 24h'
+            recent = [t for t in self._by_ip.get(ip, []) if now - t < self.IP_WINDOW_S]
+            if len(recent) >= self.IP_MAX:
+                return False, int(self.IP_WINDOW_S - min(recent)) + 1, f'{self.IP_MAX} per IP / hour'
+        return True, 0, ''
+
+    def commit(self, address, ip):
+        now = time.time()
+        with self._lock:
+            self._by_addr[address] = now
+            self._by_ip.setdefault(ip, []).append(now)
+
+
+FAUCET_LIMIT = FaucetRateLimiter()
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -1340,53 +1375,95 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
             })
 
         elif path == '/api/v1/faucet':
-            # Testnet faucet — DISABLED by default (QUARTZ_FAUCET=1 to enable).
-            # It mints synthetic coins outside blocks, which breaks exact
-            # supply accounting (supply = height × reward). New miners get
-            # coins the honest way: mine a block (~30s).
-            if os.environ.get('QUARTZ_FAUCET') != '1':
-                self.json_error(404, 'Faucet disabled on this chain — mine a '
-                                     'block to earn test QZ (~30s at current '
-                                     'difficulty)')
+            # Testnet faucet v2 (2026-09-02) — wallet-funded, rate-limited,
+            # REAL transactions. v1 minted synthetic coins outside blocks,
+            # which broke supply accounting; v2 spends from a funded wallet
+            # (QUARTZ_FAUCET_WALLET) through the same UTXO/mempool path as
+            # /send, so every drip is an ordinary mined-in tx.
+            fw_path = os.environ.get('QUARTZ_FAUCET_WALLET', '')
+            if not fw_path or not os.path.isfile(fw_path):
+                self.json_error(404, 'Faucet not configured - mine a block '
+                                     'to earn test QZ (~30s at current difficulty)')
                 return
-            # Testnet faucet — send test QZ to an address
-            # body already parsed at top of do_POST
             address = body.get('address', '').strip()
             if not address:
-                self.json_error(400, "Missing address")
+                self.json_error(400, 'Missing address')
                 return
-            # Credit the address in the chain state + UTXO set
-            # This is testnet-only — no real signing needed
-            if address not in self.chain.balances:
-                self.chain.balances[address] = 0
-            self.chain.balances[address] += 100 * 10**8  # 100 test QZ
-            # Mint a spendable UTXO keyed to the full address bytes
-            # (synthetic — not in a block; persisted separately)
-            faucet_tx = Transaction(
-                version=1,
-                inputs=[(b'\x00' * 32, 1, b'\x00' * 64, b'\x00' * 32)],
-                outputs=[(100 * 10**8, address.encode())],
-                data=b'faucet',
-            )
-            self.chain.consensus.utxo_set.add(UTXO(
-                txid=faucet_tx.txid,
-                index=0,
-                amount=100 * 10**8,
-                script_pubkey=address.encode(),
-                created_height=len(self.chain.blocks) - 1,
-            ))
-            if not hasattr(self.chain, 'synthetic_utxos'):
-                self.chain.synthetic_utxos = []
-            self.chain.synthetic_utxos.append({
-                'txid': faucet_tx.txid.hex(),
-                'index': 0,
-                'amount': 100 * 10**8,
-                'script': address.encode().hex(),
-                'created_height': len(self.chain.blocks) - 1,
-            })
-            # Save state
-            self.chain.save()
-            self.json_response({"status": "ok", "amount": "100 QZ", "address": address})
+            from quartz.crypto import validate_address, sign_message
+            if not validate_address(address):
+                self.json_error(400, 'Invalid address')
+                return
+
+            # Client IP - nginx fronts /api, trust XFF only from loopback
+            ip = self.client_address[0]
+            if ip.startswith('127.') or ip == '::1':
+                xff = self.headers.get('X-Forwarded-For', '')
+                if xff:
+                    ip = xff.split(',')[0].strip()
+
+            ok, wait_s, scope = FAUCET_LIMIT.allow(address, ip)
+            if not ok:
+                self.json_error(429, f'Faucet rate limit reached ({scope}) - '
+                                     f'try again in ~{max(wait_s, 1)}s')
+                return
+
+            with open(fw_path) as _f:
+                fw = json.load(_f)
+            faddr = fw['address']
+            fpub = bytes.fromhex(fw['public_key'])
+            fpriv = bytes.fromhex(fw['private_key'])
+
+            DRIP_SATS = 10 * 10**8   # 10 test QZ per drip
+            FEE = 1000
+
+            with _SEND_LOCK:
+                utxo_set = self.chain.consensus.utxo_set
+                futxos = sorted(utxo_set.get_utxos_for(faddr.encode()),
+                                key=lambda u: u.amount)
+                available = sum(u.amount for u in futxos)
+                if available < DRIP_SATS + FEE:
+                    self.json_error(503, f'Faucet is dry ({available / 1e8:.1f} QZ left) '
+                                         '- mine a block instead (~30s)')
+                    return
+                selected, covered = [], 0
+                for u in futxos:
+                    selected.append(u)
+                    covered += u.amount
+                    if covered >= DRIP_SATS + FEE:
+                        break
+                pending_spends = set()
+                for entry in self.chain.consensus.mempool.list_txs():
+                    pending_spends |= entry.spends
+                if any((u.txid, u.index) in pending_spends for u in selected):
+                    self.json_error(429, 'Previous faucet tx still confirming - '
+                                         'retry in ~30s')
+                    return
+                change = covered - DRIP_SATS - FEE
+                msg = f"{faddr}{address}{DRIP_SATS}".encode()
+                sig = sign_message(fpriv, msg)
+                outputs = [(DRIP_SATS, address.encode())]
+                if change > 0:
+                    outputs.append((change, faddr.encode()))
+                tx = Transaction(
+                    version=1,
+                    inputs=[(u.txid, u.index, sig, fpub) for u in selected],
+                    outputs=outputs,
+                    data=b'faucet',
+                )
+                ok_add, reason = self.chain.consensus.mempool.add(tx, utxo_set)
+                if not ok_add:
+                    self.json_error(429, f'Faucet tx not accepted ({reason}) - '
+                                         'retry in ~30s')
+                    return
+                self.chain.mempool.append(tx)
+                self.chain.save()
+                FAUCET_LIMIT.commit(address, ip)
+                print(f"FAUCET drip: 10 QZ -> {address[:12]}... "
+                      f"(txid {tx.txid.hex()[:16]}, ip {ip}, "
+                      f"{(available - DRIP_SATS) / 1e8:.1f} QZ left)")
+            self.json_response({"status": "sent", "amount": "10 QZ",
+                                "address": address, "txid": tx.txid.hex()[:16],
+                                "confirm_seconds": 30})
 
         elif path == '/api/v1/auth/verify':
             # Login-with-Quartz step 2: verify wallet-signed challenge.
