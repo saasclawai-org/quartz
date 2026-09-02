@@ -1523,16 +1523,21 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                     available = sum(u.amount for u in sender_utxos)
                     print(f"🪙 Minted legacy-balance UTXO for {from_addr[:12]}…: {mint_amt / 1e8} QZ")
 
-                if available < amount_sats:
-                    self.json_error(400, f"Insufficient UTXOs: {available / 1e8} QZ < {amount_qz} QZ")
+                # v2026-09-02 fee fix: a UTXO exactly equal to the price
+                # (e.g. change from a prior 1 QZ payment) left change<=0,
+                # fee collapsed to 0 -> mempool min-relay reject. Select
+                # enough to always cover amount + fee.
+                FEE_SATS = 1000
+                if available < amount_sats + FEE_SATS:
+                    self.json_error(400, f"Insufficient UTXOs: {available / 1e8} QZ < {amount_qz} QZ + fee")
                     return
 
-                # Select UTXOs (smallest first) until the amount is covered
+                # Select UTXOs (smallest first) until the amount + fee is covered
                 selected, covered = [], 0
                 for u in sender_utxos:
                     selected.append(u)
                     covered += u.amount
-                    if covered >= amount_sats:
+                    if covered >= amount_sats + FEE_SATS:
                         break
 
                 # v2026-09-02: wallets with stale UTXO state re-send a NEW tx
@@ -1550,7 +1555,7 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                                          "wait ~30 s for the next block, then try again")
                     return
 
-                change = covered - amount_sats - 1000  # fee: 1000 sats (> min relay for ~222-byte tx)
+                change = covered - amount_sats - FEE_SATS  # fee: 1000 sats (> min relay for ~222-byte tx)
                 outputs = [(amount_sats, to_addr.encode())]
                 if change > 0:
                     outputs.append((change, from_addr.encode()))
