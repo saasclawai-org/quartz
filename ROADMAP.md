@@ -6,8 +6,6 @@
 - [x] On-chain messaging
 - [x] SRAM PUF hardware binding (RTC NOINIT, cold-boot only)
 - [x] WOTS+ quantum-resistant signatures
-- [x] QR payment system + GPIO relay control
-- [x] Quarry rate-limiting system (15%/week)
 - [x] Autonomous device agent (rule engine + LLM endpoint)
 - [x] Energy harvesting positioning (whitepaper + website)
 - [x] Live hashrate tracking on node (`/api/v1/miners/active`)
@@ -60,6 +58,11 @@
 - [ ] Difficulty retarget algorithm (replace fixed difficulty)
 - [ ] Checkpoints for deep reorg prevention
 - [ ] Mobile app (Android, BLE + QR scanner)
+
+### 6. Quarry Economics — controlled release of mined coins
+- [ ] Coinbase maturity: enforce `COINBASE_MATURITY` in consensus (constant exists, the check is a stub), show pending vs spendable in wallet balance
+- [ ] Full quarry system: on-chain registration, 15%/week drip, PUF device fingerprints (mainnet milestone — whitepaper §Quarry)
+- **Goal:** mined supply releases gradually, no staking, payments stay liquid
 
 ## 📈 Scaling Ladder — If Quartz Catches On
 
