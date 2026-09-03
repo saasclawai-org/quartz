@@ -42,6 +42,9 @@ class QuartzBLEManager(private val context: Context) {
         val PIN_SET_UUID: UUID = UUID.fromString("00000a06-0000-1000-8000-00805f9b34fb")
         val PIN_UNLOCK_UUID: UUID = UUID.fromString("00000a07-0000-1000-8000-00805f9b34fb")
         val PIN_STATUS_UUID: UUID = UUID.fromString("00000a08-0000-1000-8000-00805f9b34fb")
+
+        // Standard Client Characteristic Configuration Descriptor (CCCD)
+        val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -391,22 +394,46 @@ class QuartzBLEManager(private val context: Context) {
             statsCharacteristic = service.getCharacteristic(STATS_UUID)
             val addrChar = service.getCharacteristic(ADDRESS_UUID)
 
-            // Enable notifications on stats
+            // v0.2.14: seed/PIN characteristics are ENCRYPTED on the device
+            // and neither side ever initiated pairing — bond now so the seed
+            // flow works (user accepts the pairing dialog on the phone).
+            try {
+                if (gatt.device.bondState != BluetoothDevice.BOND_BONDED) {
+                    Log.i(TAG, "Requesting BLE bond for encrypted characteristics")
+                    gatt.device.createBond()
+                }
+            } catch (e: SecurityException) {
+                Log.w(TAG, "createBond failed: ${e.message}")
+            }
+
+            // v0.2.14: Android queues exactly ONE GATT operation — the address
+            // read must wait for the CCCD write to complete (onDescriptorWrite
+            // below) or it silently dies.
+            var cccdWriteStarted = false
             statsCharacteristic?.let { char ->
                 gatt.setCharacteristicNotification(char, true)
-                val cccd = char.descriptors.find { it.uuid == UUID.fromString("00002902-0000-1000-8000-00805f9b34fb") }
+                val cccd = char.descriptors.find { it.uuid == CCCD_UUID }
                 cccd?.let {
                     it.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    gatt.writeDescriptor(it)
+                    cccdWriteStarted = gatt.writeDescriptor(it)
                 }
             }
 
-            // Read wallet address
-            addrChar?.let {
-                gatt.readCharacteristic(it)
+            if (!cccdWriteStarted) {
+                // No CCCD to write — safe to read the address right away
+                addrChar?.let { gatt.readCharacteristic(it) }
             }
 
             onConnectionChange?.invoke(true)
+        }
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            // v0.2.14: stats subscription done — now it's safe to read the address
+            if (descriptor.uuid == CCCD_UUID) {
+                gatt.getService(SERVICE_UUID)?.getCharacteristic(ADDRESS_UUID)?.let {
+                    gatt.readCharacteristic(it)
+                }
+            }
         }
 
         @SuppressLint("MissingPermission")

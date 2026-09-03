@@ -916,9 +916,8 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { bleManager.disconnect() }
-    }
+    // v0.2.14: no auto-disconnect when leaving the Miner screen — the BLE
+    // connection now survives tab switches (disconnect via the button).
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
