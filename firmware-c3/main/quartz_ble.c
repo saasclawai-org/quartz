@@ -98,14 +98,16 @@ static uint8_t s_pin_status_uuid128[16] = {
     0x00, 0x10, 0x00, 0x00, 0x08, 0x0A, 0x00, 0x00
 };
 
-/* v085: service UUID in the ADV packet itself — discovery no longer
- * depends on scan-response delivery, which ESP-NOW/WiFi coex starves. */
+/* v086: BLE payloads must fit 31 bytes. The old scan-rsp (name 14 +
+ * UUID 18 + conn-int 6 = 38 B) NEVER fit — config_adv_data failed, the
+ * completion event never fired, and advertising never started on ANY
+ * build. ADV = flags + UUID (21 B); scan-rsp = name only (14 B). */
 static esp_ble_adv_data_t s_adv_data_adv = {
     .set_scan_rsp = false,
     .include_name = false,
     .include_txpower = false,
-    .min_interval = 0x20,
-    .max_interval = 0x40,
+    .min_interval = 0,
+    .max_interval = 0,
     .appearance = 0x00,
     .manufacturer_len = 0,
     .p_manufacturer_data = NULL,
@@ -120,16 +122,16 @@ static esp_ble_adv_data_t s_adv_data = {
     .set_scan_rsp = true,
     .include_name = true,
     .include_txpower = false,
-    .min_interval = 0x20,
-    .max_interval = 0x40,
+    .min_interval = 0,
+    .max_interval = 0,
     .appearance = 0x00,
     .manufacturer_len = 0,
     .p_manufacturer_data = NULL,
     .service_data_len = 0,
     .p_service_data = NULL,
-    .service_uuid_len = 16,
-    .p_service_uuid = s_service_uuid128,
-    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+    .service_uuid_len = 0,
+    .p_service_uuid = NULL,
+    .flag = 0,
 };
 
 static esp_ble_adv_params_t s_adv_params = {
@@ -261,12 +263,12 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-        /* v085: ADV payload set — chain to the scan-response payload */
-        esp_ble_gap_config_adv_data(&s_adv_data);
-        break;
-    case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
+        /* v086: advertise as soon as the ADV payload is set; the scan-rsp
+         * (name only) applies live even if it completes after start. */
         esp_ble_gap_start_advertising(&s_adv_params);
         break;
+    case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
+        break;  /* nothing to do — name rides in the scan response */
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
         if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
             ESP_LOGE(TAG, "Advertising start failed");
@@ -326,9 +328,12 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_pin_unlock_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_UNLOCK_VAL];
             s_pin_status_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_STATUS_VAL];
             esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
-            /* v085: configure the ADV payload first (UUID in the packet
-             * itself); scan-response payload chains from ADV_DATA_SET_COMPLETE */
-            esp_ble_gap_config_adv_data(&s_adv_data_adv);
+            /* v086: both payloads sized to fit 31 bytes — if these calls
+             * fail, we now log it loudly instead of failing silently. */
+            if (esp_ble_gap_config_adv_data(&s_adv_data_adv) != ESP_OK)
+                ESP_LOGE(TAG, "ADV payload rejected (too big?) — check sizes");
+            if (esp_ble_gap_config_adv_data(&s_adv_data) != ESP_OK)
+                ESP_LOGE(TAG, "scan-rsp payload rejected (too big?) — check sizes");
         }
         break;
 

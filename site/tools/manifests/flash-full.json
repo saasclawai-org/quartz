@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v085.bin",
+          "path": "../../downloads/quartz-esp32-merged-v086.bin",
           "offset": 0
         }
       ]
@@ -24,12 +24,12 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v085.bin",
+          "path": "../../downloads/quartz-c3-merged-v086.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.4.10 (v085): service UUID in the ADV packet + mesh deferred during provisioning — fixes discovery starvation under radio coex. ESP32 + C3 at v085; S3 pending.",
+  "notes": "0.4.11 (v086): BLE advertising truly fixed — payloads sized to the 31-byte limit (the scan-rsp was 38 B since v070, so advertising never started on any build). ESP32 + C3 at v086; S3 pending.",
   "new_install_prompt_erase": false
 }
