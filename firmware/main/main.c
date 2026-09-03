@@ -995,6 +995,11 @@ static void mining_task(void *pvParameters) {
         }
     }
 
+    /* v085: seed confirmed — bring up the deferred ESP-NOW mesh */
+    quartz_mesh_init();
+    quartz_mesh_update_caps(QZ_CAP_IS_MINING |
+                            (quartz_wifi_is_connected() ? QZ_CAP_HAS_WIFI : 0));
+
     /* Initialize PUF (hardware binding) — NO FALLBACK.
      * If PUF fails, device refuses to mine. Period. */
     int puf_rc = quartz_puf_init();
@@ -1427,12 +1432,16 @@ void app_main(void) {
         quartz_wifi_wait_connected(15000);
     }
 
-    /* Initialize ESP-NOW mesh (after WiFi is up) */
-    if (quartz_wifi_is_connected()) {
+    /* v085: defer ESP-NOW mesh until seed confirmed — mesh RX windows +
+     * portal AP + BLE advertising share one radio; ESP-NOW coex starves BLE
+     * discovery during provisioning. Mesh has no use pre-confirmation
+     * (mining won't start) and quartz_mesh_init() is idempotent. */
+    if (!quartz_wallet_is_backup_confirmed()) {
+        ESP_LOGI(TAG, "Mesh deferred (seed unconfirmed) — radio reserved for BLE + portal");
+    } else if (quartz_wifi_is_connected()) {
         quartz_mesh_init();
         quartz_mesh_update_caps(QZ_CAP_HAS_WIFI | QZ_CAP_IS_MINING);
     } else {
-        /* Still init mesh — we can receive work from peers without WiFi */
         quartz_mesh_init();
         quartz_mesh_update_caps(QZ_CAP_IS_MINING);
     }

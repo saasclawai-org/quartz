@@ -74,7 +74,10 @@ class QuartzBLEManager(private val context: Context) {
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val name = result.device.name ?: return
+            /* v0.2.13: scan filters already matched (name/UUID/prefix) — a null
+             * name means the scan response was missed under radio coex but the
+             * service-UUID filter matched from the ADV packet. Accept it. */
+            val name = result.device.name ?: "Quartz-Miner"
             if (name.contains("Quartz", ignoreCase = true)) {
                 Log.i(TAG, "Found Quartz device: $name")
                 onScanResult?.invoke(name)

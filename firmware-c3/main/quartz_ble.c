@@ -98,6 +98,24 @@ static uint8_t s_pin_status_uuid128[16] = {
     0x00, 0x10, 0x00, 0x00, 0x08, 0x0A, 0x00, 0x00
 };
 
+/* v085: service UUID in the ADV packet itself — discovery no longer
+ * depends on scan-response delivery, which ESP-NOW/WiFi coex starves. */
+static esp_ble_adv_data_t s_adv_data_adv = {
+    .set_scan_rsp = false,
+    .include_name = false,
+    .include_txpower = false,
+    .min_interval = 0x20,
+    .max_interval = 0x40,
+    .appearance = 0x00,
+    .manufacturer_len = 0,
+    .p_manufacturer_data = NULL,
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = 16,
+    .p_service_uuid = s_service_uuid128,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+
 static esp_ble_adv_data_t s_adv_data = {
     .set_scan_rsp = true,
     .include_name = true,
@@ -243,6 +261,10 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
+        /* v085: ADV payload set — chain to the scan-response payload */
+        esp_ble_gap_config_adv_data(&s_adv_data);
+        break;
+    case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
         esp_ble_gap_start_advertising(&s_adv_params);
         break;
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
@@ -304,7 +326,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_pin_unlock_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_UNLOCK_VAL];
             s_pin_status_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_STATUS_VAL];
             esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
-            esp_ble_gap_config_adv_data(&s_adv_data);
+            /* v085: configure the ADV payload first (UUID in the packet
+             * itself); scan-response payload chains from ADV_DATA_SET_COMPLETE */
+            esp_ble_gap_config_adv_data(&s_adv_data_adv);
         }
         break;
 

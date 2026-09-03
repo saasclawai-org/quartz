@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v084.bin",
+          "path": "../../downloads/quartz-esp32-merged-v085.bin",
           "offset": 0
         }
       ]
@@ -24,11 +24,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v084.bin",
+          "path": "../../downloads/quartz-c3-merged-v085.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.3.5 (v084): BLE advertises during seed provisioning — fresh devices discoverable by the app. v083: pair-mode BLE window + reboot-proof arming. S3 remains at the v074-era build."
+  "notes": "0.3.6 (v085): service UUID in the ADV packet + ESP-NOW mesh deferred during provisioning — discovery hardening. v084: BLE during seed provisioning. S3 remains at the v074-era build."
 }

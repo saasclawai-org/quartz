@@ -1,13 +1,13 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v084.bin",
+          "path": "../../firmware/quartz-app-v085.bin",
           "offset": 131072
         }
       ]
@@ -16,11 +16,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v084-c3.bin",
+          "path": "../../firmware/quartz-app-v085-c3.bin",
           "offset": 131072
         }
       ]
     }
   ],
-  "notes": "0.4.8 (v084): BLE during seed provisioning — fresh devices pair via app on first boot. v083: pair window, reboot-proof arming. App-only update preserving wallet + WiFi."
+  "notes": "0.4.9 (v085): discovery hardening — UUID in ADV packet, mesh deferred during setup. v084: BLE during provisioning. App-only update preserving wallet + WiFi."
 }
