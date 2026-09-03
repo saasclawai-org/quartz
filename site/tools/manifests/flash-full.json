@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v083.bin",
+          "path": "../../downloads/quartz-esp32-merged-v084.bin",
           "offset": 0
         }
       ]
@@ -24,12 +24,12 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v083.bin",
+          "path": "../../downloads/quartz-c3-merged-v084.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.4.8 (v083): ble on = 5-min pair window for app pairing + miner stats on confirmed boards; relay arming survives reboots; 24h watch; console feedback. ESP32 + C3 at v083; S3 pending.",
+  "notes": "0.4.9 (v084): BLE advertises during seed provisioning — fresh devices discoverable by the app on first boot. v083: ble on pair window, reboot-proof arming, 24h watch. ESP32 + C3 at v084; S3 pending.",
   "new_install_prompt_erase": false
 }

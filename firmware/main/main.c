@@ -870,6 +870,17 @@ static void mining_task(void *pvParameters) {
             int boot_hold_ms = 0;
             int confirm_wait_ms = 0;   /* v078: repeating banner timer */
 
+            /* v084: BLE must advertise BEFORE the wait — fresh devices pair
+             * via app during provisioning (same coex sequence as 'ble on').
+             * Without this, the "pair via app" prompt below is a lie: the
+             * app can never find a device that isn't advertising. */
+            if (!quartz_ble_is_active()) {
+                quartz_wifi_set_coex_power();
+                quartz_ble_set_address(quartz_wallet_get_address());
+                quartz_ble_init();
+                ESP_LOGI(TAG, "BLE ready (provisioning) — pair as \"Quartz-Miner\"");
+            }
+
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&
                    !serial_confirmed) {
@@ -1036,11 +1047,19 @@ static void mining_task(void *pvParameters) {
      * Once backup is confirmed, dedicate the radio to WiFi and kill
      * modem-sleep coex churn (router evictions). */
     bool ble_on = !quartz_wallet_is_backup_confirmed();
-    if (ble_on) {
+    if (ble_on && quartz_ble_is_active()) {
+        /* v084: BLE already running from the provisioning wait — keep it up */
+        ESP_LOGI(TAG, "BLE ready (from provisioning wait) — pair as \"Quartz-Miner\"");
+    } else if (ble_on) {
         quartz_ble_set_address(quartz_wallet_get_address());
         quartz_ble_init();
         ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
     } else {
+        /* Confirmed: if BLE was started for provisioning, shut it down and
+         * give the radio back to WiFi full-power mining. */
+        if (quartz_ble_is_active()) {
+            quartz_ble_stop();
+        }
         ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi ('ble on' = 5-min pair window)");
         quartz_wifi_set_full_power();
     }
