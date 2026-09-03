@@ -540,17 +540,47 @@ static void quartz_serial_command(const char *cmd)
         }
     } else if (strcasecmp(cmd, "node") == 0) {
         ESP_LOGI(TAG, "Node endpoint: %s:%d", quartz_wifi_node_host(), quartz_wifi_node_port());
+    } else if (strcasecmp(cmd, "ble on") == 0) {
+        if (!quartz_wallet_is_backup_confirmed()) {
+            ESP_LOGI(TAG, "BLE already on (setup mode) — pair as \"Quartz-Miner\"");
+        } else if (quartz_ble_is_active()) {
+            quartz_ble_pair_window_start(300);
+            ESP_LOGI(TAG, "Pair window extended — 5 more min as \"Quartz-Miner\"");
+        } else {
+            quartz_wifi_set_coex_power();
+            quartz_ble_set_address(quartz_wallet_get_address());
+            quartz_ble_init();
+            quartz_ble_pair_window_start(300);
+            ESP_LOGI(TAG, "Pair window open (5 min) — pair as \"Quartz-Miner\"; 'ble off' closes early");
+        }
+    } else if (strcasecmp(cmd, "ble off") == 0) {
+        if (quartz_ble_is_active() && quartz_wallet_is_backup_confirmed()) {
+            quartz_ble_stop();
+            quartz_wifi_set_full_power();
+        } else {
+            ESP_LOGI(TAG, "BLE setup mode stays on until seed confirmed");
+        }
+    } else if (strcasecmp(cmd, "ble") == 0 || strcasecmp(cmd, "ble status") == 0) {
+        ESP_LOGI(TAG, "BLE: %s%s", quartz_ble_is_active() ? "on — pair as \"Quartz-Miner\"" : "off ('ble on' = 5-min pair window)",
+                 quartz_ble_is_active() && quartz_wallet_is_backup_confirmed() ? " (window)" : " (setup)");
     } else if (strncasecmp(cmd, "relay", 5) == 0) {
         /* v079: pay-to-trigger relay */
         const char *rarg = cmd + 5;
         while (*rarg == ' ') rarg++;
         quartz_pay_init(quartz_wallet_get_address());
             if (*rarg == '\0') {
-                ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · %s · invert %s · auto %s · 300s timeout",
+                ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · %s · invert %s · auto %s",
                          quartz_pay_get_pin(), (unsigned long) quartz_pay_get_duration_ms(),
                          quartz_pay_get_fast() ? "fast (0-conf)" : "safe (1 conf)",
                          quartz_pay_get_invert() ? "on" : "off",
                          quartz_pay_get_auto() ? "on" : "off");
+                if (quartz_pay_get_state() == QZ_PAY_WAITING) {
+                    const qz_pay_request_t *rq = quartz_pay_get_request();
+                    ESP_LOGI(TAG, "Watch: ARMED for %.2f QZ — fires on qualifying payment",
+                             (float)rq->amount_satoshis / 1e8f);
+                } else {
+                    ESP_LOGI(TAG, "Watch: not armed ('relay <price>' to arm)");
+                }
                 ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] [fast|safe] | relay test [sec] | relay fast | relay safe | relay invert | relay auto | relay off | relay pin <gpio>");
         } else if (strncasecmp(rarg, "test", 4) == 0) {
             int rsec = atoi(rarg + 4);
@@ -620,6 +650,9 @@ static void quartz_serial_command(const char *cmd)
         ESP_LOGI(TAG, "  node [host[:port]]   show/set node endpoint");
         ESP_LOGI(TAG, "  wifi                 wipe WiFi + node, reboot to portal");
         ESP_LOGI(TAG, "  relay [price_qz [sec] [fast|safe]]  pay-to-trigger GPIO relay (0-conf default)");
+        ESP_LOGI(TAG, "  ble [on|off]           pair-mode BLE window (5 min) for app pairing");
+    } else if (cmd[0] != '\0') {
+        ESP_LOGW(TAG, "Unknown command: '%s' — type 'help'", cmd);
     }
 }
 
@@ -1008,7 +1041,7 @@ static void mining_task(void *pvParameters) {
         quartz_ble_init();
         ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
     } else {
-        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi");
+        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi ('ble on' = 5-min pair window)");
         quartz_wifi_set_full_power();
     }
 

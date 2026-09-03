@@ -1,13 +1,13 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v082.bin",
+          "path": "../../firmware/quartz-app-v083.bin",
           "offset": 131072
         }
       ]
@@ -16,11 +16,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v082-c3.bin",
+          "path": "../../firmware/quartz-app-v083-c3.bin",
           "offset": 131072
         }
       ]
     }
   ],
-  "notes": "0.4.6 (v082): ⚡ relay auto — vending mode, auto re-arms after every fire, never expires, ignores self-mined coinbases (self-mining can't self-trigger). App-only update preserving wallet + WiFi."
+  "notes": "0.4.7 (v083): pair-mode BLE window, reboot-proof relay arming, 24h watch, console feedback. App-only update preserving wallet + WiFi."
 }

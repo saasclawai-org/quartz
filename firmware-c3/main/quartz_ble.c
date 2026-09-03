@@ -4,6 +4,8 @@
  */
 
 #include "quartz_ble.h"
+#include "quartz_wifi.h"
+#include "esp_timer.h"
 #include "quartz_wallet.h"
 
 #ifdef ESP_PLATFORM
@@ -382,6 +384,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     }
 }
 
+static bool s_ble_active = false;          /* v083: pair window state */
+static esp_timer_handle_t s_pair_timer = NULL;
+
 void quartz_ble_init(void) {
     ESP_LOGI(TAG, "Starting BLE GATT server (Bluedroid)");
 
@@ -422,6 +427,43 @@ void quartz_ble_init(void) {
     esp_ble_gap_set_device_name("Quartz-Miner");
 
     ESP_LOGI(TAG, "BLE security: bonding required for seed/confirm characteristics");
+    s_ble_active = true;
+}
+
+/* ---- v083: pair-mode window (BLE on demand; mining keeps full radio after) ---- */
+
+bool quartz_ble_is_active(void) { return s_ble_active; }
+
+void quartz_ble_stop(void) {
+    if (!s_ble_active) return;
+    s_ble_active = false;
+    if (s_pair_timer) esp_timer_stop(s_pair_timer);
+    esp_bluedroid_disable();
+    esp_bluedroid_deinit();
+    esp_bt_controller_disable();
+    esp_bt_controller_deinit();
+    ESP_LOGI(TAG, "BLE stopped");
+}
+
+static void pair_window_end_cb(void *arg) {
+    quartz_ble_stop();
+    quartz_wifi_set_full_power();
+    ESP_LOGI(TAG, "Pair window closed — BLE off, WiFi back to full power");
+}
+
+void quartz_ble_pair_window_start(uint32_t seconds) {
+    if (!s_ble_active) return;   /* quartz_ble_init() must have run */
+    if (!s_pair_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = pair_window_end_cb,
+            .name = "qz_ble_win",
+        };
+        esp_timer_create(&args, &s_pair_timer);
+    }
+    if (s_pair_timer) {
+        esp_timer_stop(s_pair_timer);
+        esp_timer_start_once(s_pair_timer, (uint64_t)seconds * 1000000ULL);
+    }
 }
 
 void quartz_ble_update_stats(uint32_t hash_count, uint32_t hash_rate,

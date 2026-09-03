@@ -22,6 +22,11 @@
 /* Initialize BLE GATT server with mining stats */
 void quartz_ble_init(void);
 
+/* v083: on-demand pair-mode window (BLE for confirmed boards, time-boxed) */
+void quartz_ble_pair_window_start(uint32_t seconds);
+void quartz_ble_stop(void);
+bool quartz_ble_is_active(void);
+
 /* Update mining stats (called from mining loop) */
 void quartz_ble_update_stats(uint32_t hash_count, uint32_t hash_rate,
                              uint32_t blocks_found, uint32_t uptime);

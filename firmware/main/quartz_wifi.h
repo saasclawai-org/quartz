@@ -70,6 +70,7 @@ int         quartz_wifi_node_port(void);
  */
 void quartz_wifi_init(void);
 void quartz_wifi_set_full_power(void);
+void quartz_wifi_set_coex_power(void);   /* v083: MIN_MODEM — BLE pair window */
 
 /**
  * Check if WiFi is connected.

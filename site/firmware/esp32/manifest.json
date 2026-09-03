@@ -1,19 +1,34 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "builds": [
     {
       "chipFamily": "ESP32",
-      "parts": [{ "path": "../../downloads/quartz-esp32-merged-v082.bin", "offset": 0 }]
+      "parts": [
+        {
+          "path": "../../downloads/quartz-esp32-merged-v083.bin",
+          "offset": 0
+        }
+      ]
     },
     {
       "chipFamily": "ESP32-S3",
-      "parts": [{ "path": "../../downloads/quartz-s3-merged.bin", "offset": 0 }]
+      "parts": [
+        {
+          "path": "../../downloads/quartz-s3-merged.bin",
+          "offset": 0
+        }
+      ]
     },
     {
       "chipFamily": "ESP32-C3",
-      "parts": [{ "path": "../../downloads/quartz-c3-merged-v082.bin", "offset": 0 }]
+      "parts": [
+        {
+          "path": "../../downloads/quartz-c3-merged-v083.bin",
+          "offset": 0
+        }
+      ]
     }
   ],
-  "notes": "0.3.3 (v082): relay auto vending mode — auto re-arms after every fire, ignores self-mined coinbases. Full merged images (bootloader + partition table + app). Versioned filenames so the web flasher always fetches the current build. S3 image remains at the v074-era build until an S3 build ships."
+  "notes": "0.3.4 (v083): pair-mode BLE window + reboot-proof arming. Versioned filenames; S3 remains at the v074-era build."
 }

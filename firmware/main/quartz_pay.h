@@ -31,7 +31,7 @@ extern "C" {
 
 /* Payment polling */
 #define QZ_PAY_POLL_INTERVAL_S   5       /* check for payments every 5 seconds */
-#define QZ_PAY_TIMEOUT_S         300     /* payment request expires after 5 minutes */
+#define QZ_PAY_TIMEOUT_S         86400  /* v083: watch expires after 24h (auto mode: never) */
 #define QZ_PAY_CONFIRMATIONS     1       /* blocks needed for confirmation */
 
 /* QR code sizing */

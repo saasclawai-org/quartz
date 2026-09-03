@@ -433,6 +433,12 @@ static void start_sta_mode(const char *ssid, const char *pass) {
     g_wifi_state = QZ_WIFI_CONNECTING;
 }
 
+void quartz_wifi_set_coex_power(void) {
+    /* v083: BLE pair window open — MIN_MODEM coexists with BLE advertising */
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+    ESP_LOGI(TAG, "WiFi coex mode (MIN_MODEM) — BLE active");
+}
+
 void quartz_wifi_set_full_power(void) {
     /* PS_NONE keeps the radio always-on (v070): no missed ACKs, no
      * reason-34 evictions, no reconnect churn. Safe only when BLE is off. */

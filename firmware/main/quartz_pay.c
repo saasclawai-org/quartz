@@ -44,6 +44,24 @@ static uint32_t s_duration_ms = QZ_PAY_RELAY_DURATION_MS;
 static bool s_fast_mode = true;     /* true = fire on pending (0-conf) */
 static bool s_invert    = false;    /* swap active/idle GPIO levels */
 static bool s_auto_rearm = false;   /* v082: vending mode — re-arm after each fire */
+static uint64_t s_boot_restore_sats = 0;  /* v083: NVS-persisted armed watch, restored on first poll */
+
+/* v083: persist armed state so a rebooting vending machine re-arms itself */
+static void pay_save_armed_nvs(bool armed, uint64_t price_sats) {
+#ifdef ESP_PLATFORM
+    nvs_handle_t h;
+    if (nvs_open("qz_relay", NVS_READWRITE, &h) == ESP_OK) {
+        if (armed) {
+            nvs_set_u8(h, "armed", 1);
+            nvs_set_u64(h, "price", price_sats);
+        } else {
+            nvs_erase_key(h, "armed");
+        }
+        nvs_commit(h);
+        nvs_close(h);
+    }
+#endif
+}
 
 #define QZ_PAY_MAX_DURATION_MS 86400000UL   /* v080: 24 h hold cap */
 
@@ -91,12 +109,17 @@ int quartz_pay_init(const char *wallet_address) {
     /* v079/v080: load NVS overrides */
     nvs_handle_t nh;
     if (nvs_open("qz_relay", NVS_READONLY, &nh) == ESP_OK) {
-        uint8_t pin = 0; uint32_t dur = 0; uint8_t mode = 0, inv = 0, aut = 0;
+        uint8_t pin = 0; uint32_t dur = 0; uint8_t mode = 0, inv = 0, aut = 0, armed = 0;
+        uint64_t rprice = 0;
         if (nvs_get_u8(nh, "pin", &pin) == ESP_OK && pin < 48) s_relay_pin = pin;
         if (nvs_get_u32(nh, "dur", &dur) == ESP_OK && dur >= 100 && dur <= QZ_PAY_MAX_DURATION_MS) s_duration_ms = dur;
         if (nvs_get_u8(nh, "mode", &mode) == ESP_OK) s_fast_mode = (mode == 0);
         if (nvs_get_u8(nh, "inv", &inv) == ESP_OK) s_invert = (inv != 0);
         if (nvs_get_u8(nh, "auto", &aut) == ESP_OK) s_auto_rearm = (aut != 0);
+        if (nvs_get_u8(nh, "armed", &armed) == ESP_OK && armed) {
+            if (nvs_get_u64(nh, "price", &rprice) == ESP_OK && rprice > 0)
+                s_boot_restore_sats = rprice;
+        }
         nvs_close(nh);
     }
     /* Configure relay GPIO */
@@ -118,6 +141,9 @@ int quartz_pay_init(const char *wallet_address) {
              s_invert ? "on" : "off",
              s_auto_rearm ? "on" : "off");
     ESP_LOGI(TAG, "Wallet: %s", s_wallet_address);
+    if (s_boot_restore_sats > 0)
+        ESP_LOGI(TAG, "v083: persisted watch found — will re-arm %.2f QZ once network is up",
+                 (float)s_boot_restore_sats / 1e8f);
 #endif
 
     s_request.state = QZ_PAY_IDLE;
@@ -265,11 +291,21 @@ int quartz_pay_request(float amount_qz, const char *label) {
     /* v080: snapshot existing txs, THEN arm — only new payments fire */
     quartz_pay_snapshot_known_txid();
     s_request.state = QZ_PAY_WAITING;
+    pay_save_armed_nvs(true, s_request.amount_satoshis);
 
     return 0;
 }
 
 qz_pay_state_t quartz_pay_poll(void) {
+    /* v083: restore NVS-persisted watch on first poll (network up → the arm
+     * snapshot sees the real tx list, so no stale payments retro-fire). */
+    if (s_boot_restore_sats > 0 && s_request.state == QZ_PAY_IDLE) {
+        float price_qz = (float)s_boot_restore_sats / 1e8f;
+        s_boot_restore_sats = 0;
+        ESP_LOGI(TAG, "v083: re-arming persisted watch (%.2f QZ)", price_qz);
+        quartz_pay_request(price_qz, "relay");
+        return s_request.state;
+    }
     if (!s_initialized || s_request.state != QZ_PAY_WAITING) {
         return s_request.state;
     }
@@ -280,6 +316,7 @@ qz_pay_state_t quartz_pay_poll(void) {
     /* v082: vending mode never expires — it re-arms after every payment */
     if (!s_auto_rearm && now > s_request.expires_time) {
         ESP_LOGW(TAG, "Payment request expired");
+        pay_save_armed_nvs(false, 0);
         s_request.state = QZ_PAY_EXPIRED;
         return s_request.state;
     }
@@ -399,6 +436,7 @@ qz_pay_state_t quartz_pay_poll(void) {
                     ESP_LOGI(TAG, "⚡ Auto re-armed — watching for %.2f QZ (mining rewards ignored)",
                              (float)amt / 1e8);
                 } else {
+                    pay_save_armed_nvs(false, 0);   /* v083: one-shot consumed */
                     s_request.state = QZ_PAY_CONFIRMED;
                 }
                 break;
@@ -438,6 +476,7 @@ void quartz_pay_trigger_relay(uint32_t duration_ms) {
 }
 
 void quartz_pay_cancel(void) {
+    pay_save_armed_nvs(false, 0);
     s_request.state = QZ_PAY_IDLE;
 #ifdef ESP_PLATFORM
     ESP_LOGI(TAG, "Payment request cancelled");

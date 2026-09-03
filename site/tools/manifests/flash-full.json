@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v082.bin",
+          "path": "../../downloads/quartz-esp32-merged-v083.bin",
           "offset": 0
         }
       ]
@@ -24,12 +24,12 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v082.bin",
+          "path": "../../downloads/quartz-c3-merged-v083.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.4.7 (v082): ⚡ relay auto — vending mode, auto re-arms after every fire, never expires, ignores self-mined coinbases (self-mining can't self-trigger). ESP32 + C3 at v082; S3 still older (pending). Versioned filenames so the flasher always fetches the current build.",
+  "notes": "0.4.8 (v083): ble on = 5-min pair window for app pairing + miner stats on confirmed boards; relay arming survives reboots; 24h watch; console feedback. ESP32 + C3 at v083; S3 pending.",
   "new_install_prompt_erase": false
 }

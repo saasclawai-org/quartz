@@ -288,6 +288,7 @@ static void console_task(void *pvParameters) {
             ESP_LOGI(TAG, "  pinstatus            PIN state");
             ESP_LOGI(TAG, "  meshscan             list nearby WiFi networks + channels");
             ESP_LOGI(TAG, "  meshch <1-13|0>      lock/clear portal mesh channel, reboot");
+            ESP_LOGI(TAG, "  ble [on|off]          pair-mode BLE window (5 min) for app pairing");
         } else if (strcasecmp(line, "address") == 0) {
             ESP_LOGI(TAG, "Address: %s", quartz_wallet_get_address());
         } else if (strcasecmp(line, "seed") == 0) {
@@ -484,6 +485,29 @@ static void console_task(void *pvParameters) {
             } else {
                 ESP_LOGW(TAG, "Usage: meshch <1-13>  (meshch 0 = auto-discover)");
             }
+        } else if (strcasecmp(line, "ble on") == 0) {
+            if (!quartz_wallet_is_backup_confirmed()) {
+                ESP_LOGI(TAG, "BLE already on (setup mode) — pair as \"Quartz-Miner\"");
+            } else if (quartz_ble_is_active()) {
+                quartz_ble_pair_window_start(300);
+                ESP_LOGI(TAG, "Pair window extended — 5 more min as \"Quartz-Miner\"");
+            } else {
+                quartz_wifi_set_coex_power();
+                quartz_ble_set_address(quartz_wallet_get_address());
+                quartz_ble_init();
+                quartz_ble_pair_window_start(300);
+                ESP_LOGI(TAG, "Pair window open (5 min) — pair as \"Quartz-Miner\"; 'ble off' closes early");
+            }
+        } else if (strcasecmp(line, "ble off") == 0) {
+            if (quartz_ble_is_active() && quartz_wallet_is_backup_confirmed()) {
+                quartz_ble_stop();
+                quartz_wifi_set_full_power();
+            } else {
+                ESP_LOGI(TAG, "BLE setup mode stays on until seed confirmed");
+            }
+        } else if (strcasecmp(line, "ble") == 0 || strcasecmp(line, "ble status") == 0) {
+            ESP_LOGI(TAG, "BLE: %s%s", quartz_ble_is_active() ? "on — pair as \"Quartz-Miner\"" : "off ('ble on' = 5-min pair window)",
+                     quartz_ble_is_active() && quartz_wallet_is_backup_confirmed() ? " (window)" : " (setup)");
         } else if (strcasecmp(line, "wifi") == 0) {
             /* v078: wipe WiFi + node settings, reboot into portal */
             nvs_handle_t h;
@@ -593,6 +617,8 @@ static void console_task(void *pvParameters) {
                     quartz_pay_request(price, "relay");
                 }
             }
+        } else if (line[0] != '\0') {
+            ESP_LOGW(TAG, "Unknown command: '%s' — type 'help'", line);
         }
 console_next:
         ;
@@ -929,7 +955,7 @@ static void mining_task(void *pvParameters) {
         quartz_ble_init();
         ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
     } else {
-        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi");
+        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi ('ble on' = 5-min pair window)");
         quartz_wifi_set_full_power();
     }
 
