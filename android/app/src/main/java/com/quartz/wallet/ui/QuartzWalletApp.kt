@@ -898,8 +898,18 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
     var walletAddress by remember { mutableStateOf("") }
     var statusMsg by remember { mutableStateOf("") }
 
+    // v0.2.23: BT onboarding — unconfirmed miners show their seed right here
+    val seedWords = androidx.compose.runtime.mutableStateOf<List<String>?>(null)
+
     // Set up BLE callbacks
     LaunchedEffect(Unit) {
+        bleManager.onSeedRead = { words ->
+            if (words.isNotEmpty() && seedWords.value == null) seedWords.value = words
+        }
+        bleManager.onSeedConfirmed = {
+            seedWords.value = null
+            statusMsg = "✅ Seed confirmed — mining starts"
+        }
         bleManager.onScanEnded = { found ->
             isScanning = false
             statusMsg = if (found > 0) "Scan ended — tap a device to connect"
@@ -911,6 +921,7 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
             isConnected = connected
             isScanning = false
             statusMsg = if (connected) "Connected to Quartz-Miner" else "Disconnected"
+            if (connected) bleManager.startSeedOnboardingRead()
         }
         bleManager.onScanResult = { name ->
             statusMsg = "Found $name, connecting..."
@@ -932,6 +943,45 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
         Spacer(Modifier.height(8.dp))
         Text("Quartz Miner", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
+
+        // v0.2.23: BT onboarding — new miner: read + confirm the seed here
+        seedWords.value?.let { words ->
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("🔐 New miner detected", color = QuartzAccent, fontWeight = FontWeight.Bold)
+                    Text("Write these 12 words on paper:", fontSize = 13.sp, color = QuartzMuted)
+                    Spacer(Modifier.height(8.dp))
+                    words.forEachIndexed { i, w ->
+                        Text(
+                            "${i + 1}.  $w",
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            color = QuartzText, fontSize = 14.sp
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "⚠️ Anyone with these words controls the wallet. Paper only — no screenshots.",
+                        fontSize = 11.sp, color = QuartzMuted, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { bleManager.confirmSeedPhrase() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                    ) {
+                        Text("✍️ I wrote them down — Start Mining", color = QuartzBg, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         if (!isConnected && stats == null) {
             // Not connected — show pair button

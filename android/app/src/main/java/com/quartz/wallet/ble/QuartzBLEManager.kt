@@ -473,6 +473,27 @@ class QuartzBLEManager(private val context: Context) {
         onSeedConfirmed?.invoke()
     }
 
+    /* v0.2.23: BT onboarding — after connect, wait for the pairing bond to
+     * complete (the seed read is encrypted), then read it. Empty result =
+     * already confirmed → stats view; words → the Miner screen shows them. */
+    private var seedPollCount = 0
+
+    fun startSeedOnboardingRead() {
+        seedPollCount = 0
+        pollSeedRead()
+    }
+
+    private fun pollSeedRead() {
+        val dev = connectedDevice
+        if (dev != null && dev.bondState != BluetoothDevice.BOND_BONDED && seedPollCount < 12) {
+            seedPollCount++
+            if (seedPollCount == 1) connectionState.value = "waiting for pairing…"
+            handler.postDelayed({ pollSeedRead() }, 2500)
+            return
+        }
+        if (connectedGatt != null) readSeedPhrase()
+    }
+
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -615,7 +636,8 @@ class QuartzBLEManager(private val context: Context) {
                 SEED_UUID -> {
                     // Parse 12 words from packed char[12][12] array
                     if (data == null || data.isEmpty()) {
-                        Log.w(TAG, "Seed phrase empty (already confirmed?)")
+                        Log.w(TAG, "Seed phrase empty (already confirmed)")
+                        onSeedRead?.invoke(emptyList())
                         return
                     }
                     val words = mutableListOf<String>()
@@ -663,7 +685,8 @@ class QuartzBLEManager(private val context: Context) {
                 }
                 SEED_UUID -> {
                     if (value.isEmpty()) {
-                        Log.w(TAG, "Seed phrase empty (already confirmed?)")
+                        Log.w(TAG, "Seed phrase empty (already confirmed)")
+                        onSeedRead?.invoke(emptyList())
                         return
                     }
                     val words = mutableListOf<String>()
