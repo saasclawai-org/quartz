@@ -898,8 +898,19 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
     var walletAddress by remember { mutableStateOf("") }
     var statusMsg by remember { mutableStateOf("") }
 
+    // v0.2.16: live device list during scan
+    val scanDevices = androidx.compose.runtime.mutableStateListOf<com.quartz.wallet.ble.QuartzBLEManager.DiscoveredDevice>()
+
     // Set up BLE callbacks
     LaunchedEffect(Unit) {
+        bleManager.onDeviceDiscovered = { d ->
+            if (scanDevices.none { it.address == d.address }) scanDevices.add(d)
+        }
+        bleManager.onScanEnded = { found ->
+            isScanning = false
+            statusMsg = if (found > 0) "Scan ended — tap a device to connect"
+                        else "No BLE devices found — check Location is ON and retry"
+        }
         bleManager.onStatsUpdate = { newStats -> stats = newStats }
         bleManager.onAddressRead = { addr -> walletAddress = addr }
         bleManager.onConnectionChange = { connected ->
@@ -936,14 +947,30 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
-            if (isScanning) {
-                CircularProgressIndicator(color = QuartzAccent, modifier = Modifier.size(32.dp))
+            if (isScanning || (scanDevices.isNotEmpty() && !isConnected)) {
+                if (isScanning) {
+                    CircularProgressIndicator(color = QuartzAccent, modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Scanning — tap your miner (may show as ESP32)", color = QuartzMuted, fontSize = 14.sp)
+                }
+                scanDevices.forEach { d ->
+                    Button(
+                        onClick = { bleManager.connectByAddress(d.address) },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = QuartzCard)
+                    ) {
+                        Column {
+                            Text(if (d.isQuartz) "🔮 ${d.name ?: "Quartz"}" else (d.name ?: "(unnamed)"), color = QuartzText)
+                            Text(d.address, fontSize = 11.sp, color = QuartzMuted)
+                        }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
-                Text("Scanning for Quartz-Miner...", color = QuartzMuted, fontSize = 14.sp)
             } else {
                 Button(
                     onClick = {
                         isScanning = true
+                        scanDevices.clear()
                         statusMsg = "Scanning..."
                         bleManager.startScan()
                     },

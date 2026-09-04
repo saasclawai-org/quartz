@@ -72,8 +72,15 @@ fun SeedProvisioningScreen(
         }
     }
 
+    // v0.2.16: live device list during scan
+    val scanDevices = androidx.compose.runtime.mutableStateListOf<com.quartz.wallet.ble.QuartzBLEManager.DiscoveredDevice>()
+
     // BLE callbacks
     LaunchedEffect(Unit) {
+        bleManager.onDeviceDiscovered = { d ->
+            if (scanDevices.none { it.address == d.address }) scanDevices.add(d)
+        }
+        bleManager.onScanEnded = { }
         bleManager.onError = { msg ->
             error = msg
             phase = "error"
@@ -175,6 +182,7 @@ fun SeedProvisioningScreen(
                 OutlinedButton(
                     onClick = {
                         phase = "ble_connecting"
+                        scanDevices.clear()
                         bleManager.startScan()
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -194,8 +202,23 @@ fun SeedProvisioningScreen(
             "ble_connecting" -> {
                 CircularProgressIndicator(color = Color(0xFF00D4AA))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Scanning for Quartz device...", color = Color.Gray)
-                Text("Make sure your ESP32 is powered on", fontSize = 13.sp, color = Color.Gray)
+                Text("Scanning — the miner may show as ESP32", color = Color.Gray)
+                Text("Tap your device to connect:", fontSize = 13.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                scanDevices.forEach { d ->
+                    OutlinedButton(
+                        onClick = { bleManager.connectByAddress(d.address) },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Column {
+                            Text(if (d.isQuartz) "🔮 ${d.name ?: "Quartz"}" else (d.name ?: "(unnamed)"))
+                            Text(d.address, fontSize = 11.sp, color = Color(0xFF888888))
+                        }
+                    }
+                }
+                if (scanDevices.isEmpty()) {
+                    Text("No devices yet — make sure the board is powered on", fontSize = 12.sp, color = Color.Gray)
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     "⚠️ BLE requires pairing. Accept the pairing dialog on both devices.",

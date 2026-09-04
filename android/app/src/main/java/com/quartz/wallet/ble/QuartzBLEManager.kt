@@ -63,6 +63,23 @@ class QuartzBLEManager(private val context: Context) {
     var onConnectionChange: ((Boolean) -> Unit)? = null
     var onScanResult: ((String) -> Unit)? = null  // device name
     var onError: ((String) -> Unit)? = null
+    /* v0.2.16: every discovered device surfaces to the UI — no more silent
+     * drops. The board may advertise under the stack-default name "ESP32"
+     * (firmware name-race), so ESP32-named devices are listed for manual
+     * tap-to-connect. */
+    var onDeviceDiscovered: ((DiscoveredDevice) -> Unit)? = null
+    var onScanEnded: ((found: Int) -> Unit)? = null
+
+    data class DiscoveredDevice(val name: String?, val address: String, val rssi: Int, val isQuartz: Boolean)
+
+    private val foundDevices = HashMap<String, BluetoothDevice>()
+
+    fun connectByAddress(address: String) {
+        foundDevices[address]?.let {
+            stopScan()
+            connect(it)
+        }
+    }
 
     // PIN operation callbacks (set by callers before invoking pin methods)
     var onPinUnlockResult: ((success: Boolean, attemptsLeft: Int, wiped: Boolean) -> Unit)? = null
@@ -79,12 +96,18 @@ class QuartzBLEManager(private val context: Context) {
         private val seen = mutableSetOf<String>()
 
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            /* v0.2.15: unfiltered scan — match manually on name or raw UUID
-             * bytes; Android's ScanFilter matching was silently discarding
-             * the device while the firmware reported advertising. */
+            /* v0.2.16: every device is reported to the UI (no silent drops).
+             * Auto-connect ONLY on a positive Quartz match (UUID bytes or
+             * "Quartz" name). ESP32-named devices are likely our miner
+             * (firmware advertises the stack-default name) — tap to connect. */
             val name = result.device.name
-            val isQuartz = (name?.contains("Quartz", ignoreCase = true) == true) ||
-                result.scanRecord?.bytes?.let(::hasQuartzUuid) == true
+            val uuidMatch = result.scanRecord?.bytes?.let(::hasQuartzUuid) == true
+            val isQuartz = uuidMatch ||
+                (name?.contains("Quartz", ignoreCase = true) == true)
+            foundDevices[result.device.address] = result.device
+            onDeviceDiscovered?.invoke(
+                DiscoveredDevice(name, result.device.address, result.rssi, isQuartz)
+            )
             if (!isQuartz) return
             if (!seen.add(result.device.address)) return
             Log.i(TAG, "Found Quartz device: ${name ?: "(no name)"} @ ${result.device.address}")
@@ -118,7 +141,8 @@ class QuartzBLEManager(private val context: Context) {
             return
         }
 
-        Log.i(TAG, "Starting BLE scan for Quartz-Miner")
+        foundDevices.clear()
+        Log.i(TAG, "Starting BLE scan for Quartz devices")
 
         /* v0.2.15: NO ScanFilters — Android's filter matching silently ate
          * the device while the firmware verifiably advertised. We parse raw
@@ -128,13 +152,14 @@ class QuartzBLEManager(private val context: Context) {
             .build()
         scanner.startScan(null, settings, scanCallback)
 
-        // Stop after 15s and notify
+        // v0.2.16: stop after 45s — report how many devices were seen; the
+        // list stays on screen for manual tap-to-connect (never a dead end)
         handler.postDelayed({
             stopScan()
             if (connectedDevice == null) {
-                onError?.invoke("No Quartz device found. Make sure your ESP32 is powered on and broadcasting BLE.")
+                onScanEnded?.invoke(foundDevices.size)
             }
-        }, 15000)
+        }, 45000)
     }
 
     @SuppressLint("MissingPermission")
