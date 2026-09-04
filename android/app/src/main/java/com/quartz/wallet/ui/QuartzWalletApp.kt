@@ -949,7 +949,10 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                 }
                 bleManager.discovered.forEach { d ->
                     Button(
-                        onClick = { bleManager.connectByAddress(d.address) },
+                        onClick = {
+                            statusMsg = "Connecting to ${d.name ?: d.address}…"
+                            bleManager.connectByAddress(d.address)
+                        },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = QuartzCard)
                     ) {
@@ -995,6 +998,7 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                         lm?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
                     val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
                     Text(
+                        "CONN  ${bleManager.connectionState.value}\n" +
                         "DIAG  v$vname · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
                         "BT: ${if (bleManager.adapterOn()) "on" else "OFF"} · Location: ${if (locOn) "on" else "OFF"} · Power saver: ${if (pm?.isPowerSaveMode == true) "ON" else "off"}\n" +
                         "Perms: " + perms.joinToString(" ") { (n, ok) -> (if (ok) "✓" else "✗") + n } + "\n" +

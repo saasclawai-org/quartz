@@ -87,13 +87,22 @@ class QuartzBLEManager(private val context: Context) {
      * lists never received the callbacks (2482 results heard, 0 listed) */
     val discovered = androidx.compose.runtime.mutableStateListOf<DiscoveredDevice>()
 
+    /* v0.2.20: visible connection state — taps looked dead while
+     * connectGatt worked silently for seconds before any UI change */
+    val connectionState = androidx.compose.runtime.mutableStateOf("idle")
+    @Volatile private var connectRetries = 0
+
     fun adapterOn(): Boolean = adapter.isEnabled
 
     fun connectByAddress(address: String) {
-        foundDevices[address]?.let {
-            stopScan()
-            connect(it)
+        val dev = foundDevices[address]
+        if (dev == null) {
+            connectionState.value = "not in scan cache — scan again"
+            return
         }
+        connectRetries = 0
+        stopScan()
+        connect(dev)
     }
 
     // PIN operation callbacks (set by callers before invoking pin methods)
@@ -222,8 +231,19 @@ class QuartzBLEManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun connect(device: BluetoothDevice) {
         Log.i(TAG, "Connecting to ${device.name}")
+        connectionState.value = "connecting to ${device.name ?: device.address}…"
         connectedDevice = device
-        connectedGatt = device.connectGatt(context, false, gattCallback)
+        /* v0.2.20: stop-scan → connect races give status 133 on many
+         * Samsungs — settle 600ms first, and force TRANSPORT_LE */
+        handler.postDelayed({
+            try {
+                connectedGatt?.close()
+                connectedGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+                if (connectedGatt == null) connectionState.value = "connectGatt failed (null)"
+            } catch (e: Exception) {
+                connectionState.value = "connect failed: ${e.message}"
+            }
+        }, 600)
     }
 
     @SuppressLint("MissingPermission")
@@ -431,13 +451,25 @@ class QuartzBLEManager(private val context: Context) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to GATT server")
+                    connectionState.value = "connected — discovering services"
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.i(TAG, "Disconnected from GATT server")
-                    connectedGatt = null
-                    statsCharacteristic = null
-                    onConnectionChange?.invoke(false)
+                    Log.i(TAG, "Disconnected from GATT server (status $status)")
+                    /* v0.2.20: status 133 right after a scan is the classic
+                     * Samsung race — auto-retry twice before giving up */
+                    if (status == 133 && connectRetries < 2 && connectedDevice != null) {
+                        connectRetries++
+                        connectionState.value = "retry $connectRetries/2 (status 133)…"
+                        gatt.close()
+                        val dev = connectedDevice
+                        handler.postDelayed({ connect(dev!!) }, 800)
+                    } else {
+                        connectionState.value = "disconnected (status $status)"
+                        connectedGatt = null
+                        statsCharacteristic = null
+                        onConnectionChange?.invoke(false)
+                    }
                 }
             }
         }
@@ -450,9 +482,11 @@ class QuartzBLEManager(private val context: Context) {
                 return
             }
 
+            connectionState.value = "services discovered"
             val service = gatt.getService(SERVICE_UUID)
             if (service == null) {
                 Log.e(TAG, "Quartz service not found")
+                connectionState.value = "Quartz service not found on device"
                 onError?.invoke("Quartz service not found")
                 return
             }

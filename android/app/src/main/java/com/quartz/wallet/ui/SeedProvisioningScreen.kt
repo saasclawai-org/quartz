@@ -212,6 +212,7 @@ fun SeedProvisioningScreen(
                 if (bleManager.discovered.isEmpty()) {
                     Text("No devices yet — make sure the board is powered on", fontSize = 12.sp, color = Color.Gray)
                 }
+                Text("Conn: ${bleManager.connectionState.value}", fontSize = 11.sp, color = Color.Gray)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     "⚠️ BLE requires pairing. Accept the pairing dialog on both devices.",
