@@ -925,7 +925,7 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
     // connection now survives tab switches (disconnect via the button).
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("⛏️", fontSize = 48.sp)
@@ -941,51 +941,46 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
-            if (isScanning || (bleManager.discovered.isNotEmpty() && !isConnected)) {
-                if (isScanning) {
-                    CircularProgressIndicator(color = QuartzAccent, modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.height(8.dp))
-                    Text("Scanning — tap your miner (may show as ESP32)", color = QuartzMuted, fontSize = 14.sp)
-                }
-                bleManager.discovered.forEach { d ->
-                    Button(
-                        onClick = {
-                            statusMsg = "Connecting to ${d.name ?: d.address}…"
-                            bleManager.connectByAddress(d.address)
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = QuartzCard)
-                    ) {
-                        Column {
-                            Text(if (d.isQuartz) "🔮 ${d.name ?: "Quartz"}" else (d.name ?: "(unnamed)"), color = QuartzText)
-                            Text(d.address, fontSize = 11.sp, color = QuartzMuted)
-                        }
-                    }
-                }
-                Text(bleManager.connectionState.value, color = QuartzAccent, fontSize = 13.sp)
-                Button(
-                    onClick = {
-                        isScanning = true
-                        statusMsg = "Rescanning…"
-                        bleManager.startScan()
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
-                ) {
-                    Text("🔄 Rescan", color = QuartzBg, fontWeight = FontWeight.Bold)
-                }
+            /* v0.2.22: CONN state + Scan button ALWAYS visible above the
+             * list — the old layout buried Rescan under a full list on a
+             * screen that couldn't scroll */
+            Text(
+                bleManager.connectionState.value,
+                color = QuartzAccent, fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Button(
+                onClick = {
+                    isScanning = true
+                    statusMsg = "Scanning…"
+                    bleManager.startScan()
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+            ) {
+                Text(if (isScanning) "🔄 Scanning…" else "🔄 Scan / Rescan", color = QuartzBg, fontWeight = FontWeight.Bold)
+            }
+
+            if (isScanning) {
                 Spacer(Modifier.height(8.dp))
-            } else {
+                CircularProgressIndicator(color = QuartzAccent, modifier = Modifier.size(32.dp))
+                Spacer(Modifier.height(4.dp))
+                Text("Scanning — tap your miner when it appears", color = QuartzMuted, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(8.dp))
+            bleManager.discovered.forEach { d ->
                 Button(
                     onClick = {
-                        isScanning = true
-                        statusMsg = "Scanning..."
-                        bleManager.startScan()
+                        statusMsg = "Connecting to ${d.name ?: d.address}…"
+                        bleManager.connectByAddress(d.address)
                     },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = QuartzCard)
                 ) {
-                    Text("🔗 Pair ESP32 Miner", color = QuartzBg, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text(if (d.isQuartz) "🔮 ${d.name ?: "Quartz"}" else (d.name ?: "(unnamed)"), color = QuartzText)
+                        Text(d.address, fontSize = 11.sp, color = QuartzMuted)
+                    }
                 }
             }
 
