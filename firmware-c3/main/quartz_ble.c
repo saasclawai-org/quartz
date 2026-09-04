@@ -147,6 +147,7 @@ enum {
     QUARTZ_IDX_SVC,
     QUARTZ_IDX_STATS_CHAR,
     QUARTZ_IDX_STATS_VAL,
+    QUARTZ_IDX_STATS_CCCD,
     QUARTZ_IDX_ADDR_CHAR,
     QUARTZ_IDX_ADDR_VAL,
     QUARTZ_IDX_SEED_CHAR,
@@ -169,6 +170,12 @@ enum {
  * Masked since forever because the v087 adv-kick kept advertising alive. */
 static const uint16_t s_pri_service_uuid16 = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t s_char_decl_uuid16  = ESP_GATT_UUID_CHAR_DECLARE;
+
+/* v089.2: CCCD for stats notifications — the app subscribes here, and its
+ * address read is queued behind the descriptor write, so a missing CCCD
+ * dead-ended BOTH the stats and the wallet-address display */
+static const uint16_t s_cccd_uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+static uint16_t s_stats_ccc = 0;   /* mutable — the stack writes it */
 
 static const uint8_t s_props_stats      = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 static const uint8_t s_props_read       = ESP_GATT_CHAR_PROP_BIT_READ;
@@ -193,6 +200,12 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_GATT_AUTO_RSP},
         {ESP_UUID_LEN_128, s_stats_uuid128, ESP_GATT_PERM_READ,
          sizeof(struct mining_stats), sizeof(struct mining_stats), (uint8_t*)&s_stats}
+    },
+    /* v089.2: Client Characteristic Configuration — subscribe for stats */
+    [QUARTZ_IDX_STATS_CCCD] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&s_cccd_uuid16, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&s_stats_ccc}
     },
     /* Address characteristic declaration */
     [QUARTZ_IDX_ADDR_CHAR] = {
