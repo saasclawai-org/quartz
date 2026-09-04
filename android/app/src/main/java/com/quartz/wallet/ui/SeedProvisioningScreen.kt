@@ -80,15 +80,24 @@ fun SeedProvisioningScreen(
             phase = "error"
         }
         bleManager.onSeedRead = { words ->
-            seedWords = words
-            phase = "display"
+            if (words.isEmpty()) {
+                /* v0.2.24: confirmed miners return an empty seed — wiped
+                 * from the device by design after backup confirmation */
+                error = "This miner's seed is already confirmed and wiped from the device. Enter your 12 paper words with 'Type Seed Manually' instead."
+                phase = "error"
+            } else {
+                seedWords = words
+                phase = "display"
+            }
         }
         bleManager.onSeedConfirmed = {
             phase = "done"
         }
         bleManager.onConnectionChange = { connected ->
             if (connected && phase == "ble_connecting") {
-                bleManager.readSeedPhrase()
+                /* v0.2.24: bond-aware read — the encrypted read fired before
+                 * pairing completed and died silently ("nothing happens") */
+                bleManager.startSeedOnboardingRead()
             }
         }
     }
@@ -358,8 +367,20 @@ fun SeedProvisioningScreen(
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
+                val wctx = androidx.compose.ui.platform.LocalContext.current
                 Button(
-                    onClick = onDone,
+                    onClick = {
+                        /* v0.2.24: actually persist the app wallet — this screen
+                         * claimed "Wallet Setup Complete" without ever saving
+                         * the words it read */
+                        if (seedWords.isNotEmpty()) {
+                            try {
+                                val w = com.quartz.wallet.wallet.SoftwareWallet.restore(seedWords)
+                                com.quartz.wallet.wallet.SoftwareWallet.save(wctx, w)
+                            } catch (_: Exception) { }
+                        }
+                        onDone()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9933FF))
                 ) {

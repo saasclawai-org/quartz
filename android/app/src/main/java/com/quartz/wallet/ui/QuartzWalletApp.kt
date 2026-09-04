@@ -111,7 +111,13 @@ fun QuartzWalletApp() {
                         onImport = { showProvisioning = true }
                     )
                 }
-                1 -> MinerScreen(bleManager = bleManager)
+                1 -> MinerScreen(
+                    bleManager = bleManager,
+                    onWalletImported = {
+                        walletCreated = true
+                        walletEpoch++
+                    }
+                )
                 2 -> SettingsScreen(onWalletDeleted = {
                     walletCreated = false
                     walletEpoch++
@@ -891,7 +897,7 @@ private fun scanOptions(): ScanOptions = ScanOptions().apply {
 private fun formatScannedAmount(qz: Double): String =
     String.format(java.util.Locale.US, "%.8f", qz).trimEnd('0').trimEnd('.')
 @Composable
-fun MinerScreen(bleManager: QuartzBLEManager) {
+fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {}) {
     var isScanning by remember { mutableStateOf(false) }
     var isConnected by remember { mutableStateOf(false) }
     var stats by remember { mutableStateOf<MiningStats?>(null) }
@@ -971,8 +977,27 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                         fontSize = 11.sp, color = QuartzMuted, textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(8.dp))
+                    Text(
+                        "📱 These words also become this phone's wallet",
+                        fontSize = 11.sp, color = QuartzMuted
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val wctx = androidx.compose.ui.platform.LocalContext.current
                     Button(
-                        onClick = { bleManager.confirmSeedPhrase() },
+                        onClick = {
+                            bleManager.confirmSeedPhrase()
+                            /* v0.2.24: the miner's words become this phone's
+                             * wallet — no second trip to the Wallet page */
+                            seedWords.value?.let { words ->
+                                try {
+                                    val w = SoftwareWallet.restore(words)
+                                    SoftwareWallet.save(wctx, w)
+                                    onWalletImported()
+                                } catch (e: Exception) {
+                                    statusMsg = "Wallet import failed: ${e.message}"
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
                     ) {
