@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v087.bin",
+          "path": "../../downloads/quartz-esp32-merged-v088.bin",
           "offset": 0
         }
       ]
@@ -24,11 +24,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v087.bin",
+          "path": "../../downloads/quartz-c3-merged-v088.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.3.8 (v087): BLE status prints in the seed-confirm banner every 10 s + advertising self-heal. v086: payloads fit the 31-byte limit. S3 remains at the v074-era build."
+  "notes": "0.3.9 (v088): BLE owns the radio during provisioning — WiFi/portal deferred until the seed is confirmed (the coex arbiter was starving advertising while the controller reported success). S3 remains at the v074-era build."
 }

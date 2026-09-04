@@ -76,17 +76,21 @@ class QuartzBLEManager(private val context: Context) {
     private var pendingRecoveryWords: List<String>? = null
 
     private val scanCallback = object : ScanCallback() {
+        private val seen = mutableSetOf<String>()
+
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            /* v0.2.13: scan filters already matched (name/UUID/prefix) — a null
-             * name means the scan response was missed under radio coex but the
-             * service-UUID filter matched from the ADV packet. Accept it. */
-            val name = result.device.name ?: "Quartz-Miner"
-            if (name.contains("Quartz", ignoreCase = true)) {
-                Log.i(TAG, "Found Quartz device: $name")
-                onScanResult?.invoke(name)
-                stopScan()
-                connect(result.device)
-            }
+            /* v0.2.15: unfiltered scan — match manually on name or raw UUID
+             * bytes; Android's ScanFilter matching was silently discarding
+             * the device while the firmware reported advertising. */
+            val name = result.device.name
+            val isQuartz = (name?.contains("Quartz", ignoreCase = true) == true) ||
+                result.scanRecord?.bytes?.let(::hasQuartzUuid) == true
+            if (!isQuartz) return
+            if (!seen.add(result.device.address)) return
+            Log.i(TAG, "Found Quartz device: ${name ?: "(no name)"} @ ${result.device.address}")
+            onScanResult?.invoke(name ?: "Quartz-Miner")
+            stopScan()
+            connect(result.device)
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -115,24 +119,14 @@ class QuartzBLEManager(private val context: Context) {
         }
 
         Log.i(TAG, "Starting BLE scan for Quartz-Miner")
-        
-        // Scan by device name (more reliable than UUID filter — ESP32 may not
-        // advertise service UUID in advertisement packets)
-        val nameFilter = ScanFilter.Builder()
-            .setDeviceName("Quartz-Miner")
-            .build()
-        // Also scan by service UUID as fallback
-        val uuidFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-        // Broad name prefix filter
-        val prefixFilter = ScanFilter.Builder()
-            .setDeviceName("Quartz")
-            .build()
+
+        /* v0.2.15: NO ScanFilters — Android's filter matching silently ate
+         * the device while the firmware verifiably advertised. We parse raw
+         * results instead (see onScanResult + hasQuartzUuid). */
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
-        scanner.startScan(listOf(nameFilter, uuidFilter, prefixFilter), settings, scanCallback)
+        scanner.startScan(null, settings, scanCallback)
 
         // Stop after 15s and notify
         handler.postDelayed({
@@ -151,6 +145,20 @@ class QuartzBLEManager(private val context: Context) {
             Log.w(TAG, "Stop scan error: ${e.message}")
         }
         handler.removeCallbacksAndMessages(null)
+    }
+
+    /* v0.2.15: raw ADV parse — the little-endian tail of our 128-bit service
+     * UUID 00000a01-0000-1000-8000-00805f9b34fb. Matches with or without a
+     * scan response, independent of Android filter matching. */
+    private fun hasQuartzUuid(bytes: ByteArray): Boolean {
+        val tail = byteArrayOf(0x00, 0x10, 0x00, 0x00, 0x01, 0x0A, 0x00, 0x00)
+        outer@ for (i in 0..bytes.size - tail.size) {
+            for (j in tail.indices) {
+                if (bytes[i + j] != tail[j]) continue@outer
+            }
+            return true
+        }
+        return false
     }
 
     @SuppressLint("MissingPermission")

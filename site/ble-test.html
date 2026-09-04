@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quartz BLE Test</title>
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;color:#eee;background:#0d1117">
+<h2>📻 Quartz BLE Test</h2>
+<p>Independent check: does <b>Quartz-Miner</b> reach <i>this device's</i> Bluetooth radio?
+Works in Chrome/Edge on desktop or Android (not iOS, not Safari).</p>
+<button onclick="scan()" style="padding:12px 24px;font-size:16px;cursor:pointer">Scan for Quartz-Miner</button>
+<p id="hint" style="color:#888;font-size:13px">Shows ALL nearby BLE devices — look for <b>Quartz-Miner</b> in the picker. If it's absent while the board's banner says advertising, the packets aren't reaching the air.</p>
+<pre id="out" style="background:#111;color:#9f9;padding:16px;border-radius:8px;white-space:pre-wrap">idle</pre>
+<script>
+const OUT = document.getElementById('out');
+function log(s){ OUT.textContent += "\n" + s; }
+async function scan(){
+  OUT.textContent = 'requesting…';
+  try {
+    const dev = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: ['00000a01-0000-1000-8000-00805f9b34fb']
+    });
+    log('✅ FOUND: ' + (dev.name || 'unnamed') + '  id=' + dev.id);
+    try {
+      await dev.gatt.connect();
+      log('✅ GATT connected — radio path fully working');
+    } catch(e) {
+      log('found, but GATT connect failed: ' + e.message);
+    }
+  } catch(e) {
+    const noDev = String(e.message).includes('No devices found') ||
+                  String(e.message).includes('User cancelled');
+    log('❌ ' + e.message +
+        (String(e.message).includes('No devices found')
+          ? ' — no Quartz advertisements reached this radio'
+          : ''));
+  }
+}
+</script>
+</body>
+</html>

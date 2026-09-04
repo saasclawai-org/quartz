@@ -626,6 +626,19 @@ console_next:
 }
 
 /* === Mining Task === */
+/* v088: bring WiFi up in the background once the seed is confirmed, or
+ * after PROVISION_WIFI_FALLBACK_S if the user never confirms (portal
+ * stays reachable for stranded setups). */
+#define PROVISION_WIFI_FALLBACK_S 120
+static void deferred_wifi_task(void *arg) {
+    for (int i = 0; i < PROVISION_WIFI_FALLBACK_S; i++) {
+        if (quartz_wallet_is_backup_confirmed()) break;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    quartz_wifi_init();
+    vTaskDelete(NULL);
+}
+
 static void mining_task(void *pvParameters) {
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "  Quartz (QZ) — ESP32 Cryptocurrency Miner");
@@ -1296,13 +1309,24 @@ void app_main(void) {
 #endif
 
     /* Initialize WiFi (provisioning or connect) */
-    quartz_wifi_init();
+    /* v088: BLE gets the radio ALONE during seed provisioning — WiFi+BLE
+     * coex starves advertising at the arbiter (controller reports success,
+     * air stays silent; two independent scanners confirmed). Unconfirmed
+     * boards defer WiFi to a background task: starts the moment the seed
+     * is confirmed, or PROVISION_WIFI_FALLBACK_S as a portal fallback. */
+    bool wifi_deferred = !quartz_wallet_is_backup_confirmed();
+    if (wifi_deferred) {
+        ESP_LOGI(TAG, "Seed unconfirmed — WiFi deferred, radio dedicated to BLE");
+        xTaskCreate(deferred_wifi_task, "qz_wifi_defer", 3072, NULL, 3, NULL);
+    } else {
+        quartz_wifi_init();
+    }
 
     /* Wait for radio to warm up */
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    if (!wifi_deferred) vTaskDelay(pdMS_TO_TICKS(2000));
 
     /* If in portal mode, show instructions on display */
-    if (g_wifi_state == QZ_WIFI_PORTAL_ACTIVE) {
+    if (!wifi_deferred && g_wifi_state == QZ_WIFI_PORTAL_ACTIVE) {
         uint8_t mac[6];
         esp_wifi_get_mac(WIFI_IF_AP, mac);
         char ap_name[32];
@@ -1315,7 +1339,7 @@ void app_main(void) {
     }
 
     /* Wait for WiFi (or stay in portal mode forever) */
-    if (g_wifi_state != QZ_WIFI_PORTAL_ACTIVE) {
+    if (!wifi_deferred && g_wifi_state != QZ_WIFI_PORTAL_ACTIVE) {
 #ifdef QUARTZ_HAS_DISPLAY
         quartz_display_connecting();
 #endif

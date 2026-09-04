@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v087.bin",
+          "path": "../../downloads/quartz-esp32-merged-v088.bin",
           "offset": 0
         }
       ]
@@ -24,12 +24,12 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v087.bin",
+          "path": "../../downloads/quartz-c3-merged-v088.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.4.12 (v087): BLE status in the provisioning banner + advertising self-heal (re-issues adv config up to 3×). ESP32 + C3 at v087; S3 pending.",
+  "notes": "0.4.13 (v088): BLE owns the radio during setup — WiFi deferred until the seed is confirmed (120 s portal fallback); coex starvation fixed. ESP32 + C3 at v088; S3 pending.",
   "new_install_prompt_erase": false
 }
