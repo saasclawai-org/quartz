@@ -494,6 +494,27 @@ class QuartzBLEManager(private val context: Context) {
         if (connectedGatt != null) readSeedPhrase()
     }
 
+    /* v0.2.25: stats poller — the firmware never sends periodic notifications
+     * (its only indicate fires at pair-window close), so poll the readable
+     * stats characteristic while connected. First tick grabs the wallet
+     * address too (fixes the CCCD-queued read that dead-ended pre-v089.2). */
+    private var statsPollTick = 0
+    private val statsPoller = object : Runnable {
+        override fun run() {
+            val gatt = connectedGatt
+            val svc = gatt?.getService(SERVICE_UUID)
+            if (svc != null) {
+                val target = if (statsPollTick == 0) svc.getCharacteristic(ADDRESS_UUID)
+                             else svc.getCharacteristic(STATS_UUID)
+                statsPollTick++
+                try {
+                    target?.let { gatt.readCharacteristic(it) }
+                } catch (_: Exception) {}
+            }
+            handler.postDelayed(this, 2500)
+        }
+    }
+
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -502,11 +523,15 @@ class QuartzBLEManager(private val context: Context) {
                     Log.i(TAG, "Connected to GATT server")
                     handler.removeCallbacks(connectWatchdog)
                     connectionState.value = "connected — discovering services"
+                    /* v0.2.25: poll stats + address — nothing notifies them */
+                    statsPollTick = 0
+                    handler.postDelayed(statsPoller, 3000)
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "Disconnected from GATT server (status $status)")
                     handler.removeCallbacks(connectWatchdog)
+                    handler.removeCallbacks(statsPoller)
                     /* v0.2.21: retry on ANY error status (not just 133) —
                      * zombie teardown, Samsung races, remote resets */
                     if (status != 0 && connectRetries < 3 && connectedDevice != null) {
@@ -659,6 +684,13 @@ class QuartzBLEManager(private val context: Context) {
                         onPinStatusResult = null
                     }
                 }
+                STATS_UUID -> {
+                    /* v0.2.25: stats by polling — the firmware never sends
+                     * periodic notifications, so the poller reads this char */
+                    val stats = parseStats(data)
+                    Log.i(TAG, "Stats (polled): $stats H/s, blocks=${stats.blocksFound}")
+                    onStatsUpdate?.invoke(stats)
+                }
             }
         }
 
@@ -707,6 +739,12 @@ class QuartzBLEManager(private val context: Context) {
                         onPinStatusResult?.invoke(hasPin, attemptsLeft, unlocked)
                         onPinStatusResult = null
                     }
+                }
+                STATS_UUID -> {
+                    /* v0.2.25: stats by polling (new API path) */
+                    val stats = parseStats(value)
+                    Log.i(TAG, "Stats (polled): $stats H/s, blocks=${stats.blocksFound}")
+                    onStatsUpdate?.invoke(stats)
                 }
             }
         }
