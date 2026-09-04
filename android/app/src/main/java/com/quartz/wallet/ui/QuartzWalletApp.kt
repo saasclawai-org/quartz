@@ -962,6 +962,18 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                         }
                     }
                 }
+                Text(bleManager.connectionState.value, color = QuartzAccent, fontSize = 13.sp)
+                Button(
+                    onClick = {
+                        isScanning = true
+                        statusMsg = "Rescanning…"
+                        bleManager.startScan()
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                ) {
+                    Text("🔄 Rescan", color = QuartzBg, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.height(8.dp))
             } else {
                 Button(

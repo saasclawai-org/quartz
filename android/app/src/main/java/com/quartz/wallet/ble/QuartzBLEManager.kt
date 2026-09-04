@@ -229,17 +229,45 @@ class QuartzBLEManager(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
+    /* v0.2.21: 15s watchdog — a direct connect to a non-advertising
+     * peripheral (zombie link held board-side) hangs silently forever */
+    private val connectWatchdog = Runnable {
+        if (connectionState.value.startsWith("connecting")) {
+            connectedGatt?.let { g ->
+                try { g.disconnect() } catch (_: Exception) {}
+                try { g.close() } catch (_: Exception) {}
+            }
+            connectedGatt = null
+            if (connectRetries < 3 && connectedDevice != null) {
+                connectRetries++
+                connectionState.value = "timeout — retry $connectRetries/3"
+                connect(connectedDevice!!)
+            } else {
+                connectionState.value = "connect failed — board not advertising? RST the board, then Rescan"
+            }
+        }
+    }
+
     fun connect(device: BluetoothDevice) {
         Log.i(TAG, "Connecting to ${device.name}")
         connectionState.value = "connecting to ${device.name ?: device.address}…"
         connectedDevice = device
-        /* v0.2.20: stop-scan → connect races give status 133 on many
-         * Samsungs — settle 600ms first, and force TRANSPORT_LE */
+        handler.removeCallbacks(connectWatchdog)
+        /* v0.2.20: settle 600ms after scan-stop (Samsung 133 race).
+         * v0.2.21: tear down any previous link FIRST — the board serves
+         * ONE connection and a zombie handle stops it advertising. */
         handler.postDelayed({
             try {
-                connectedGatt?.close()
+                connectedGatt?.let { g ->
+                    try { g.disconnect() } catch (_: Exception) {}
+                    try { g.close() } catch (_: Exception) {}
+                }
                 connectedGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
-                if (connectedGatt == null) connectionState.value = "connectGatt failed (null)"
+                if (connectedGatt == null) {
+                    connectionState.value = "connectGatt failed (null)"
+                } else {
+                    handler.postDelayed(connectWatchdog, 15000)
+                }
             } catch (e: Exception) {
                 connectionState.value = "connect failed: ${e.message}"
             }
@@ -451,17 +479,19 @@ class QuartzBLEManager(private val context: Context) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to GATT server")
+                    handler.removeCallbacks(connectWatchdog)
                     connectionState.value = "connected — discovering services"
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "Disconnected from GATT server (status $status)")
-                    /* v0.2.20: status 133 right after a scan is the classic
-                     * Samsung race — auto-retry twice before giving up */
-                    if (status == 133 && connectRetries < 2 && connectedDevice != null) {
+                    handler.removeCallbacks(connectWatchdog)
+                    /* v0.2.21: retry on ANY error status (not just 133) —
+                     * zombie teardown, Samsung races, remote resets */
+                    if (status != 0 && connectRetries < 3 && connectedDevice != null) {
                         connectRetries++
-                        connectionState.value = "retry $connectRetries/2 (status 133)…"
-                        gatt.close()
+                        connectionState.value = "retry $connectRetries/3 (status $status)…"
+                        try { gatt.close() } catch (_: Exception) {}
                         val dev = connectedDevice
                         handler.postDelayed({ connect(dev!!) }, 800)
                     } else {
