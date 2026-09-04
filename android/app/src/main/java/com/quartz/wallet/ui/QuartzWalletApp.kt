@@ -898,14 +898,8 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
     var walletAddress by remember { mutableStateOf("") }
     var statusMsg by remember { mutableStateOf("") }
 
-    // v0.2.16: live device list during scan
-    val scanDevices = androidx.compose.runtime.mutableStateListOf<com.quartz.wallet.ble.QuartzBLEManager.DiscoveredDevice>()
-
     // Set up BLE callbacks
     LaunchedEffect(Unit) {
-        bleManager.onDeviceDiscovered = { d ->
-            if (scanDevices.none { it.address == d.address }) scanDevices.add(d)
-        }
         bleManager.onScanEnded = { found ->
             isScanning = false
             statusMsg = if (found > 0) "Scan ended — tap a device to connect"
@@ -947,13 +941,13 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
-            if (isScanning || (scanDevices.isNotEmpty() && !isConnected)) {
+            if (isScanning || (bleManager.discovered.isNotEmpty() && !isConnected)) {
                 if (isScanning) {
                     CircularProgressIndicator(color = QuartzAccent, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.height(8.dp))
                     Text("Scanning — tap your miner (may show as ESP32)", color = QuartzMuted, fontSize = 14.sp)
                 }
-                scanDevices.forEach { d ->
+                bleManager.discovered.forEach { d ->
                     Button(
                         onClick = { bleManager.connectByAddress(d.address) },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -970,7 +964,6 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                 Button(
                     onClick = {
                         isScanning = true
-                        scanDevices.clear()
                         statusMsg = "Scanning..."
                         bleManager.startScan()
                     },
@@ -1005,7 +998,7 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                         "DIAG  v$vname · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
                         "BT: ${if (bleManager.adapterOn()) "on" else "OFF"} · Location: ${if (locOn) "on" else "OFF"} · Power saver: ${if (pm?.isPowerSaveMode == true) "ON" else "off"}\n" +
                         "Perms: " + perms.joinToString(" ") { (n, ok) -> (if (ok) "✓" else "✗") + n } + "\n" +
-                        "Scans: ${bleManager.scansStarted.intValue} · results heard: ${bleManager.resultsReceived.intValue} · listed: ${scanDevices.size}" +
+                        "Scans: ${bleManager.scansStarted.intValue} · results heard: ${bleManager.resultsReceived.intValue} · listed: ${bleManager.discovered.size}" +
                         (bleManager.lastScanError.value?.let { "\nLast scan error: $it" } ?: ""),
                         fontSize = 10.sp,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,

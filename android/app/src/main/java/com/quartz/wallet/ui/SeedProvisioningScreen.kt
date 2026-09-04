@@ -72,14 +72,8 @@ fun SeedProvisioningScreen(
         }
     }
 
-    // v0.2.16: live device list during scan
-    val scanDevices = androidx.compose.runtime.mutableStateListOf<com.quartz.wallet.ble.QuartzBLEManager.DiscoveredDevice>()
-
     // BLE callbacks
     LaunchedEffect(Unit) {
-        bleManager.onDeviceDiscovered = { d ->
-            if (scanDevices.none { it.address == d.address }) scanDevices.add(d)
-        }
         bleManager.onScanEnded = { }
         bleManager.onError = { msg ->
             error = msg
@@ -182,7 +176,6 @@ fun SeedProvisioningScreen(
                 OutlinedButton(
                     onClick = {
                         phase = "ble_connecting"
-                        scanDevices.clear()
                         bleManager.startScan()
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -205,7 +198,7 @@ fun SeedProvisioningScreen(
                 Text("Scanning — the miner may show as ESP32", color = Color.Gray)
                 Text("Tap your device to connect:", fontSize = 13.sp, color = Color.Gray)
                 Spacer(modifier = Modifier.height(8.dp))
-                scanDevices.forEach { d ->
+                bleManager.discovered.forEach { d ->
                     OutlinedButton(
                         onClick = { bleManager.connectByAddress(d.address) },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
@@ -216,7 +209,7 @@ fun SeedProvisioningScreen(
                         }
                     }
                 }
-                if (scanDevices.isEmpty()) {
+                if (bleManager.discovered.isEmpty()) {
                     Text("No devices yet — make sure the board is powered on", fontSize = 12.sp, color = Color.Gray)
                 }
                 Spacer(modifier = Modifier.height(16.dp))

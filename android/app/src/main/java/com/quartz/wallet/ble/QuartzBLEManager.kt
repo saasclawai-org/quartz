@@ -83,6 +83,10 @@ class QuartzBLEManager(private val context: Context) {
     val resultsReceived = androidx.compose.runtime.mutableIntStateOf(0)
     val lastScanError = androidx.compose.runtime.mutableStateOf<String?>(null)
 
+    /* v0.2.19: the device list lives HERE, beside the counters — screen-held
+     * lists never received the callbacks (2482 results heard, 0 listed) */
+    val discovered = androidx.compose.runtime.mutableStateListOf<DiscoveredDevice>()
+
     fun adapterOn(): Boolean = adapter.isEnabled
 
     fun connectByAddress(address: String) {
@@ -117,6 +121,10 @@ class QuartzBLEManager(private val context: Context) {
             val isQuartz = uuidMatch ||
                 (name?.contains("Quartz", ignoreCase = true) == true)
             foundDevices[result.device.address] = result.device
+            val isNew = discovered.none { it.address == result.device.address }
+            if (isNew && (isQuartz || discovered.size < 25)) {
+                discovered.add(DiscoveredDevice(name, result.device.address, result.rssi, isQuartz))
+            }
             onDeviceDiscovered?.invoke(
                 DiscoveredDevice(name, result.device.address, result.rssi, isQuartz)
             )
@@ -163,6 +171,7 @@ class QuartzBLEManager(private val context: Context) {
         }
 
         foundDevices.clear()
+        discovered.clear()
         Log.i(TAG, "Starting BLE scan for Quartz devices")
 
         /* v0.2.15: NO ScanFilters — Android's filter matching silently ate
