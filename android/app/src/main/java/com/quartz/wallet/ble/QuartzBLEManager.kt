@@ -78,6 +78,13 @@ class QuartzBLEManager(private val context: Context) {
      * SCAN_FAILED_ALREADY_STARTED (code 1). */
     @Volatile private var scanActive = false
 
+    /* v0.2.18: scan diagnostics — surfaced live on the Miner screen */
+    val scansStarted = androidx.compose.runtime.mutableIntStateOf(0)
+    val resultsReceived = androidx.compose.runtime.mutableIntStateOf(0)
+    val lastScanError = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    fun adapterOn(): Boolean = adapter.isEnabled
+
     fun connectByAddress(address: String) {
         foundDevices[address]?.let {
             stopScan()
@@ -105,6 +112,7 @@ class QuartzBLEManager(private val context: Context) {
              * "Quartz" name). ESP32-named devices are likely our miner
              * (firmware advertises the stack-default name) — tap to connect. */
             val name = result.device.name
+            resultsReceived.intValue++
             val uuidMatch = result.scanRecord?.bytes?.let(::hasQuartzUuid) == true
             val isQuartz = uuidMatch ||
                 (name?.contains("Quartz", ignoreCase = true) == true)
@@ -123,6 +131,7 @@ class QuartzBLEManager(private val context: Context) {
         override fun onScanFailed(errorCode: Int) {
             Log.e(TAG, "Scan failed: $errorCode")
             scanActive = false
+            lastScanError.value = "code $errorCode"
             onError?.invoke("Scan failed (code $errorCode)")
         }
     }
@@ -163,6 +172,7 @@ class QuartzBLEManager(private val context: Context) {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
         scanActive = true
+        scansStarted.intValue++
         scanner.startScan(null, settings, scanCallback)
 
         // v0.2.16: stop after 45s — report how many devices were seen; the

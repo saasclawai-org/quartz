@@ -980,6 +980,39 @@ fun MinerScreen(bleManager: QuartzBLEManager) {
                     Text("🔗 Pair ESP32 Miner", color = QuartzBg, fontWeight = FontWeight.Bold)
                 }
             }
+
+            // v0.2.18: one-screenshot diagnostics — version, radio, location,
+            // permissions, scan counters. The Miner screen tells the truth.
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            Spacer(Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    val vname = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (e: Exception) { "?" }
+                    val perms = com.quartz.wallet.ble.BLEPermissions.requiredPermissions().map {
+                        it.substring(it.lastIndexOf('.') + 1) to
+                            (androidx.core.content.ContextCompat.checkSelfPermission(ctx, it) ==
+                                android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    }
+                    val lm = ctx.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+                    val locOn = lm?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                        lm?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
+                    val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+                    Text(
+                        "DIAG  v$vname · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+                        "BT: ${if (bleManager.adapterOn()) "on" else "OFF"} · Location: ${if (locOn) "on" else "OFF"} · Power saver: ${if (pm?.isPowerSaveMode == true) "ON" else "off"}\n" +
+                        "Perms: " + perms.joinToString(" ") { (n, ok) -> (if (ok) "✓" else "✗") + n } + "\n" +
+                        "Scans: ${bleManager.scansStarted.intValue} · results heard: ${bleManager.resultsReceived.intValue} · listed: ${scanDevices.size}" +
+                        (bleManager.lastScanError.value?.let { "\nLast scan error: $it" } ?: ""),
+                        fontSize = 10.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        color = QuartzMuted
+                    )
+                }
+            }
         } else {
             // Connected — show mining stats
             Card(
