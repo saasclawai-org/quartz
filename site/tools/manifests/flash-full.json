@@ -1,6 +1,6 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.14",
+  "version": "0.4.15",
   "builds": [
     {
       "chipFamily": "ESP32",
@@ -24,12 +24,12 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v089.bin",
+          "path": "../../downloads/quartz-c3-merged-v0891.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.4.14 (v089): boot-order fix — with WiFi deferred the entropy gate saw no radio and the setup task self-deleted at boot (BLE never advertised). BLE now comes up before the gate; gate recognizes BT. ESP32 + C3 at v089; S3 pending.",
+  "notes": "0.4.15 (v089.1): GATT table rewritten to spec — the service was invisible to every client since day one. C3 at v089.1; classic ESP32 table fix pending; S3 pending.",
   "new_install_prompt_erase": false
 }

@@ -162,18 +162,31 @@ enum {
     QUARTZ_IDX_NB,
 };
 
+/* v089.1: correct GATT attribute types. The old table used 0x2901 + 2-byte
+ * values for characteristic declarations and the service UUID as the entry
+ * TYPE — the stack accepted it, but no client could ever discover the
+ * service (GATT requires 0x2800 service / 0x2803 char declarations).
+ * Masked since forever because the v087 adv-kick kept advertising alive. */
+static const uint16_t s_pri_service_uuid16 = ESP_GATT_UUID_PRI_SERVICE;
+static const uint16_t s_char_decl_uuid16  = ESP_GATT_UUID_CHAR_DECLARE;
+
+static const uint8_t s_props_stats      = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+static const uint8_t s_props_read       = ESP_GATT_CHAR_PROP_BIT_READ;
+static const uint8_t s_props_read_write = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE;
+static const uint8_t s_props_write      = ESP_GATT_CHAR_PROP_BIT_WRITE;
+
 static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* Service */
     [QUARTZ_IDX_SVC] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_128, s_service_uuid128, ESP_GATT_PERM_READ,
-         0, 0, NULL}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_pri_service_uuid16, ESP_GATT_PERM_READ,
+         sizeof(s_service_uuid128), sizeof(s_service_uuid128), s_service_uuid128}
     },
     /* Stats characteristic declaration */
     [QUARTZ_IDX_STATS_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_stats}
     },
     /* Stats characteristic value */
     [QUARTZ_IDX_STATS_VAL] = {
@@ -184,8 +197,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* Address characteristic declaration */
     [QUARTZ_IDX_ADDR_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_read}
     },
     /* Address characteristic value */
     [QUARTZ_IDX_ADDR_VAL] = {
@@ -196,8 +209,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* Seed phrase characteristic declaration */
     [QUARTZ_IDX_SEED_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_read}
     },
     /* Seed phrase value — requires bonded connection (encrypted)
      * Uses ESP_GATT_PERM_READ_ENCRYPTED so only paired devices can read */
@@ -210,8 +223,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* Confirm characteristic declaration */
     [QUARTZ_IDX_CONFIRM_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_read_write}
     },
     /* Confirm value — phone writes to confirm seed (requires bonding) */
     [QUARTZ_IDX_CONFIRM_VAL] = {
@@ -223,8 +236,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* PIN set characteristic declaration */
     [QUARTZ_IDX_PIN_SET_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_WRITE}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_write}
     },
     /* PIN set value — write PIN string (requires bonding) */
     [QUARTZ_IDX_PIN_SET_VAL] = {
@@ -236,8 +249,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* PIN unlock characteristic declaration */
     [QUARTZ_IDX_PIN_UNLOCK_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_WRITE}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_write}
     },
     /* PIN unlock value — write PIN to unlock device */
     [QUARTZ_IDX_PIN_UNLOCK_VAL] = {
@@ -249,8 +262,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     /* PIN status characteristic declaration */
     [QUARTZ_IDX_PIN_STATUS_CHAR] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t*)&(uint16_t){0x2901}, ESP_GATT_PERM_READ,
-         sizeof(uint16_t), sizeof(uint16_t), (uint8_t*)&(uint16_t){ESP_GATT_CHAR_PROP_BIT_READ}}
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_read}
     },
     /* PIN status value — read: [has_pin, attempts_left, unlocked] */
     [QUARTZ_IDX_PIN_STATUS_VAL] = {
@@ -331,13 +344,19 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_pin_set_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_SET_VAL];
             s_pin_unlock_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_UNLOCK_VAL];
             s_pin_status_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_STATUS_VAL];
-            esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
+            esp_err_t svc_err = esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
+            if (svc_err != ESP_OK) {
+                ESP_LOGE(TAG, "start_service FAILED: %s", esp_err_to_name(svc_err));
+            }
             /* v086: both payloads sized to fit 31 bytes — if these calls
              * fail, we now log it loudly instead of failing silently. */
             if (esp_ble_gap_config_adv_data(&s_adv_data_adv) != ESP_OK)
                 ESP_LOGE(TAG, "ADV payload rejected (too big?) — check sizes");
             if (esp_ble_gap_config_adv_data(&s_adv_data) != ESP_OK)
                 ESP_LOGE(TAG, "scan-rsp payload rejected (too big?) — check sizes");
+        } else {
+            ESP_LOGE(TAG, "Attr table count mismatch: got %d, want %d — service NOT started",
+                     param->add_attr_tab.num_handle, QUARTZ_IDX_NB);
         }
         break;
 

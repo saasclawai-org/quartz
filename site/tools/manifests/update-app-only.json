@@ -1,6 +1,6 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.13",
+  "version": "0.4.14",
   "new_install_prompt_erase": false,
   "builds": [
     {
@@ -16,11 +16,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v089-c3.bin",
+          "path": "../../firmware/quartz-app-v0891-c3.bin",
           "offset": 131072
         }
       ]
     }
   ],
-  "notes": "0.4.13 (v089): entropy-gate boot-order fix — setup task no longer self-deletes at boot. App-only update preserving wallet + WiFi."
+  "notes": "0.4.14 (v089.1): GATT table to spec — service finally discoverable. C3 app-only; ESP32 pending. Preserves wallet + WiFi."
 }
