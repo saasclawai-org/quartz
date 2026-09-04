@@ -260,6 +260,8 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
     },
 };
 
+static bool s_advertising = false;         /* v087: ADV_START_COMPLETE seen */
+
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
@@ -270,8 +272,10 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
         break;  /* nothing to do — name rides in the scan response */
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
-        if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGE(TAG, "Advertising start failed");
+        s_advertising = (param->adv_start_cmpl.status == ESP_BT_STATUS_SUCCESS);
+        if (!s_advertising) {
+            ESP_LOGE(TAG, "Advertising start failed (status %d)",
+                     param->adv_start_cmpl.status);
         } else {
             ESP_LOGI(TAG, "BLE advertising as \"Quartz-Miner\"");
         }
@@ -466,12 +470,29 @@ bool quartz_ble_is_active(void) { return s_ble_active; }
 void quartz_ble_stop(void) {
     if (!s_ble_active) return;
     s_ble_active = false;
+    s_advertising = false;   /* v087 */
     if (s_pair_timer) esp_timer_stop(s_pair_timer);
     esp_bluedroid_disable();
     esp_bluedroid_deinit();
     esp_bt_controller_disable();
     esp_bt_controller_deinit();
     ESP_LOGI(TAG, "BLE stopped");
+}
+
+bool quartz_ble_is_advertising(void) {
+    return s_ble_active && s_advertising && !s_connected;
+}
+
+void quartz_ble_kick_adv(void) {
+    /* v087: self-heal — BLE up but not advertising → re-issue payload
+     * configs (ADV_DATA_SET_COMPLETE starts advertising again). */
+    if (!s_ble_active || s_advertising || s_connected) return;
+    static uint8_t kicks = 0;
+    if (kicks >= 3) return;
+    kicks++;
+    ESP_LOGW(TAG, "BLE not advertising — re-issuing adv configs (kick %d/3)", kicks);
+    esp_ble_gap_config_adv_data(&s_adv_data_adv);
+    esp_ble_gap_config_adv_data(&s_adv_data);
 }
 
 static void pair_window_end_cb(void *arg) {

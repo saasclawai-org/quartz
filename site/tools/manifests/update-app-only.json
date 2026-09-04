@@ -1,13 +1,13 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v086.bin",
+          "path": "../../firmware/quartz-app-v087.bin",
           "offset": 131072
         }
       ]
@@ -16,11 +16,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v086-c3.bin",
+          "path": "../../firmware/quartz-app-v087-c3.bin",
           "offset": 131072
         }
       ]
     }
   ],
-  "notes": "0.4.10 (v086): advertising starts for real — payload overflow fixed. App-only update preserving wallet + WiFi."
+  "notes": "0.4.11 (v087): BLE status in the setup banner + advertising self-heal. App-only update preserving wallet + WiFi."
 }

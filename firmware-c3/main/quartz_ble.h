@@ -59,4 +59,8 @@ void quartz_ble_get_pin_status(bool *has_pin, uint8_t *attempts_left, bool *unlo
 /* Provisioning: set the wallet address (already exists, keep it) */
 /* void quartz_ble_set_address(const char *address); — already declared */
 
+/* v087: advertising state + self-heal for the provisioning banner */
+bool quartz_ble_is_advertising(void);
+void quartz_ble_kick_adv(void);
+
 #endif /* QUARTZ_BLE_H */

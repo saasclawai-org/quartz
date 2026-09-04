@@ -884,8 +884,10 @@ static void mining_task(void *pvParameters) {
                 confirm_wait_ms += 50;
                 if (confirm_wait_ms >= 10000) {
                     confirm_wait_ms = 0;
-                    ESP_LOGW(TAG, "⏳ WALLET NOT CONFIRMED — MINING WILL NOT START");
+                    ESP_LOGW(TAG, "⏳ WALLET NOT CONFIRMED — MINING WILL NOT START [BLE: %s]",
+                             quartz_ble_is_advertising() ? "advertising" : "NOT advertising");
                     ESP_LOGW(TAG, "   → type 'confirm' + Enter   (or hold BOOT/PRG 3s)");
+                    quartz_ble_kick_adv();
                 }
 
                 vTaskDelay(pdMS_TO_TICKS(50));

@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v086.bin",
+          "path": "../../downloads/quartz-esp32-merged-v087.bin",
           "offset": 0
         }
       ]
@@ -24,11 +24,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v086.bin",
+          "path": "../../downloads/quartz-c3-merged-v087.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.3.7 (v086): BLE advertising actually starts — payloads now fit the 31-byte limit (the old scan-rsp never did, so no build ever advertised). S3 remains at the v074-era build."
+  "notes": "0.3.8 (v087): BLE status prints in the seed-confirm banner every 10 s + advertising self-heal. v086: payloads fit the 31-byte limit. S3 remains at the v074-era build."
 }
