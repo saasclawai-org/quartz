@@ -1,13 +1,13 @@
 {
   "name": "Quartz Miner (app update)",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v088.bin",
+          "path": "../../firmware/quartz-app-v089.bin",
           "offset": 131072
         }
       ]
@@ -16,11 +16,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../firmware/quartz-app-v088-c3.bin",
+          "path": "../../firmware/quartz-app-v089-c3.bin",
           "offset": 131072
         }
       ]
     }
   ],
-  "notes": "0.4.12 (v088): radio dedicated to BLE during provisioning (WiFi deferred). App-only update preserving wallet + WiFi."
+  "notes": "0.4.13 (v089): entropy-gate boot-order fix — setup task no longer self-deletes at boot. App-only update preserving wallet + WiFi."
 }

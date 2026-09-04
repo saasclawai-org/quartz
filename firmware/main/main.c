@@ -723,6 +723,16 @@ static void mining_task(void *pvParameters) {
     ESP_LOGI(TAG, "  Node: %s:%d", quartz_wifi_node_host(), quartz_wifi_node_port());
     ESP_LOGI(TAG, "========================================");
 
+    /* v089: unconfirmed boards run with WiFi deferred (v088) — bring BLE
+     * up BEFORE the entropy gate so the RNG sees a live radio. Without
+     * this, the gate failed at boot and this whole task (seed display,
+     * BLE advertising, the 10s banner, serial/BOOT confirm) silently
+     * self-deleted: the board looked booted but nothing ever advertised. */
+    if (!quartz_wallet_is_backup_confirmed() && !quartz_ble_is_active()) {
+        quartz_ble_init();
+        ESP_LOGI(TAG, "BLE up early (provisioning) — radio active for RNG + pairing");
+    }
+
     /* Initialize entropy subsystem */
     ESP_LOGI(TAG, "Waiting for hardware RNG...");
     qz_err_t err = quartz_entropy_wait_for_ready();
@@ -889,10 +899,11 @@ static void mining_task(void *pvParameters) {
              * app can never find a device that isn't advertising. */
             if (!quartz_ble_is_active()) {
                 quartz_wifi_set_coex_power();
-                quartz_ble_set_address(quartz_wallet_get_address());
                 quartz_ble_init();
-                ESP_LOGI(TAG, "BLE ready (provisioning) — pair as \"Quartz-Miner\"");
             }
+            /* v089: refresh address even when BLE came up at boot (early init) */
+            quartz_ble_set_address(quartz_wallet_get_address());
+            ESP_LOGI(TAG, "BLE ready (provisioning) — pair as \"Quartz-Miner\"");
 
             /* Wait for confirmation from ANY source — NO TIMEOUT */
             while (!quartz_ble_is_seed_confirmed() &&

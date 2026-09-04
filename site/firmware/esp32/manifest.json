@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v088.bin",
+          "path": "../../downloads/quartz-esp32-merged-v089.bin",
           "offset": 0
         }
       ]
@@ -24,11 +24,11 @@
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "../../downloads/quartz-c3-merged-v088.bin",
+          "path": "../../downloads/quartz-c3-merged-v089.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "notes": "0.3.9 (v088): BLE owns the radio during provisioning — WiFi/portal deferred until the seed is confirmed (the coex arbiter was starving advertising while the controller reported success). S3 remains at the v074-era build."
+  "notes": "0.3.10 (v089): boot-order fix — the entropy gate saw no radio with WiFi deferred and the setup task self-deleted at boot (BLE never advertised). BLE comes up before the gate; gate recognizes BT. S3 remains at the v074-era build."
 }
