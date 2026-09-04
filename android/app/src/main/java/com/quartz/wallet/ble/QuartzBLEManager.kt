@@ -74,6 +74,10 @@ class QuartzBLEManager(private val context: Context) {
 
     private val foundDevices = HashMap<String, BluetoothDevice>()
 
+    /* v0.2.17: restartable scan — a second startScan while live returned
+     * SCAN_FAILED_ALREADY_STARTED (code 1). */
+    @Volatile private var scanActive = false
+
     fun connectByAddress(address: String) {
         foundDevices[address]?.let {
             stopScan()
@@ -118,6 +122,7 @@ class QuartzBLEManager(private val context: Context) {
 
         override fun onScanFailed(errorCode: Int) {
             Log.e(TAG, "Scan failed: $errorCode")
+            scanActive = false
             onError?.invoke("Scan failed (code $errorCode)")
         }
     }
@@ -141,6 +146,13 @@ class QuartzBLEManager(private val context: Context) {
             return
         }
 
+        /* v0.2.17: second press while scanning — restart cleanly instead
+         * of letting the stack reject us with code 1 */
+        if (scanActive) {
+            Log.i(TAG, "Scan already active — restarting")
+            stopScan()
+        }
+
         foundDevices.clear()
         Log.i(TAG, "Starting BLE scan for Quartz devices")
 
@@ -150,6 +162,7 @@ class QuartzBLEManager(private val context: Context) {
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
+        scanActive = true
         scanner.startScan(null, settings, scanCallback)
 
         // v0.2.16: stop after 45s — report how many devices were seen; the
@@ -164,6 +177,7 @@ class QuartzBLEManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun stopScan() {
+        scanActive = false
         try {
             scanner.stopScan(scanCallback)
         } catch (e: Exception) {
