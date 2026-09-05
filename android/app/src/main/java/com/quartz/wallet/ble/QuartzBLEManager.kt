@@ -451,6 +451,11 @@ class QuartzBLEManager(private val context: Context) {
             return
         }
         Log.i(TAG, "Reading seed phrase from device")
+        if (seedReadRetries >= 8) {
+            /* v0.2.30: no more silent give-up */
+            onError?.invoke("Seed read failed after $seedReadRetries tries — Disconnect and reconnect")
+            return
+        }
         /* v0.2.28: Android queues ONE GATT op — the stats poller can eat
          * this read (the reason fresh boards showed no seed at all).
          * Watchdog retries until the read is actually answered. */
@@ -537,7 +542,10 @@ class QuartzBLEManager(private val context: Context) {
             handler.postDelayed({ pollSeedRead() }, 2500)
             return
         }
-        if (connectedGatt != null) readSeedPhrase()
+        /* v0.2.30: even with a stored bond, the LINK takes ~200ms to
+         * re-encrypt after connect — give it a beat before the first
+         * encrypted read or it loses the race and dies silently */
+        if (connectedGatt != null) handler.postDelayed({ readSeedPhrase() }, 1000)
     }
 
     /* v0.2.25: stats poller — the firmware never sends periodic notifications
@@ -707,6 +715,15 @@ class QuartzBLEManager(private val context: Context) {
             status: Int
         ) {
             gotAnyRead = true   // v0.2.29: queue alive — stall watchdog stands down
+            /* v0.2.30: encrypted read racing link encryption — fast-retry;
+             * Android completes SMP on the retry and the read goes through */
+            if ((status == 5 || status == 0x0F) && characteristic.uuid == SEED_UUID) {
+                Log.w(TAG, "Seed read blocked pending encryption (status $status) — retrying")
+                handler.postDelayed({
+                    if (connectedGatt != null) readSeedPhrase()
+                }, 500)
+                return
+            }
             if (status != BluetoothGatt.GATT_SUCCESS) return
             val data = characteristic.value
             when (characteristic.uuid) {
@@ -769,6 +786,13 @@ class QuartzBLEManager(private val context: Context) {
             status: Int
         ) {
             gotAnyRead = true   // v0.2.29: queue alive — stall watchdog stands down
+            if ((status == 5 || status == 0x0F) && characteristic.uuid == SEED_UUID) {
+                Log.w(TAG, "Seed read blocked pending encryption (status $status) — retrying")
+                handler.postDelayed({
+                    if (connectedGatt != null) readSeedPhrase()
+                }, 500)
+                return
+            }
             if (status != BluetoothGatt.GATT_SUCCESS) return
             when (characteristic.uuid) {
                 ADDRESS_UUID -> {
