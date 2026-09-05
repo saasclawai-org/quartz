@@ -128,23 +128,51 @@ def run_backend(prompt: str) -> str:
     raise RuntimeError(f"unknown backend {LLM_BACKEND}")
 
 class Handler(BaseHTTPRequestHandler):
+    def route(self):
+        """Path with query stripped, tolerant of a /llm prefix.
+
+        Behind a reverse proxy or a path-based Cloudflare Origin Rule the
+        service may live at /llm/price etc. — route those identically to
+        /price so browser demos can reach it without a dedicated port.
+        """
+        p = self.path.split("?", 1)[0]
+        if p == "/llm":
+            return "/"
+        if p.startswith("/llm/"):
+            return p[4:]
+        return p
+
     def reply(self, code, obj):
         body = json.dumps(obj, indent=2).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        # Browser demos: any origin may talk to the LLM node (payments are
+        # enforced on-chain, not by origin policy)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def log_message(self, fmt, *args):
         print(f"[llm-node] {self.command} {self.path} {fmt % args}", flush=True)
 
     def do_GET(self):
-        if self.path == "/price":
+        path = self.route()
+        if path == "/price":
             self.reply(200, {"price_qz": PRICE_QZ, "price_sats": PRICE_SATS,
                              "pay_to": PAY_TO, "model": LLM_MODEL,
                              "backend": LLM_BACKEND})
-        elif self.path == "/identity":
+        elif path == "/identity":
             self.reply(200, {"address": PAY_TO,
                              "public_key": IDENTITY["public_key"]})
         else:
@@ -157,7 +185,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self.reply(400, {"error": "bad json"})
 
-        if self.path == "/request":
+        path = self.route()
+        if path == "/request":
             prompt = (body.get("prompt") or "").strip()
             if not prompt or len(prompt) > 4000:
                 return self.reply(400, {"error": "prompt 1..4000 chars"})
@@ -170,7 +199,7 @@ class Handler(BaseHTTPRequestHandler):
                                     "price_sats": PRICE_SATS,
                                     "expires_in_s": JOB_TTL_S})
 
-        if self.path == "/claim":
+        if path == "/claim":
             job_id, txid = body.get("job_id", ""), body.get("txid", "").strip()
             job = JOBS.get(job_id)
             if not job:
@@ -208,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"completion": completion,
                                     "receipt": receipt})
 
-        if self.path == "/verify":
+        if path == "/verify":
             receipt = dict(body.get("receipt", {}))
             sig_hex = receipt.pop("signature", "")
             try:

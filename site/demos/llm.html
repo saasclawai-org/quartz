@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧠 Village LLM — Quartz Demo</title>
+<meta name="description" content="A Raspberry Pi sells local-AI completions for QZ. Pay-per-prompt: the payment is an ordinary on-chain transaction, the answer arrives with an Ed25519-signed receipt anyone can verify.">
+<style>
+:root {
+  --bg: #0a0a0f; --card: #1a1a2e; --accent: #9933ff;
+  --accent2: #00d4aa; --text: #e4e4ef; --muted: #8888a0; --warn: #ff6b35;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); font-size: 26px; margin-bottom: 6px; }
+h2 { color: var(--accent2); font-size: 18px; margin: 20px 0 8px; }
+p { margin-bottom: 10px; }
+.muted { color: var(--muted); font-size: 14px; }
+.card { background: var(--card); border-radius: 12px; padding: 24px; margin: 16px 0; border: 1px solid #2a2a3e; }
+.btn { background: var(--accent); color: #fff; border: none; padding: 14px 28px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.ghost { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 8px 16px; font-size: 14px; font-weight: 500; margin: 4px; }
+.btn.ok { background: transparent; border: 1px solid var(--accent2); color: var(--accent2); padding: 8px 16px; font-size: 14px; }
+textarea { width: 100%; min-height: 90px; background: #12121f; color: var(--text); border: 1px solid #2a2a3e; border-radius: 8px; padding: 12px; font-size: 15px; font-family: inherit; resize: vertical; }
+input[type=text] { width: 100%; background: #12121f; color: var(--text); border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-family: 'SF Mono', Consolas, monospace; }
+code { background: #12121f; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; color: var(--accent2); word-break: break-all; }
+pre { background: #12121f; border: 1px solid #2a2a3e; border-radius: 8px; padding: 14px; font-size: 12px; overflow-x: auto; margin-top: 8px; }
+#qr-wrap { margin: 16px auto; width: 220px; background: #fff; padding: 10px; border-radius: 8px; display: none; }
+.state { font-size: 15px; margin-top: 8px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 8px; animation: dpulse 2s infinite; }
+.dot.green { background: var(--accent2); }
+.ok { color: var(--accent2); font-weight: 600; }
+.err { color: var(--warn); font-weight: 600; }
+#status-pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; padding: 4px 14px; font-size: 13px; font-weight: 600; border: 1px solid var(--muted); color: var(--muted); }
+#status-pill.online { border-color: var(--accent2); color: var(--accent2); background: rgba(0,212,170,.08); }
+#status-pill.offline { border-color: var(--warn); color: var(--warn); background: rgba(255,107,53,.08); }
+#node-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+#node-url { flex: 1; min-width: 220px; background: #12121f; color: var(--text); border: 1px solid #2a2a3e; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: 'SF Mono', Consolas, monospace; }
+.step { display: none; }
+.step.on { display: block; }
+.badge { display: inline-block; margin-top: 10px; padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 700; border: 1px solid var(--accent2); color: var(--accent2); background: rgba(0,212,170,.1); }
+details { margin-top: 14px; }
+summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+details pre { font-size: 11.5px; }
+a { color: var(--accent); }
+@keyframes dpulse { 0%{opacity:1} 50%{opacity:.4} 100%{opacity:1} }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🧠 Village LLM</h1>
+  <p class="muted">A Raspberry Pi sells local-AI completions for QZ — the "solar-powered village LLM."
+  No escrow, no accounts: you pay the node's Quartz address (an ordinary on-chain transaction),
+  it verifies your payment against the chain itself, and answers with a completion plus an
+  <b>Ed25519-signed receipt</b> anyone can verify. Txids are single-use — replay is impossible.</p>
+
+  <div id="node-row">
+    <span id="status-pill">checking node…</span>
+    <input id="node-url" type="text" spellcheck="false" placeholder="LLM node base URL">
+    <button class="btn ghost" onclick="saveBase()">use</button>
+  </div>
+
+  <div class="card step on" id="step-ask">
+    <h2 style="margin-top:0;">1 · Ask</h2>
+    <p class="muted">Type a prompt. The node quotes a price and gives you a job.</p>
+    <textarea id="prompt">Give me one sentence on why peer-to-peer cash matters.</textarea>
+    <div style="margin-top:12px;">
+      <button class="btn" id="btn-ask" onclick="createJob()">Create job →</button>
+    </div>
+    <div class="state" id="ask-state"></div>
+  </div>
+
+  <div class="card step" id="step-pay">
+    <h2 style="margin-top:0;">2 · Pay <span id="price-tag" style="color:var(--accent);"></span></h2>
+    <p class="muted">Send QZ to this address from any Quartz wallet
+      (<a href="/wallet/" target="_blank">web wallet</a> ·
+      <a href="/faucet.html" target="_blank">free testnet QZ from the faucet</a>).
+      Job ID <code id="job-id"></code> — expires in 10&nbsp;min.</p>
+    <p><code id="pay-to" style="font-size:15px;"></code></p>
+    <button class="btn ghost" onclick="copyAddr()">copy address</button>
+    <div id="qr-wrap"><canvas id="qr"></canvas></div>
+    <div class="state" id="pay-state"><span class="dot"></span>watching the chain for your payment…</div>
+    <p class="muted" style="margin-top:10px;">Or paste a txid yourself:</p>
+    <input type="text" id="txid" placeholder="txid (after you've paid)">
+    <div style="margin-top:10px;">
+      <button class="btn" id="btn-manual" onclick="manualClaim()">Claim with txid →</button>
+    </div>
+  </div>
+
+  <div class="card step" id="step-done">
+    <h2 style="margin-top:0;">3 · Answer</h2>
+    <div id="completion" style="font-size:16px; background:#12121f; border:1px solid #2a2a3e; border-radius:8px; padding:16px; white-space:pre-wrap;"></div>
+    <h2>Receipt</h2>
+    <p class="muted">Signed by the node's key. Anyone can verify it offline — this page checks it live:</p>
+    <pre id="receipt"></pre>
+    <div id="verify-badge"></div>
+    <p class="muted" style="margin-top:12px;">Paid with <code id="paid-txid"></code> — see it in the <a href="/explorer/" target="_blank">explorer</a>.</p>
+    <button class="btn ghost" onclick="location.reload()" style="margin-top:8px;">ask something else</button>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">What just happened</h2>
+    <p class="muted">1 · <code>POST /request</code> → the node creates a job and quotes its price.<br>
+    2 · You pay its Quartz address — a plain on-chain transaction, from any wallet.<br>
+    3 · <code>POST /claim {job_id, txid}</code> → the node checks the chain's own API: right address? enough?
+    confirmed? txid unused?<br>
+    4 · It runs the local model and returns the completion + a signed receipt
+    (<code>prompt_sha256, completion_sha256, model, price, txid</code> + Ed25519 signature).<br>
+    5 · <code>POST /verify</code> proves the signature — no trust in this page required.</p>
+    <details>
+      <summary>Node offline? Owner setup (2 steps)</summary>
+      <p class="muted">This demo talks to the LLM node running on a Pi at
+      <code>pi.quartzchain.net</code> (behind Cloudflare, path <code>/llm/</code> → port 8788).
+      To bring it up:</p>
+      <p class="muted">1 · On the Pi — install the node bundle with the LLM flavor:</p>
+      <pre>curl -LO https://quartzchain.net/downloads/quartz-pi-node.tar.gz
+tar xzf quartz-pi-node.tar.gz && cd quartz-pi-node
+sudo INSTALL_LLM=ollama bash install.sh   # real model
+# or: sudo INSTALL_LLM=mock bash install.sh  (demo backend, zero deps)</pre>
+      <p class="muted">2 · Expose port 8788 through Cloudflare — dashboard → Rules → Origin Rules:
+      match <code>Hostname eq pi.quartzchain.net AND URI Path starts with /llm/</code> →
+      Destination Port <code>8788</code>. (Or on the Pi's nginx:
+      <code>location /llm/ &#123; proxy_pass http://127.0.0.1:8788/; &#125;</code>)</p>
+    </details>
+  </div>
+
+  <p class="muted"><a href="/demos/">← all Quartz demos</a> · the same flow runs on any Pi with the
+  <a href="/downloads/quartz-pi-node.tar.gz">node bundle</a> — point the box above at your own node.</p>
+</div>
+
+<script>
+const DEFAULT_BASE = 'https://pi.quartzchain.net/llm';
+let BASE = localStorage.getItem('llm-node-base') || DEFAULT_BASE;
+let job = null, reqTime = 0, payTimer = null, claimTries = 0;
+
+const $ = id => document.getElementById(id);
+function base() { return BASE.replace(/\/+$/, ''); }
+$('node-url').value = BASE;
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  let d = null;
+  try { d = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+  return d;
+}
+
+// ── node status ──────────────────────────────────────────────
+async function ping() {
+  const pill = $('status-pill');
+  try {
+    const p = await api(base() + '/price', { signal: AbortSignal.timeout(8000) });
+    pill.className = 'online'; pill.id = 'status-pill';
+    pill.textContent = '● online · ' + p.backend + ' · ' + p.model + ' · ' + p.price_qz + ' QZ/prompt';
+  } catch (e) {
+    pill.className = 'offline';
+    pill.textContent = '● node offline — see setup below';
+  }
+}
+function saveBase() {
+  BASE = $('node-url').value.trim().replace(/\/+$/, '');
+  localStorage.setItem('llm-node-base', BASE);
+  ping();
+}
+setInterval(ping, 15000);
+
+// ── 1 · ask ──────────────────────────────────────────────────
+async function createJob() {
+  const prompt = $('prompt').value.trim();
+  if (!prompt) return;
+  $('btn-ask').disabled = true;
+  $('ask-state').innerHTML = '<span class="dot"></span>contacting node…';
+  try {
+    job = await api(base() + '/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    reqTime = Math.floor(Date.now() / 1000);
+    $('step-ask').classList.remove('on');
+    $('step-pay').classList.add('on');
+    $('job-id').textContent = job.job_id;
+    $('pay-to').textContent = job.pay_to;
+    $('price-tag').textContent = '· ' + job.price_qz + ' QZ';
+    drawQR(job.pay_to);
+    payTimer = setInterval(watch, 3000);
+    watch();
+  } catch (e) {
+    $('ask-state').innerHTML = '<span class="err">✗ ' + e.message + '</span>';
+    $('btn-ask').disabled = false;
+  }
+}
+
+function drawQR(text) {
+  const draw = () => QRCode.toCanvas($('qr'), text, { width: 200, margin: 1 },
+      err => { if (!err) $('qr-wrap').style.display = 'block'; });
+  if (window.QRCode) draw();
+  else {
+    const s = document.createElement('script');
+    s.src = '/js/qrcode.min.js';   // self-hosted: CSP blocks CDNs
+    s.onload = draw;
+    document.head.appendChild(s);
+  }
+}
+
+function copyAddr() {
+  navigator.clipboard?.writeText(job.pay_to);
+  event.target.textContent = 'copied ✓';
+  setTimeout(() => event.target.textContent = 'copy address', 1500);
+}
+
+// ── 2 · pay (watch the chain for the tx) ─────────────────────
+const seen = new Set();
+async function watch() {
+  try {
+    const d = await api('/api/v1/address/' + job.pay_to + '/txs?min_amount=' + job.price_sats);
+    for (const t of (d.txs || [])) {
+      if (seen.has(t.txid)) continue;
+      seen.add(t.txid);
+      if (t.timestamp < reqTime - 30) continue;   // old txs from earlier visitors
+      if ((t.amount || 0) < job.price_sats) continue;
+      $('txid').value = t.txid;
+      if (t.pending) {
+        $('pay-state').innerHTML = '<span class="dot"></span>payment seen (0-conf) — waiting for the ~30 s block…';
+      } else {
+        $('pay-state').innerHTML = '<span class="dot green"></span>payment confirmed — claiming…';
+        clearInterval(payTimer);
+        claim(t.txid);
+      }
+      return;
+    }
+  } catch (e) { /* transient — keep watching */ }
+}
+
+function manualClaim() {
+  const txid = $('txid').value.trim();
+  if (!txid) return;
+  clearInterval(payTimer);
+  $('pay-state').innerHTML = '<span class="dot"></span>claiming…';
+  claim(txid);
+}
+
+// ── 3 · claim + verify ───────────────────────────────────────
+async function claim(txid) {
+  try {
+    const r = await api(base() + '/claim', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: job.job_id, txid })
+    });
+    $('step-pay').classList.remove('on');
+    $('step-done').classList.add('on');
+    $('completion').textContent = r.completion;
+    $('receipt').textContent = JSON.stringify(r.receipt, null, 2);
+    $('paid-txid').textContent = r.receipt.txid;
+    const v = await api(base() + '/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receipt: r.receipt })
+    });
+    $('verify-badge').innerHTML = v.valid
+      ? '<span class="badge">✓ signature valid — signed by the node, verified live</span>'
+      : '<span class="err">✗ signature INVALID</span>';
+  } catch (e) {
+    claimTries++;
+    if (e.message.includes('not confirmed') && claimTries < 25) {
+      $('pay-state').innerHTML = '<span class="dot"></span>payment seen — waiting for confirmation…';
+      setTimeout(() => claim(txid), 6000);   // retry until the block lands
+      return;
+    }
+    $('pay-state').innerHTML = '<span class="err">✗ ' + e.message + '</span>' +
+      ' <button class="btn ghost" onclick="manualClaim()">retry</button>';
+  }
+}
+
+ping();
+</script>
+</body>
+</html>
