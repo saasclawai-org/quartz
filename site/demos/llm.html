@@ -278,8 +278,11 @@ async function claim(txid) {
   } catch (e) {
     claimTries++;
     // "not confirmed" = block not mined yet; "not found" = the node's chain
-    // copy is a few seconds behind — both transient, keep trying
-    if ((e.message.includes('not confirmed') || e.message.includes('not found')) && claimTries < 25) {
+    // copy is a few seconds behind; "524"/"Failed to fetch" = Cloudflare
+    // timed out a slow generation — all transient, keep trying
+    const m = e.message || '';
+    if ((m.includes('not confirmed') || m.includes('not found') ||
+         m.includes('524') || m.toLowerCase().includes('failed to fetch')) && claimTries < 25) {
       $('pay-state').innerHTML = '<span class="dot"></span>payment seen — waiting for the network to catch up…';
       setTimeout(() => claim(txid), 6000);   // retry until the block lands + syncs
       return;

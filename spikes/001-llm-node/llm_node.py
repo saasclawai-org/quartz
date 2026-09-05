@@ -65,6 +65,11 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:1.5b")
 PRICE_QZ = float(os.environ.get("PRICE_QZ", "0.5"))
 PRICE_SATS = int(PRICE_QZ * 1e8)
 LLM_MODELS_SPEC = os.environ.get("LLM_MODELS", "")
+# Generation guardrails: cap output tokens (a "thinking" model left
+# uncapped can outlive every proxy timeout) and fail fast under
+# Cloudflare's ~100 s patience so the client gets a clean error.
+MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "400"))
+GENERATION_TIMEOUT = int(os.environ.get("LLM_TIMEOUT_S", "90"))
 PORT = int(os.environ.get("PORT", "8788"))
 JOB_TTL_S = 600
 
@@ -189,8 +194,9 @@ def run_backend(prompt: str, model: str = LLM_MODEL) -> str:
                 f"sha {h}. On a Pi this would be Ollama/llama.cpp output.")
     if LLM_BACKEND == "ollama":
         r = http_json(f"{LLM_URL}/api/generate",
-                      {"model": model, "prompt": prompt, "stream": False},
-                      timeout=300)
+                      {"model": model, "prompt": prompt, "stream": False,
+                       "options": {"num_predict": MAX_TOKENS}},
+                      timeout=GENERATION_TIMEOUT)
         return r.get("response", "").strip()
     if LLM_BACKEND == "openai":
         r = http_json(f"{LLM_URL}/chat/completions",
