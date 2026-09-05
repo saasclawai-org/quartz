@@ -30,6 +30,9 @@ fi
 #    not clobber live state with the (older) bundle-baked snapshot.
 mkdir -p "$DEST"
 cp -r "$DIR/quartz" "$DIR/testnet.py" "$DEST/"
+# LLM node (optional flavor): script only; service/key handled below.
+# A missing llm_node.py (bare bundle) just means no LLM flavor — not an error.
+[ -f "$DIR/llm_node.py" ] && cp "$DIR/llm_node.py" "$DEST/"
 mkdir -p "$DEST/testnet-data"
 if [ ! -f "$DEST/testnet-data/chain.json" ] \
     && [ -f "$DIR/testnet-data/chain.json" ]; then
@@ -50,6 +53,79 @@ systemctl restart quartz-node   # ALWAYS restart: pick up new code/env
 # 5. Local firewall (if ufw present): allow the node port on LAN
 if command -v ufw >/dev/null; then
   ufw allow 21100/tcp >/dev/null 2>&1 || true
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Optional: Quartz LLM node — pay-per-request local inference for QZ
+#    (spike 001, validated on live testnet: payment → claim → signed receipt)
+#
+#      INSTALL_LLM=ollama  install Ollama + pull model (real inference)
+#      INSTALL_LLM=mock    demo backend, no model (works on any Pi)
+#      INSTALL_LLM=1       auto: ollama if already present, else mock
+#      unset + interactive tty → ask; unset + no tty → skip silently
+#
+#    Price and model: PRICE_QZ=0.25 LLM_MODEL=qwen2.5:1.5b sudo bash install.sh
+#    The node's wallet key (/opt/quartz-node/llm-node-key.json) is generated
+#    on first start and NEVER clobbered by reinstalls.
+# ---------------------------------------------------------------------------
+INSTALL_LLM="${INSTALL_LLM:-}"
+if [ -z "$INSTALL_LLM" ] && [ -t 0 ]; then
+  read -r -p "Install the Quartz LLM node (sells inference for QZ on :8788)? [y/N] " _yn
+  case "$_yn" in y|Y|yes|YES) INSTALL_LLM=1 ;; esac
+fi
+
+if [ -n "$INSTALL_LLM" ] && [ -f "$DEST/llm_node.py" ]; then
+  echo
+  echo "== LLM node =="
+  # Signed Ed25519 receipts need PyNaCl
+  if ! python3 -c "import nacl" 2>/dev/null; then
+    ( apt-get install -y python3-pynacl 2>/dev/null \
+        || pip3 install --break-system-packages pynacl 2>/dev/null \
+        || pip3 install pynacl 2>/dev/null ) \
+      || { echo "PyNaCl unavailable — LLM node needs it for signed receipts; skipping."; INSTALL_LLM=""; }
+  fi
+fi
+
+if [ -n "$INSTALL_LLM" ]; then
+  LLM_BACKEND_SEL="mock"
+  LLM_MODEL_SEL="${LLM_MODEL:-qwen2.5:1.5b}"
+  PRICE_QZ_SEL="${PRICE_QZ:-0.5}"
+
+  case "$INSTALL_LLM" in
+    ollama) command -v ollama >/dev/null 2>&1 || {
+              echo "Installing Ollama (can take a few minutes)…"
+              curl -fsSL https://ollama.com/install.sh | sh \
+                || echo "Ollama install failed — falling back to mock backend"
+            } ;;
+  esac
+  if command -v ollama >/dev/null 2>&1; then
+    echo "Pulling model $LLM_MODEL_SEL …"
+    ollama pull "$LLM_MODEL_SEL" \
+      && LLM_BACKEND_SEL="ollama" \
+      || echo "Model pull failed — staying on mock backend"
+  fi
+
+  cp "$DIR/quartz-llm.service" /etc/systemd/system/
+  mkdir -p /etc/systemd/system/quartz-llm.service.d
+  cat > /etc/systemd/system/quartz-llm.service.d/10-config.conf <<EOF
+[Service]
+Environment=LLM_BACKEND=$LLM_BACKEND_SEL
+Environment=LLM_MODEL=$LLM_MODEL_SEL
+Environment=PRICE_QZ=$PRICE_QZ_SEL
+EOF
+  systemctl daemon-reload
+  systemctl enable quartz-llm >/dev/null 2>&1 || true
+  systemctl restart quartz-llm
+  command -v ufw >/dev/null && ufw allow 8788/tcp >/dev/null 2>&1 || true
+  sleep 2
+
+  LLM_ADDR=$(python3 -c "import json;print(json.load(open('$DEST/llm-node-key.json'))['address'])" 2>/dev/null || true)
+  echo "✅ LLM node on port 8788 (backend=$LLM_BACKEND_SEL model=$LLM_MODEL_SEL price=$PRICE_QZ_SEL QZ)"
+  if [ -n "$LLM_ADDR" ]; then
+    echo "   Pay-to: $LLM_ADDR"
+  fi
+  echo "   Price:  curl http://localhost:8788/price"
+  echo "   Logs:   journalctl -u quartz-llm -f"
 fi
 
 sleep 2

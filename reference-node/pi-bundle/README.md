@@ -40,6 +40,39 @@ That's it. The installer:
 
 Verify: `curl http://localhost:21100/api/v1/info` → JSON with chain height.
 
+## Optional: LLM node flavor (sell inference for QZ)
+
+The bundle ships `llm_node.py` — the validated "village LLM" from spike 001.
+A gateway Pi sells local-model completions for QZ with **no escrow, no trusted
+third party**: the customer pays the node's Quartz address (an ordinary
+on-chain transaction from any wallet), the node verifies the payment against
+the chain's own API (single-use txids — replay-proof), then answers with the
+completion plus an **Ed25519-signed receipt** anyone can verify offline.
+
+Enable it at install time:
+
+```bash
+sudo INSTALL_LLM=ollama bash install.sh   # real inference: installs Ollama + pulls model
+sudo INSTALL_LLM=mock    bash install.sh   # demo backend, zero deps, any Pi
+sudo bash install.sh                      # interactive prompt (answer y)
+sudo PRICE_QZ=0.25 LLM_MODEL=qwen2.5:1.5b INSTALL_LLM=ollama bash install.sh
+```
+
+What you get:
+
+- `quartz-llm.service` on port **8788**, verified payments at 0.5 QZ/request
+  (configurable), backend defaults to Ollama + `qwen2.5:1.5b` when available
+- Endpoints: `GET /price` → `{pay_to, price}` · `POST /request {prompt}` →
+  `{job_id}` · pay via any wallet · `POST /claim {job_id, txid}` →
+  completion + receipt · `POST /verify {receipt}` — offline, by anyone
+- The node's wallet (`/opt/quartz-node/llm-node-key.json`) is generated on
+  first start; reinstalls never clobber it, earnings accumulate on-chain
+- Customers on your LAN (or the internet if you expose :8788) can pay from
+  the Quartz Android/web wallet — the receipt proves what they bought
+
+It reads the chain through the local `quartz-node` service, so it works even
+when the upstream network is down (autonomous failover mode).
+
 ## Continuous chain sync (p2p)
 
 The service syncs continuously via `QUARTZ_PEERS` — **no cron, no seed

@@ -35,7 +35,12 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "reference-node"))
+# Portable layout: in the Pi bundle, quartz/ sits NEXT TO this file;
+# in the repo spike, it lives two dirs up in reference-node/.
+for _cand in (HERE, os.path.join(HERE, "..", "..", "reference-node")):
+    if os.path.isdir(os.path.join(_cand, "quartz")):
+        sys.path.insert(0, _cand)
+        break
 from quartz.crypto import create_new_wallet, sign_message, verify_signature  # noqa: E402
 
 NODE_URL = os.environ.get("NODE_URL", "http://127.0.0.1:21100")

@@ -16,7 +16,10 @@ cp -r reference-node/quartz "$STAGE/"
 cp reference-node/testnet.py "$STAGE/"
 cp reference-node/pi-bundle/install.sh \
    reference-node/pi-bundle/quartz-node.service \
+   reference-node/pi-bundle/quartz-llm.service \
    reference-node/pi-bundle/README.md "$STAGE/"
+# LLM node flavor (spike 001) — install.sh enables it via INSTALL_LLM=…
+cp spikes/001-llm-node/llm_node.py "$STAGE/"
 
 # Chain snapshot: bake the live node's current chain so fresh installs start at
 # the tip. (Reinstalls never clobber existing on-Pi chain data — install.sh.)

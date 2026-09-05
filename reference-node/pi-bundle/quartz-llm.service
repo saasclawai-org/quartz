@@ -1,0 +1,29 @@
+[Unit]
+Description=Quartz LLM node — pay-per-request local inference for QZ
+After=network-online.target quartz-node.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/quartz-node/llm_node.py
+WorkingDirectory=/opt/quartz-node
+# Chain API = the local quartz-node service
+Environment=NODE_URL=http://127.0.0.1:21100
+# Backend: mock | ollama | openai (override via drop-in, see install.sh)
+Environment=LLM_BACKEND=mock
+Environment=LLM_MODEL=qwen2.5:1.5b
+Environment=LLM_URL=http://127.0.0.1:11434
+Environment=PRICE_QZ=0.5
+Environment=PORT=8788
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=10
+FinalKillSignal=SIGKILL
+# Hardening (mirrors quartz-node.service)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
