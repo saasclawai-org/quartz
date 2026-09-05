@@ -262,9 +262,11 @@ async function claim(txid) {
       : '<span class="err">✗ signature INVALID</span>';
   } catch (e) {
     claimTries++;
-    if (e.message.includes('not confirmed') && claimTries < 25) {
-      $('pay-state').innerHTML = '<span class="dot"></span>payment seen — waiting for confirmation…';
-      setTimeout(() => claim(txid), 6000);   // retry until the block lands
+    // "not confirmed" = block not mined yet; "not found" = the node's chain
+    // copy is a few seconds behind — both transient, keep trying
+    if ((e.message.includes('not confirmed') || e.message.includes('not found')) && claimTries < 25) {
+      $('pay-state').innerHTML = '<span class="dot"></span>payment seen — waiting for the network to catch up…';
+      setTimeout(() => claim(txid), 6000);   // retry until the block lands + syncs
       return;
     }
     $('pay-state').innerHTML = '<span class="err">✗ ' + e.message + '</span>' +
