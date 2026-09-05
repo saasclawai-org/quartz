@@ -1,12 +1,12 @@
 {
   "name": "Quartz Miner",
-  "version": "0.4.16",
+  "version": "0.4.17",
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "../../downloads/quartz-esp32-merged-v089.bin",
+          "path": "../../downloads/quartz-esp32-merged-v0892.bin",
           "offset": 0
         }
       ]
@@ -30,6 +30,6 @@
       ]
     }
   ],
-  "notes": "0.4.16 (v089.2): stats CCCD added — wallet address + live stats display after connect. C3 at v089.2; classic ESP32 table fix pending; S3 pending.",
+  "notes": "0.4.17 (v089.2): classic ESP32 GATT table fixed — service discoverable + stats CCCD (parity with C3). All BLE boards now pair. S3 pending.",
   "new_install_prompt_erase": false
 }
