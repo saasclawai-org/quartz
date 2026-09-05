@@ -9,7 +9,7 @@
 // the reload+unlock path too).
 // Shell strategy is now stale-while-revalidate: serve cache instantly,
 // fetch the fresh copy in the background, and swap it in for next load.
-const CACHE_NAME = 'quartz-wallet-v9';
+const CACHE_NAME = 'quartz-wallet-v10';
 const ASSETS = [
     '/wallet/',
     '/wallet/manifest.json',

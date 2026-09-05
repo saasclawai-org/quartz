@@ -658,6 +658,18 @@
                 renderWallet();
             } catch (e) {
                 console.log('Balance refresh failed:', e.message);
+                // Never show a fake zero: if the node is unreachable and no
+                // balance has loaded yet, say so — and make it tappable.
+                if (!wallet.balance) {
+                    const el = document.getElementById('balance');
+                    if (el) {
+                        el.textContent = 'offline · tap to retry';
+                        el.style.cursor = 'pointer';
+                        el.onclick = () => { el.textContent = '…'; refreshBalance(); };
+                        const unit = el.parentElement && el.parentElement.querySelector('.unit');
+                        if (unit) unit.style.display = 'none';
+                    }
+                }
             }
         }
 
@@ -1229,7 +1241,12 @@
             document.getElementById('wallet-main').style.display = 'block';
             document.getElementById('header-settings').style.display = 'inline';
             document.getElementById('header-lock').style.display = (wallet.locked || !wallet.privateKey) ? 'none' : 'inline';
-            document.getElementById('balance').textContent = (wallet.balance / 1e8).toFixed(8);
+            const balEl = document.getElementById('balance');
+            balEl.textContent = (wallet.balance / 1e8).toFixed(8);
+            balEl.onclick = null;
+            balEl.style.cursor = '';
+            const balUnit = balEl.parentElement && balEl.parentElement.querySelector('.unit');
+            if (balUnit) balUnit.style.display = '';
             document.getElementById('address').textContent = wallet.address.slice(0, 10) + '...' + wallet.address.slice(-6);
 
             // Resolve on-chain name for this address (NAME:REGISTER messages)
@@ -1367,7 +1384,7 @@
             // ?v= pins the SW version — CDNs (Cloudflare) cache sw.js for
             // hours and would hold the old worker hostage. Bump with every
             // wallet deploy (must match CACHE_NAME in sw.js).
-            navigator.serviceWorker.register('sw.js?v=9').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=10').catch(() => {});
         }
         // Load signing crypto (nacl + wordlist) on EVERY path — the
         // reload-and-unlock journey never imported anything, so nacl stayed
