@@ -663,7 +663,7 @@
                 if (!wallet.balance) {
                     const el = document.getElementById('balance');
                     if (el) {
-                        el.textContent = 'offline · tap to retry';
+                        el.textContent = 'offline (' + (e.message || '?') + ') · retry';
                         el.style.cursor = 'pointer';
                         el.onclick = () => { el.textContent = '…'; refreshBalance(); };
                         const unit = el.parentElement && el.parentElement.querySelector('.unit');
@@ -1384,7 +1384,7 @@
             // ?v= pins the SW version — CDNs (Cloudflare) cache sw.js for
             // hours and would hold the old worker hostage. Bump with every
             // wallet deploy (must match CACHE_NAME in sw.js).
-            navigator.serviceWorker.register('sw.js?v=10').catch(() => {});
+            navigator.serviceWorker.register('sw.js?v=11').catch(() => {});
         }
         // Load signing crypto (nacl + wordlist) on EVERY path — the
         // reload-and-unlock journey never imported anything, so nacl stayed
