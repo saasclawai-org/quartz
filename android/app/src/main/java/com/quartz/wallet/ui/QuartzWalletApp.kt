@@ -907,6 +907,26 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
     // v0.2.23: BT onboarding — unconfirmed miners show their seed right here
     val seedWords = androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 
+    // v0.2.26: on-chain stats (API-first — the main Miner view)
+    val chainStats = androidx.compose.runtime.mutableStateOf<SoftwareWallet.MinerStats?>(null)
+    val chainErr = androidx.compose.runtime.mutableStateOf<String?>(null)
+    val walletAddr = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    // v0.2.26: on-chain stats poller — the main Miner view, works anywhere
+    val actx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        while (true) {
+            val addr = SoftwareWallet.load(actx)?.third
+            if (addr != null) {
+                walletAddr.value = addr
+                SoftwareWallet.fetchMinerStats(addr)
+                    .onSuccess { chainStats.value = it; chainErr.value = null }
+                    .onFailure { chainErr.value = it.message }
+            }
+            kotlinx.coroutines.delay(15000)
+        }
+    }
+
     // Set up BLE callbacks
     LaunchedEffect(Unit) {
         bleManager.onSeedRead = { words ->
@@ -949,6 +969,39 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
         Spacer(Modifier.height(8.dp))
         Text("Quartz Miner", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
+
+        // v0.2.26: ON-CHAIN — the main Miner view (API, works anywhere)
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = QuartzCard),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🌐 On-chain", color = QuartzAccent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (chainStats.value?.online == true) "● online" else "○ offline",
+                        color = if (chainStats.value?.online == true) QuartzAccent else QuartzMuted,
+                        fontSize = 11.sp
+                    )
+                }
+                walletAddr.value?.let {
+                    Text(it, fontSize = 10.sp, color = QuartzMuted,
+                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                }
+                val st = chainStats.value
+                if (st != null) {
+                    StatRow("Blocks Mined", "${st.blocksMined}")
+                    StatRow("Rewards", "%,.1f QZ".format(st.rewardsQz))
+                    StatRow("Last Block", st.lastBlockHeight?.let { "#$it" } ?: "—")
+                    StatRow("Live Hashrate", "${st.liveHashrate} H/s")
+                    StatRow("Chain Height", "${st.chainHeight}")
+                } else {
+                    Text(chainErr.value?.let { "node: $it" } ?: "loading…", color = QuartzMuted, fontSize = 13.sp)
+                }
+            }
+        }
 
         // v0.2.23: BT onboarding — new miner: read + confirm the seed here
         seedWords.value?.let { words ->
@@ -1011,7 +1064,7 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
         if (!isConnected && stats == null) {
             // Not connected — show pair button
             Text(
-                "Connect to your ESP32 miner via Bluetooth",
+                "📡 Local — connect your ESP32 miner via Bluetooth",
                 color = QuartzMuted, fontSize = 15.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 24.dp)
             )

@@ -1255,6 +1255,66 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                 'total_hashrate': total_hps,
             })
 
+        elif path.startswith('/api/v1/miner/') and path.endswith('/stats'):
+            """GET /api/v1/miner/{address}/stats — mining stats by WALLET
+            address (API-first Miner view; BLE is the local panel).
+
+            On-chain half: scan blocks whose coinbase pays this address
+            (coinbase v2 embeds the payout — any node derives it from block
+            data alone). Live half: the node's miner_stats (self-reported
+            hashrate from /mining/work + /mining/submit, 10-min staleness).
+            """
+            parts = path.split('/')
+            address = parts[4] if len(parts) > 4 else ''
+            addr_b = address.encode()
+
+            blocks_mined = 0
+            rewards_total = 0
+            last_height = None
+            last_time = None
+            first_time = None
+            for i, block in enumerate(self.chain.blocks):
+                if not block.transactions:
+                    continue
+                # Coinbase is always transactions[0]
+                amt = sum(a for a, script in block.transactions[0].outputs
+                          if script == addr_b)
+                if amt > 0:
+                    blocks_mined += 1
+                    rewards_total += amt
+                    ts = block.header.timestamp
+                    last_height = i
+                    last_time = ts
+                    if first_time is None:
+                        first_time = ts
+
+            # Live (volatile) stats — self-reported via /mining/work
+            live = {'hashrate': 0, 'online': False,
+                    'last_submit_ago_s': None, 'uptime_s': 0}
+            now = time.time()
+            for v in getattr(self.chain, 'miner_stats', {}).values():
+                if v.get('address', '') == address:
+                    ago = now - v.get('last_submit', 0)
+                    live = {
+                        'hashrate': v.get('hashrate', 0),
+                        'last_submit_ago_s': int(ago),
+                        'uptime_s': int(now - v.get('first_seen', now)),
+                        'online': ago <= 600,
+                    }
+                    break
+
+            self.json_response({
+                'address': address,
+                'blocks_mined': blocks_mined,
+                'rewards_total_sats': rewards_total,
+                'rewards_total_qz': rewards_total / 1e8,
+                'last_block_height': last_height,
+                'last_block_time': last_time,
+                'first_block_time': first_time,
+                'chain_height': len(self.chain.blocks) - 1,
+                'live': live,
+            })
+
         else:
             self.json_error(404, "Not found")
 

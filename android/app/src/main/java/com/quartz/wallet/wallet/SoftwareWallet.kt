@@ -110,6 +110,41 @@ object SoftwareWallet {
     }
 
     // ------------------------------------------------------------------
+    // Mining stats (API-first Miner view — Norman's architecture call)
+    // ------------------------------------------------------------------
+
+    data class MinerStats(
+        val blocksMined: Int,
+        val rewardsQz: Double,
+        val lastBlockHeight: Int?,
+        val lastBlockTime: Long?,
+        val chainHeight: Int,
+        val liveHashrate: Int,
+        val online: Boolean
+    )
+
+    /** GET /api/v1/miner/{address}/stats — on-chain mining stats by wallet address. */
+    suspend fun fetchMinerStats(address: String): Result<MinerStats> = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url("$NODE_URL/api/v1/miner/$address/stats").build()
+            http.newCall(req).execute().use { resp ->
+                check(resp.isSuccessful) { "node returned HTTP ${resp.code}" }
+                val body = JSONObject(resp.body!!.string())
+                val live = body.optJSONObject("live")
+                MinerStats(
+                    blocksMined = body.optInt("blocks_mined", 0),
+                    rewardsQz = body.optDouble("rewards_total_qz", 0.0),
+                    lastBlockHeight = if (body.isNull("last_block_height")) null else body.optInt("last_block_height"),
+                    lastBlockTime = if (body.isNull("last_block_time")) null else body.optLong("last_block_time"),
+                    chainHeight = body.optInt("chain_height", 0),
+                    liveHashrate = live?.optInt("hashrate", 0) ?: 0,
+                    online = live?.optBoolean("online", false) ?: false
+                )
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
     // On-chain name registry (NAME:REGISTER messages)
     // ------------------------------------------------------------------
 
