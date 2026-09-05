@@ -52,9 +52,10 @@ svg text { fill: var(--muted); font-size: 11px; font-family: system-ui, sans-ser
   <div class="card" id="main">
     <div id="idle">
       <h2 id="devname">relay-01</h2>
-      <p class="muted">Simulated relay — the browser plays the device. On real hardware an
-      ESP32 or Raspberry Pi drives the GPIO relay with
-      <a href="https://github.com/saasclawai-org/quartz" target="_blank">the same flow</a>.</p>
+      <p class="muted"><b>Real hardware.</b> A Quartz board with a relay module watches this
+      wallet on-chain — your payment closes the circuit, in the browser and in the flesh.
+      The board mines with this wallet too; mining rewards never trigger the relay —
+      only payments do.</p>
       <button class="btn" id="buy">Energize — <span id="price">0.5</span> QZ / <span id="mins">10</span> min</button>
     </div>
     <div id="flow" style="display:none">
@@ -91,8 +92,10 @@ svg text { fill: var(--muted); font-size: 11px; font-family: system-ui, sans-ser
     <button class="btn ghost" id="extend" style="display:none;margin-top:10px">➕ Extend session (pay again)</button>
   </div>
 
-  <p class="muted">Every device gets its own wallet — this relay's address is dedicated to it.
-  Real-hardware version: <code>demos/pay_demo.py</code> on GitHub (Raspberry Pi GPIO, no browser).</p>
+  <p class="muted">This relay's wallet is a real board wallet — it mines and takes payments
+  on the same address (rewards are filtered out; only payments trip the relay).
+  Want your own? <code>demos/pay_demo.py</code> on GitHub runs the same flow on any
+  Raspberry Pi GPIO.</p>
   <p style="text-align:center"><a href="/demos/">← All Quartz demos</a></p>
 
   <footer>🔮 Quartz testnet demo — machine payments for hobby hardware</footer>
@@ -100,7 +103,7 @@ svg text { fill: var(--muted); font-size: 11px; font-family: system-ui, sans-ser
 
 <script>
 const qs = new URLSearchParams(location.search);
-const ADDRESS  = qs.get('address')  || 'Qqm9bbgCqB7HrQY92QV5PtbmFBYJ4g45wd'; // dedicated testnet relay wallet
+const ADDRESS  = qs.get('address')  || 'Qq82MvBbjUwhQ3BjD7Z9Rs8XGSc1JZmWgi'; // real relay board wallet
 const PRICE    = parseFloat(qs.get('price') || '0.5');
 const DURATION = parseInt(qs.get('duration') || '600', 10);
 const DEVICE   = qs.get('device') || 'relay-01';
@@ -183,6 +186,7 @@ async function watchPayments() {
   for (const t of (d.transactions || [])) {
     if (seenTxids.has(t.txid)) continue;
     seenTxids.add(t.txid);
+    if (t.type === 'coinbase') continue;          // mining rewards ≠ payments
     if (t.direction !== 'in' || t.timestamp < reqTime) continue;
     if (!t.counterparty || t.amount_sats < PRICE * 1e8) continue;
     gotPayment(t);
