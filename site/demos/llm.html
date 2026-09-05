@@ -210,15 +210,16 @@ function copyAddr() {
 }
 
 // ── 2 · pay (watch the chain for the tx) ─────────────────────
-const seen = new Set();
+// Keep polling the SAME txid from 0-conf until its block lands
+// (the tx flips pending:false once mined) — then claim.
+let myTxid = null;
 async function watch() {
   try {
     const d = await api('/api/v1/address/' + job.pay_to + '/txs?min_amount=' + job.price_sats);
     for (const t of (d.txs || [])) {
-      if (seen.has(t.txid)) continue;
-      seen.add(t.txid);
-      if (t.timestamp < reqTime - 30) continue;   // old txs from earlier visitors
-      if ((t.amount || 0) < job.price_sats) continue;
+      if (myTxid ? t.txid !== myTxid
+                 : (t.timestamp < reqTime - 30 || (t.amount || 0) < job.price_sats)) continue;
+      myTxid = t.txid;
       $('txid').value = t.txid;
       if (t.pending) {
         $('pay-state').innerHTML = '<span class="dot"></span>payment seen (0-conf) — waiting for the ~30 s block…';
