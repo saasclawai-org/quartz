@@ -561,6 +561,29 @@ class QuartzBLEManager(private val context: Context) {
         }
     }
 
+    /* v0.2.29: total-silence detection — any read callback proves the GATT
+     * queue is alive; none within the window means wedged → close + one
+     * recovery reconnect (capped at 2 per app run). */
+    private var gotAnyRead = false
+    private var stallReconnects = 0
+    private val stallWatchdog = Runnable {
+        val dev = connectedDevice
+        val gatt = connectedGatt
+        if (!gotAnyRead && gatt != null && dev != null && stallReconnects < 2) {
+            stallReconnects++
+            Log.w(TAG, "GATT stall: no reads answered — recovery reconnect $stallReconnects/2")
+            connectionState.value = "recovering stalled GATT…"
+            try { gatt.disconnect(); gatt.close() } catch (_: Exception) {}
+            handler.postDelayed({ connect(dev) }, 800)
+        }
+    }
+
+    private fun scheduleStallWatchdog() {
+        handler.removeCallbacks(stallWatchdog)
+        gotAnyRead = false
+        handler.postDelayed(stallWatchdog, 6500)
+    }
+
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -628,23 +651,17 @@ class QuartzBLEManager(private val context: Context) {
                 Log.w(TAG, "createBond failed: ${e.message}")
             }
 
-            // v0.2.14: Android queues exactly ONE GATT operation — the address
-            // read must wait for the CCCD write to complete (onDescriptorWrite
-            // below) or it silently dies.
-            var cccdWriteStarted = false
-            statsCharacteristic?.let { char ->
-                gatt.setCharacteristicNotification(char, true)
-                val cccd = char.descriptors.find { it.uuid == CCCD_UUID }
-                cccd?.let {
-                    it.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    cccdWriteStarted = gatt.writeDescriptor(it)
-                }
-            }
+            /* v0.2.29: the connect-time CCCD descriptor write is GONE.
+             * Stats are POLLED (v0.2.25+) and notifications are never used —
+             * but a pending descriptor write wedges Android's one-operation
+             * GATT queue forever: bonded, "connected", every read silently
+             * dropped (the all-silent screen). Local registration only. */
+            statsCharacteristic?.let { gatt.setCharacteristicNotification(it, true) }
+            addrChar?.let { gatt.readCharacteristic(it) }
 
-            if (!cccdWriteStarted) {
-                // No CCCD to write — safe to read the address right away
-                addrChar?.let { gatt.readCharacteristic(it) }
-            }
+            // v0.2.29: stall watchdog — if nothing comes back within 6.5s of
+            // discovery, the queue is wedged: one clean recovery reconnect.
+            scheduleStallWatchdog()
 
             onConnectionChange?.invoke(true)
         }
@@ -689,6 +706,7 @@ class QuartzBLEManager(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             status: Int
         ) {
+            gotAnyRead = true   // v0.2.29: queue alive — stall watchdog stands down
             if (status != BluetoothGatt.GATT_SUCCESS) return
             val data = characteristic.value
             when (characteristic.uuid) {
@@ -750,6 +768,7 @@ class QuartzBLEManager(private val context: Context) {
             value: ByteArray,
             status: Int
         ) {
+            gotAnyRead = true   // v0.2.29: queue alive — stall watchdog stands down
             if (status != BluetoothGatt.GATT_SUCCESS) return
             when (characteristic.uuid) {
                 ADDRESS_UUID -> {
