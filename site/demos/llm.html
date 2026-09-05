@@ -221,13 +221,11 @@ async function watch() {
                  : (t.timestamp < reqTime - 30 || (t.amount || 0) < job.price_sats)) continue;
       myTxid = t.txid;
       $('txid').value = t.txid;
-      if (t.pending) {
-        $('pay-state').innerHTML = '<span class="dot"></span>payment seen (0-conf) — waiting for the ~30 s block…';
-      } else {
-        $('pay-state').innerHTML = '<span class="dot green"></span>payment confirmed — claiming…';
-        clearInterval(payTimer);
-        claim(t.txid);
-      }
+      $('pay-state').innerHTML = t.pending
+        ? '<span class="dot green"></span>payment seen (0-conf) — claiming…'
+        : '<span class="dot green"></span>payment confirmed — claiming…';
+      clearInterval(payTimer);
+      claim(t.txid);
       return;
     }
   } catch (e) { /* transient — keep watching */ }

@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 import secrets
 import urllib.request
@@ -44,6 +45,16 @@ for _cand in (HERE, os.path.join(HERE, "..", "..", "reference-node")):
 from quartz.crypto import create_new_wallet, sign_message, verify_signature  # noqa: E402
 
 NODE_URL = os.environ.get("NODE_URL", "http://127.0.0.1:21100")
+# Well-connected node used for the 0-conf fast path: the local node's
+# mempool may never see a tx that was broadcast elsewhere, but the seed
+# sees it within ~2 s. Local node stays the confirmation authority.
+# Set NODE_FALLBACK_URL="" to disable (fully offline operation).
+NODE_FALLBACK_URL = os.environ.get(
+    "NODE_FALLBACK_URL", "https://quartzchain.net")
+# Payments up to this cap may claim on 0-conf (mempool) — retail risk
+# model: tiny exposures don't wait ~30 s for a block. Above it: a
+# confirmation is required.
+ZEROCONF_MAX_SATS = int(float(os.environ.get("ZEROCONF_MAX_QZ", "10")) * 1e8)
 LLM_BACKEND = os.environ.get("LLM_BACKEND", "mock")
 LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:11434")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:1.5b")
@@ -77,37 +88,65 @@ def canonical(payload: dict) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
 
 def http_json(url, body=None, timeout=30):
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; quartz-llm-node/1.0)"}
+    # ^ Cloudflare 403s bare Python-urllib UAs; the fallback node sits
+    # behind CF, so identify as a real client or the fast path dies.
     if body is None:
-        req = urllib.request.Request(url)
+        req = urllib.request.Request(url, headers=headers)
     else:
         req = urllib.request.Request(
             url, data=json.dumps(body).encode(),
-            headers={"Content-Type": "application/json"})
+            headers={**headers, "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
-def check_payment(txid: str):
-    """Verify txid paid PAY_TO at least PRICE_SATS, confirmed, on-chain.
-
-    Returns (ok, detail)."""
+def _find_tx(base_url, txid):
+    """Search PAY_TO's tx list on one node. Returns (status, tx, detail):
+    ok = confirmed · pending = in mempool · no = seen but rejected."""
     try:
         info = http_json(
-            f"{NODE_URL}/api/v1/address/{PAY_TO}/txs?min_amount={PRICE_SATS}")
+            f"{base_url}/api/v1/address/{PAY_TO}/txs?min_amount={PRICE_SATS}")
     except Exception as e:
-        return False, f"node query failed: {e}"
+        return "error", None, f"node query failed: {e}"
     for tx in info.get("txs", []):
         chain_txid = str(tx.get("txid", ""))
         if not (chain_txid == txid or chain_txid.startswith(txid)
                 or txid.startswith(chain_txid)):
             continue
         if tx.get("direction", "in") != "in":
-            return False, "tx is outgoing, not a payment"
-        if tx.get("confirmed") is False or tx.get("pending") is True:
-            return False, "tx not confirmed yet"
+            return "no", tx, "tx is outgoing, not a payment"
         if int(tx.get("amount", 0)) < PRICE_SATS:
-            return False, f"tx underpaid ({tx.get('amount')} < {PRICE_SATS})"
-        return True, tx
-    return False, "txid not found for this address"
+            return "no", tx, f"tx underpaid ({tx.get('amount')} < {PRICE_SATS})"
+        if tx.get("confirmed") is False or tx.get("pending") is True:
+            return "pending", tx, "tx not confirmed yet (in mempool)"
+        return "ok", tx, "confirmed"
+    return "missing", None, "txid not found for this address"
+
+
+def check_payment(txid: str):
+    """Verify txid paid PAY_TO at least PRICE_SATS.
+
+    Confirmed on the local node always works. Small payments may also claim
+    0-conf — from the local mempool or, failing that, the seed node's: the
+    local node often never sees a tx that was broadcast elsewhere, but the
+    seed's mempool has it within ~2 s. Exposure is capped by
+    ZEROCONF_MAX_SATS; anything above the cap waits for a real block.
+    Returns (ok, detail)."""
+    detail = "txid not found for this address"
+    for base in (NODE_URL, NODE_FALLBACK_URL):
+        if not base:
+            continue
+        status, tx, d = _find_tx(base, txid)
+        if status == "ok":
+            return True, tx
+        if status == "pending" and tx \
+                and int(tx.get("amount", 0)) <= ZEROCONF_MAX_SATS:
+            return True, {**tx, "zero_conf": True}
+        if status == "no":
+            return False, d          # seen and rejected: definitive
+        if d:
+            detail = d
+    return False, detail
 
 def run_backend(prompt: str) -> str:
     if LLM_BACKEND == "mock":
@@ -126,6 +165,29 @@ def run_backend(prompt: str) -> str:
                       timeout=300)
         return r["choices"][0]["message"]["content"].strip()
     raise RuntimeError(f"unknown backend {LLM_BACKEND}")
+
+_warm_lock = threading.Lock()
+
+
+def warm_model():
+    """Preload the model while the customer pays — Ollama's cold load is
+    ~15-20 s on a Pi, so overlap it with the payment window instead of
+    paying it afterwards. Best-effort: failures are ignored."""
+    if LLM_BACKEND != "ollama" or not _warm_lock.acquire(blocking=False):
+        return
+
+    def _go():
+        try:
+            http_json(f"{LLM_URL}/api/generate",
+                      {"model": LLM_MODEL, "prompt": "hi", "stream": False,
+                       "options": {"num_predict": 1}}, timeout=180)
+        except Exception:
+            pass                      # warm-up is best-effort
+        finally:
+            _warm_lock.release()
+
+    threading.Thread(target=_go, daemon=True).start()
+
 
 class Handler(BaseHTTPRequestHandler):
     def route(self):
@@ -171,7 +233,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/price":
             self.reply(200, {"price_qz": PRICE_QZ, "price_sats": PRICE_SATS,
                              "pay_to": PAY_TO, "model": LLM_MODEL,
-                             "backend": LLM_BACKEND})
+                             "backend": LLM_BACKEND,
+                             "zeroconf_max_qz": ZEROCONF_MAX_SATS / 1e8})
         elif path == "/identity":
             self.reply(200, {"address": PAY_TO,
                              "public_key": IDENTITY["public_key"]})
@@ -194,6 +257,7 @@ class Handler(BaseHTTPRequestHandler):
             JOBS[job_id] = {"prompt": prompt, "created": time.time(),
                             "claimed_txid": None}
             print(f"[llm-node] job {job_id} created", flush=True)
+            warm_model()              # hide the model's cold load in the pay window
             return self.reply(200, {"job_id": job_id, "pay_to": PAY_TO,
                                     "price_qz": PRICE_QZ,
                                     "price_sats": PRICE_SATS,
@@ -232,7 +296,8 @@ class Handler(BaseHTTPRequestHandler):
             sig = sign_message(bytes.fromhex(IDENTITY["private_key"]),
                                canonical(receipt))
             receipt["signature"] = sig.hex()
-            print(f"[llm-node] job {job_id} claimed via {txid[:16]}…",
+            print(f"[llm-node] job {job_id} claimed via {txid[:16]}… "
+                  f"({'0-conf' if isinstance(detail, dict) and detail.get('zero_conf') else 'confirmed'})",
                   flush=True)
             return self.reply(200, {"completion": completion,
                                     "receipt": receipt})
