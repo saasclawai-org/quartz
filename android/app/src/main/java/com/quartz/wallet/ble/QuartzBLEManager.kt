@@ -451,7 +451,21 @@ class QuartzBLEManager(private val context: Context) {
             return
         }
         Log.i(TAG, "Reading seed phrase from device")
+        /* v0.2.28: Android queues ONE GATT op — the stats poller can eat
+         * this read (the reason fresh boards showed no seed at all).
+         * Watchdog retries until the read is actually answered. */
+        seedReadRetries++
+        handler.removeCallbacks(seedReadWatchdog)
+        handler.postDelayed(seedReadWatchdog, 2500)
         gatt.readCharacteristic(seedChar)
+    }
+
+    private var seedReadRetries = 0
+    private val seedReadWatchdog = Runnable {
+        if (connectedGatt != null && seedReadRetries < 4) {
+            Log.w(TAG, "Seed read unanswered (eaten by GATT queue?) — retry $seedReadRetries/4")
+            readSeedPhrase()
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -465,13 +479,44 @@ class QuartzBLEManager(private val context: Context) {
             onError?.invoke("Confirm characteristic not found")
             return
         }
-        // Write 3 bytes to confirm (firmware accepts any 3-byte write).
-        // v0.2.27: success is reported by onCharacteristicWrite — the old
-        // code fired onSeedConfirmed before the device ever answered.
-        confirmChar.value = byteArrayOf(1, 2, 3)
-        confirmChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        gatt.writeCharacteristic(confirmChar)
-        Log.i(TAG, "Seed confirmation sent — awaiting device ack")
+        /* v0.2.28: pause the stats poller (one GATT op at a time — it eats
+         * single-shot writes), then send with a retry watchdog until the
+         * device actually acks. v0.2.27: success is only reported by
+         * onCharacteristicWrite, never optimistically. */
+        handler.removeCallbacks(statsPoller)
+        confirmRetries = 0
+        Log.i(TAG, "Seed confirmation: stats poller paused, sending")
+        sendConfirmWatchdog(gatt, confirmChar)
+    }
+
+    private var confirmRetries = 0
+    private val confirmWatchdog = object : Runnable {
+        override fun run() {
+            val gatt = connectedGatt
+            val ch = gatt?.getService(SERVICE_UUID)?.getCharacteristic(CONFIRM_UUID)
+            if (ch == null || confirmRetries >= 5) {
+                onError?.invoke("Seed confirm not acknowledged — tap Check again or reconnect")
+                resumeStatsPoller()
+                return
+            }
+            Log.w(TAG, "Confirm write unanswered — retry $confirmRetries/5")
+            sendConfirmWatchdog(gatt, ch)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun sendConfirmWatchdog(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic) {
+        confirmRetries++
+        ch.value = byteArrayOf(1, 2, 3)   // firmware accepts any 3-byte write
+        ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        gatt.writeCharacteristic(ch)
+        handler.removeCallbacks(confirmWatchdog)
+        handler.postDelayed(confirmWatchdog, 1500)
+    }
+
+    private fun resumeStatsPoller() {
+        handler.removeCallbacks(confirmWatchdog)
+        if (connectedGatt != null) handler.postDelayed(statsPoller, 3000)
     }
 
     /* v0.2.23: BT onboarding — after connect, wait for the pairing bond to
@@ -660,6 +705,9 @@ class QuartzBLEManager(private val context: Context) {
                     }
                 }
                 SEED_UUID -> {
+                    // v0.2.28: read answered — stop the retry watchdog
+                    handler.removeCallbacks(seedReadWatchdog)
+                    seedReadRetries = 0
                     // Parse 12 words from packed char[12][12] array
                     if (data == null || data.isEmpty()) {
                         Log.w(TAG, "Seed phrase empty (already confirmed)")
@@ -717,6 +765,8 @@ class QuartzBLEManager(private val context: Context) {
                     }
                 }
                 SEED_UUID -> {
+                    handler.removeCallbacks(seedReadWatchdog)
+                    seedReadRetries = 0
                     if (value.isEmpty()) {
                         Log.w(TAG, "Seed phrase empty (already confirmed)")
                         onSeedRead?.invoke(emptyList())
@@ -776,6 +826,7 @@ class QuartzBLEManager(private val context: Context) {
                     }
                     CONFIRM_UUID -> {
                         onError?.invoke("Seed confirm rejected by device (GATT error $status) — still bonded?")
+                        resumeStatsPoller()
                     }
                 }
                 return
@@ -816,6 +867,8 @@ class QuartzBLEManager(private val context: Context) {
                 }
                 CONFIRM_UUID -> {
                     Log.i(TAG, "Seed confirmation acknowledged by device")
+                    handler.removeCallbacks(confirmWatchdog)
+                    resumeStatsPoller()
                     onSeedConfirmed?.invoke()
                 }
                 SEED_UUID -> {
