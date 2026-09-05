@@ -64,6 +64,7 @@ a { color: var(--accent); }
   <div class="card step on" id="step-ask">
     <h2 style="margin-top:0;">1 · Ask</h2>
     <p class="muted">Type a prompt. The node quotes a price and gives you a job.</p>
+    <div id="model-row" style="display:none;margin:0 0 10px;"></div>
     <textarea id="prompt">Give me one sentence on why peer-to-peer cash matters.</textarea>
     <div style="margin-top:12px;">
       <button class="btn" id="btn-ask" onclick="createJob()">Create job →</button>
@@ -133,6 +134,17 @@ sudo INSTALL_LLM=ollama bash install.sh   # real model
 const DEFAULT_BASE = 'https://pi.quartzchain.net/llm';
 let BASE = localStorage.getItem('llm-node-base') || DEFAULT_BASE;
 let job = null, reqTime = 0, payTimer = null, claimTries = 0;
+let MODELS = null, SEL_MODEL = null;
+function renderModels(models, def) {
+  MODELS = models; SEL_MODEL = def;
+  const row = $('model-row');
+  if (!models || models.length < 2) { row.style.display = 'none'; return; }
+  row.style.display = 'block';
+  row.innerHTML = models.map(m =>
+    `<button class="btn ghost ${m.model === def ? 'ok' : ''}" style="margin:2px" onclick="pickModel('${m.model}')">${m.model} · ${m.price_qz} QZ</button>`
+  ).join('');
+}
+function pickModel(m) { renderModels(MODELS, m); }
 
 const $ = id => document.getElementById(id);
 function base() { return BASE.replace(/\/+$/, ''); }
@@ -152,7 +164,10 @@ async function ping() {
   try {
     const p = await api(base() + '/price', { signal: AbortSignal.timeout(8000) });
     pill.className = 'online'; pill.id = 'status-pill';
-    pill.textContent = '● online · ' + p.backend + ' · ' + p.model + ' · ' + p.price_qz + ' QZ/prompt';
+    pill.textContent = p.models && p.models.length > 1
+      ? '● online · ' + p.backend + ' · ' + p.models.length + ' models on the menu'
+      : '● online · ' + p.backend + ' · ' + p.model + ' · ' + p.price_qz + ' QZ/prompt';
+    renderModels(p.models, p.model);
   } catch (e) {
     pill.className = 'offline';
     pill.textContent = '● node offline — see setup below';
@@ -172,16 +187,18 @@ async function createJob() {
   $('btn-ask').disabled = true;
   $('ask-state').innerHTML = '<span class="dot"></span>contacting node…';
   try {
+    const payload = { prompt };
+    if (SEL_MODEL) payload.model = SEL_MODEL;
     job = await api(base() + '/request', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify(payload)
     });
     reqTime = Math.floor(Date.now() / 1000);
     $('step-ask').classList.remove('on');
     $('step-pay').classList.add('on');
     $('job-id').textContent = job.job_id;
     $('pay-to').textContent = job.pay_to;
-    $('price-tag').textContent = '· ' + job.price_qz + ' QZ';
+    $('price-tag').textContent = '· ' + job.price_qz + ' QZ' + (job.model ? ' (' + job.model + ')' : '');
     drawQR(job.pay_to);
     payTimer = setInterval(watch, 3000);
     watch();

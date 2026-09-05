@@ -22,6 +22,10 @@ Env:
   LLM_BACKEND mock | ollama | openai      (default mock)
   LLM_URL     backend base URL
   LLM_MODEL   model name (default "qwen2.5:1.5b")
+  LLM_MODELS  optional menu "name=price,name=price" — customers pick the
+              model per request (/request {"model": ...}); prices per model.
+              LLM_MODEL remains the default. Example:
+              LLM_MODELS="qwen3.5:0.8b=0.5,qwen2.5:3b=2"
   PRICE_QZ    price per request (default 0.5)
   PORT        listen port    (default 8788)
 """
@@ -60,8 +64,38 @@ LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:11434")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:1.5b")
 PRICE_QZ = float(os.environ.get("PRICE_QZ", "0.5"))
 PRICE_SATS = int(PRICE_QZ * 1e8)
+LLM_MODELS_SPEC = os.environ.get("LLM_MODELS", "")
 PORT = int(os.environ.get("PORT", "8788"))
 JOB_TTL_S = 600
+
+
+def _parse_models(spec, default_model, default_price):
+    """'name=price,name=price' -> ordered {name: price_qz}."""
+    models = {}
+    for item in spec.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" in item:
+            name, price = item.rsplit("=", 1)
+            try:
+                models[name.strip()] = float(price)
+            except ValueError:
+                pass
+        else:
+            models[item] = default_price
+    models.setdefault(default_model, default_price)
+    return models
+
+
+# The model menu: per-request selection, per-model pricing. The first
+# entry of LLM_MODELS wins the /price headline; LLM_MODEL is the default
+# when a request doesn't name one.
+MODELS = _parse_models(LLM_MODELS_SPEC, LLM_MODEL, PRICE_QZ)
+if not LLM_MODELS_SPEC:
+    LLM_MODEL = next(iter(MODELS))          # normalize default to the menu
+elif LLM_MODEL not in MODELS:
+    MODELS[LLM_MODEL] = PRICE_QZ            # default must be servable
 
 # ── node identity ──────────────────────────────────────────────────────
 KEY_FILE = os.path.join(HERE, "llm-node-key.json")
@@ -100,12 +134,12 @@ def http_json(url, body=None, timeout=30):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
-def _find_tx(base_url, txid):
+def _find_tx(base_url, txid, price_sats):
     """Search PAY_TO's tx list on one node. Returns (status, tx, detail):
     ok = confirmed · pending = in mempool · no = seen but rejected."""
     try:
         info = http_json(
-            f"{base_url}/api/v1/address/{PAY_TO}/txs?min_amount={PRICE_SATS}")
+            f"{base_url}/api/v1/address/{PAY_TO}/txs?min_amount={price_sats}")
     except Exception as e:
         return "error", None, f"node query failed: {e}"
     for tx in info.get("txs", []):
@@ -115,15 +149,15 @@ def _find_tx(base_url, txid):
             continue
         if tx.get("direction", "in") != "in":
             return "no", tx, "tx is outgoing, not a payment"
-        if int(tx.get("amount", 0)) < PRICE_SATS:
-            return "no", tx, f"tx underpaid ({tx.get('amount')} < {PRICE_SATS})"
+        if int(tx.get("amount", 0)) < price_sats:
+            return "no", tx, f"tx underpaid ({tx.get('amount')} < {price_sats})"
         if tx.get("confirmed") is False or tx.get("pending") is True:
             return "pending", tx, "tx not confirmed yet (in mempool)"
         return "ok", tx, "confirmed"
     return "missing", None, "txid not found for this address"
 
 
-def check_payment(txid: str):
+def check_payment(txid: str, price_sats: int):
     """Verify txid paid PAY_TO at least PRICE_SATS.
 
     Confirmed on the local node always works. Small payments may also claim
@@ -136,7 +170,7 @@ def check_payment(txid: str):
     for base in (NODE_URL, NODE_FALLBACK_URL):
         if not base:
             continue
-        status, tx, d = _find_tx(base, txid)
+        status, tx, d = _find_tx(base, txid, price_sats)
         if status == "ok":
             return True, tx
         if status == "pending" and tx \
@@ -148,19 +182,19 @@ def check_payment(txid: str):
             detail = d
     return False, detail
 
-def run_backend(prompt: str) -> str:
+def run_backend(prompt: str, model: str = LLM_MODEL) -> str:
     if LLM_BACKEND == "mock":
         h = hashlib.sha256(prompt.encode()).hexdigest()[:16]
-        return (f"[mock:{LLM_MODEL}] Quartz demo completion for prompt "
+        return (f"[mock:{model}] Quartz demo completion for prompt "
                 f"sha {h}. On a Pi this would be Ollama/llama.cpp output.")
     if LLM_BACKEND == "ollama":
         r = http_json(f"{LLM_URL}/api/generate",
-                      {"model": LLM_MODEL, "prompt": prompt, "stream": False},
+                      {"model": model, "prompt": prompt, "stream": False},
                       timeout=300)
         return r.get("response", "").strip()
     if LLM_BACKEND == "openai":
         r = http_json(f"{LLM_URL}/chat/completions",
-                      {"model": LLM_MODEL, "messages": [{"role": "user",
+                      {"model": model, "messages": [{"role": "user",
                                                          "content": prompt}]},
                       timeout=300)
         return r["choices"][0]["message"]["content"].strip()
@@ -169,7 +203,7 @@ def run_backend(prompt: str) -> str:
 _warm_lock = threading.Lock()
 
 
-def warm_model():
+def warm_model(model: str = LLM_MODEL):
     """Preload the model while the customer pays — Ollama's cold load is
     ~15-20 s on a Pi, so overlap it with the payment window instead of
     paying it afterwards. Best-effort: failures are ignored."""
@@ -179,7 +213,7 @@ def warm_model():
     def _go():
         try:
             http_json(f"{LLM_URL}/api/generate",
-                      {"model": LLM_MODEL, "prompt": "hi", "stream": False,
+                      {"model": model, "prompt": "hi", "stream": False,
                        "options": {"num_predict": 1}}, timeout=180)
         except Exception:
             pass                      # warm-up is best-effort
@@ -231,7 +265,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.route()
         if path == "/price":
-            self.reply(200, {"price_qz": PRICE_QZ, "price_sats": PRICE_SATS,
+            self.reply(200, {"models": [{"model": m, "price_qz": p}
+                                        for m, p in MODELS.items()],
+                             "price_qz": MODELS[LLM_MODEL],
+                             "price_sats": int(MODELS[LLM_MODEL] * 1e8),
                              "pay_to": PAY_TO, "model": LLM_MODEL,
                              "backend": LLM_BACKEND,
                              "zeroconf_max_qz": ZEROCONF_MAX_SATS / 1e8})
@@ -253,14 +290,22 @@ class Handler(BaseHTTPRequestHandler):
             prompt = (body.get("prompt") or "").strip()
             if not prompt or len(prompt) > 4000:
                 return self.reply(400, {"error": "prompt 1..4000 chars"})
+            model = body.get("model") or LLM_MODEL
+            if model not in MODELS:
+                return self.reply(400, {"error": f"unknown model {model!r}",
+                                        "available": list(MODELS)})
+            price_qz = MODELS[model]
+            price_sats = int(price_qz * 1e8)
             job_id = "job_" + secrets.token_hex(6)
             JOBS[job_id] = {"prompt": prompt, "created": time.time(),
-                            "claimed_txid": None}
-            print(f"[llm-node] job {job_id} created", flush=True)
-            warm_model()              # hide the model's cold load in the pay window
+                            "claimed_txid": None,
+                            "model": model, "price_sats": price_sats}
+            print(f"[llm-node] job {job_id} created ({model})", flush=True)
+            warm_model(model)          # hide the model's cold load in the pay window
             return self.reply(200, {"job_id": job_id, "pay_to": PAY_TO,
-                                    "price_qz": PRICE_QZ,
-                                    "price_sats": PRICE_SATS,
+                                    "model": model,
+                                    "price_qz": price_qz,
+                                    "price_sats": price_sats,
                                     "expires_in_s": JOB_TTL_S})
 
         if path == "/claim":
@@ -272,11 +317,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(410, {"error": "job expired"})
             if txid in USED_TXIDS:
                 return self.reply(409, {"error": "txid already used"})
-            ok, detail = check_payment(txid)
+            price_sats = job.get("price_sats", PRICE_SATS)
+            model = job.get("model", LLM_MODEL)
+            ok, detail = check_payment(txid, price_sats)
             if not ok:
                 return self.reply(402, {"error": f"payment not verified: {detail}"})
             try:
-                completion = run_backend(job["prompt"])
+                completion = run_backend(job["prompt"], model)
             except Exception as e:
                 return self.reply(502, {"error": f"backend failed: {e}"})
             USED_TXIDS.add(txid)
@@ -287,8 +334,8 @@ class Handler(BaseHTTPRequestHandler):
                     job["prompt"].encode()).hexdigest(),
                 "completion_sha256": hashlib.sha256(
                     completion.encode()).hexdigest(),
-                "model": LLM_MODEL,
-                "price_sats": PRICE_SATS,
+                "model": model,
+                "price_sats": price_sats,
                 "txid": txid,
                 "ts": int(time.time()),
                 "node": PAY_TO,
