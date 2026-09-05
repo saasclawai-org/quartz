@@ -300,7 +300,10 @@ fun SeedProvisioningScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 if (confirmStep < 3 && seedWords.isNotEmpty()) {
-                    val randomIdx = remember { (0..11).shuffled().take(3)[confirmStep] }
+                    /* v0.2.27: hoist the shuffle — unkeyed remember asked the
+                     * SAME word three times (cached first computation) */
+                    val challengeIdx = remember { (0..11).shuffled().take(3) }
+                    val randomIdx = challengeIdx[confirmStep]
                     Text("Type word #${randomIdx + 1}:")
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(

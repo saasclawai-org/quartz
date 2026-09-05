@@ -465,12 +465,13 @@ class QuartzBLEManager(private val context: Context) {
             onError?.invoke("Confirm characteristic not found")
             return
         }
-        // Write 3 dummy bytes to confirm (firmware accepts any 3-byte write)
+        // Write 3 bytes to confirm (firmware accepts any 3-byte write).
+        // v0.2.27: success is reported by onCharacteristicWrite — the old
+        // code fired onSeedConfirmed before the device ever answered.
         confirmChar.value = byteArrayOf(1, 2, 3)
         confirmChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         gatt.writeCharacteristic(confirmChar)
-        Log.i(TAG, "Seed confirmation sent")
-        onSeedConfirmed?.invoke()
+        Log.i(TAG, "Seed confirmation sent — awaiting device ack")
     }
 
     /* v0.2.23: BT onboarding — after connect, wait for the pairing bond to
@@ -773,6 +774,9 @@ class QuartzBLEManager(private val context: Context) {
                             onRecoverResult = null
                         }
                     }
+                    CONFIRM_UUID -> {
+                        onError?.invoke("Seed confirm rejected by device (GATT error $status) — still bonded?")
+                    }
                 }
                 return
             }
@@ -809,6 +813,10 @@ class QuartzBLEManager(private val context: Context) {
                     Log.i(TAG, "PIN set result: success=$success")
                     onPinSetResult?.invoke(success)
                     onPinSetResult = null
+                }
+                CONFIRM_UUID -> {
+                    Log.i(TAG, "Seed confirmation acknowledged by device")
+                    onSeedConfirmed?.invoke()
                 }
                 SEED_UUID -> {
                     Log.i(TAG, "Seed write successful")

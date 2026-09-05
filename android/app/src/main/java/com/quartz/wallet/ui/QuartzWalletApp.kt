@@ -907,6 +907,16 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
     // v0.2.23: BT onboarding — unconfirmed miners show their seed right here
     val seedWords = androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 
+    // v0.2.27: prove-the-backup challenge + honest wiped-seed state
+    val seedWiped = androidx.compose.runtime.mutableStateOf(false)
+    val challenge = androidx.compose.runtime.mutableStateOf<List<Int>?>(null)
+    var challengeStep by remember { mutableStateOf(0) }
+    var challengeInput by remember { mutableStateOf("") }
+    var challengeError by remember { mutableStateOf<String?>(null) }
+    var verifyMode by remember { mutableStateOf(false) }
+    var verifyInput by remember { mutableStateOf("") }
+    var verifyResult by remember { mutableStateOf<String?>(null) }
+
     // v0.2.26: on-chain stats (API-first — the main Miner view)
     val chainStats = androidx.compose.runtime.mutableStateOf<SoftwareWallet.MinerStats?>(null)
     val chainErr = androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -931,6 +941,9 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
     LaunchedEffect(Unit) {
         bleManager.onSeedRead = { words ->
             if (words.isNotEmpty() && seedWords.value == null) seedWords.value = words
+            // v0.2.27: empty read = seed confirmed+wiped earlier — say so,
+            // don't go silent ("no way to confirm" was this invisibility)
+            if (words.isEmpty()) seedWiped.value = true
         }
         bleManager.onSeedConfirmed = {
             seedWords.value = null
@@ -1036,29 +1049,135 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                     )
                     Spacer(Modifier.height(8.dp))
                     val wctx = androidx.compose.ui.platform.LocalContext.current
-                    Button(
-                        onClick = {
-                            bleManager.confirmSeedPhrase()
-                            /* v0.2.24: the miner's words become this phone's
-                             * wallet — no second trip to the Wallet page */
-                            seedWords.value?.let { words ->
-                                try {
-                                    val w = SoftwareWallet.restore(words)
-                                    SoftwareWallet.save(wctx, w)
-                                    onWalletImported()
-                                } catch (e: Exception) {
-                                    statusMsg = "Wallet import failed: ${e.message}"
-                                }
+                    val ch = challenge.value
+                    when {
+                        ch == null -> Button(
+                            onClick = {
+                                challenge.value = (0..11).shuffled().take(3)
+                                challengeStep = 0; challengeInput = ""; challengeError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                        ) {
+                            Text("✍️ I wrote them down", color = QuartzBg, fontWeight = FontWeight.Bold)
+                        }
+                        challengeStep < 3 -> {
+                            val idx = ch[challengeStep]
+                            Text(
+                                "Prove it — type word #${idx + 1}  (${challengeStep + 1}/3)",
+                                color = QuartzText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            androidx.compose.material3.OutlinedTextField(
+                                value = challengeInput,
+                                onValueChange = { challengeInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Button(
+                                onClick = {
+                                    val expected = seedWords.value?.getOrNull(idx)
+                                    if (expected != null && challengeInput.trim().equals(expected, ignoreCase = true)) {
+                                        challengeInput = ""; challengeError = null; challengeStep++
+                                        if (challengeStep >= 3) {
+                                            bleManager.confirmSeedPhrase()
+                                            seedWords.value?.let { words ->
+                                                try {
+                                                    val w = SoftwareWallet.restore(words)
+                                                    SoftwareWallet.save(wctx, w)
+                                                    onWalletImported()
+                                                } catch (e: Exception) {
+                                                    statusMsg = "Wallet import failed: ${e.message}"
+                                                }
+                                            }
+                                            challenge.value = null; challengeStep = 0
+                                        }
+                                    } else {
+                                        challengeError = "Wrong word — check your paper and try again."
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                            ) { Text("Check", color = QuartzBg, fontWeight = FontWeight.Bold) }
+                            challengeError?.let {
+                                Spacer(Modifier.height(4.dp))
+                                Text(it, color = androidx.compose.ui.graphics.Color(0xFFFF6B35), fontSize = 13.sp)
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
-                    ) {
-                        Text("✍️ I wrote them down — Start Mining", color = QuartzBg, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
             Spacer(Modifier.height(8.dp))
+        }
+
+        // v0.2.27: honest state for already-confirmed miners + paper verification
+        if (seedWiped.value && seedWords.value == null) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("🔐 Seed already backed up", color = QuartzAccent, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "This miner's seed was confirmed and wiped from the device — by design. " +
+                        "Your 12 paper words are the only copy, and they still control its wallet.",
+                        fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center
+                    )
+                    if (!verifyMode) {
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { verifyMode = true; verifyResult = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = QuartzCard)
+                        ) { Text("🧾 Verify my paper backup", color = QuartzText) }
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        androidx.compose.material3.OutlinedTextField(
+                            value = verifyInput,
+                            onValueChange = { verifyInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("12 words, space-separated", fontSize = 12.sp, color = QuartzMuted) }
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        val vctx = androidx.compose.ui.platform.LocalContext.current
+                        Button(
+                            onClick = {
+                                val words = verifyInput.trim().lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+                                if (words.size != 12) {
+                                    verifyResult = "Need exactly 12 words — got ${words.size}."
+                                    return@Button
+                                }
+                                try {
+                                    val w = SoftwareWallet.restore(words)
+                                    when {
+                                        walletAddress.isEmpty() ->
+                                            verifyResult = "Miner's wallet address not read yet — reconnect and retry."
+                                        w.address == walletAddress -> {
+                                            verifyResult = "✓ MATCH — these words control this miner's wallet. Imported as this phone's wallet."
+                                            SoftwareWallet.save(vctx, w)
+                                            onWalletImported()
+                                        }
+                                        else ->
+                                            verifyResult = "✗ NO MATCH — these words are NOT this miner's backup. Keep looking for the right paper."
+                                    }
+                                } catch (e: Exception) {
+                                    verifyResult = "Couldn't derive a wallet from those words: ${e.message}"
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                        ) { Text("Verify", color = QuartzBg, fontWeight = FontWeight.Bold) }
+                        verifyResult?.let {
+                            Spacer(Modifier.height(4.dp))
+                            Text(it, fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            }
         }
 
         if (!isConnected && stats == null) {
