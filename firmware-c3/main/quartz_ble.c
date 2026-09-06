@@ -391,10 +391,24 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             esp_ble_gatts_set_attr_value(s_stats_handle + 1,
                 sizeof(struct mining_stats), (uint8_t*)&s_stats);
         }
-        if (param->read.handle == s_seed_handle + 1 && s_seed_confirmed) {
-            /* Seed already confirmed — return empty */
-            uint8_t empty = 0;
-            esp_ble_gatts_set_attr_value(s_seed_handle + 1, 0, &empty);
+        /* v0893: attr values are COPIED at table creation — without these
+         * refreshes the phone keeps reading the boot-time zeros ("0 words",
+         * empty address) no matter what the setters wrote into RAM. */
+        if (param->read.handle == s_addr_handle + 1) {
+            esp_ble_gatts_set_attr_value(s_addr_handle + 1,
+                strlen(s_address), (uint8_t*)s_address);
+        }
+        if (param->read.handle == s_seed_handle + 1) {
+            if (s_seed_confirmed) {
+                /* Seed already confirmed — return empty */
+                uint8_t empty = 0;
+                esp_ble_gatts_set_attr_value(s_seed_handle + 1, 0, &empty);
+            } else if (s_seed_available) {
+                /* Provisioning: serve the words — PERM_READ_ENCRYPTED
+                 * already gates access to bonded peers */
+                esp_ble_gatts_set_attr_value(s_seed_handle + 1,
+                    sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase);
+            }
         }
         break;
 
