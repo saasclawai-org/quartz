@@ -582,6 +582,11 @@ void quartz_ble_set_address(const char *address) {
         strncpy(s_address, address, sizeof(s_address) - 1);
         s_address[sizeof(s_address) - 1] = '\0';
     }
+    /* v0894: push immediately (see set_seed_phrase) */
+    if (s_addr_handle) {
+        esp_ble_gatts_set_attr_value(s_addr_handle + 1,
+            strlen(s_address), (uint8_t*)s_address);
+    }
 }
 
 void quartz_ble_force_unlock(void) {
@@ -596,6 +601,12 @@ void quartz_ble_set_seed_phrase(const char words[12][12]) {
     memcpy(s_seed_phrase, words, sizeof(s_seed_phrase));
     s_seed_available = true;
     s_seed_confirmed = false;
+    /* v0894: push to the GATT stack immediately — refresh-on-read alone
+     * lags one read behind (first read still serves the stale copy) */
+    if (s_seed_handle) {
+        esp_ble_gatts_set_attr_value(s_seed_handle + 1,
+            sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase);
+    }
     ESP_LOGI(TAG, "Seed phrase loaded for BLE provisioning (read once)");
 }
 
