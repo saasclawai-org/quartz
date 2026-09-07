@@ -915,12 +915,17 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
     var walletAddress by remember { mutableStateOf("") }
     var statusMsg by remember { mutableStateOf("") }
 
+    /* v0.2.33: remember{} is load-bearing here. Bare mutableStateOf in
+     * composition re-creates the state on every recomposition, so the BLE
+     * callbacks kept writing to orphaned first-composition copies while
+     * the UI read fresh nulls — the seed card could NEVER render, no
+     * matter what the firmware served (masked since v0.2.23). */
     // v0.2.23: BT onboarding — unconfirmed miners show their seed right here
-    val seedWords = androidx.compose.runtime.mutableStateOf<List<String>?>(null)
+    val seedWords = remember { androidx.compose.runtime.mutableStateOf<List<String>?>(null) }
 
     // v0.2.27: prove-the-backup challenge + honest wiped-seed state
-    val seedWiped = androidx.compose.runtime.mutableStateOf(false)
-    val challenge = androidx.compose.runtime.mutableStateOf<List<Int>?>(null)
+    val seedWiped = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val challenge = remember { androidx.compose.runtime.mutableStateOf<List<Int>?>(null) }
     var challengeStep by remember { mutableStateOf(0) }
     var challengeInput by remember { mutableStateOf("") }
     var challengeError by remember { mutableStateOf<String?>(null) }
@@ -929,9 +934,9 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
     var verifyResult by remember { mutableStateOf<String?>(null) }
 
     // v0.2.26: on-chain stats (API-first — the main Miner view)
-    val chainStats = androidx.compose.runtime.mutableStateOf<SoftwareWallet.MinerStats?>(null)
-    val chainErr = androidx.compose.runtime.mutableStateOf<String?>(null)
-    val walletAddr = androidx.compose.runtime.mutableStateOf<String?>(null)
+    val chainStats = remember { androidx.compose.runtime.mutableStateOf<SoftwareWallet.MinerStats?>(null) }
+    val chainErr = remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val walletAddr = remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
 
     // v0.2.26: on-chain stats poller — the main Miner view, works anywhere
     val actx = androidx.compose.ui.platform.LocalContext.current
@@ -980,6 +985,10 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
             statusMsg = "Error: $err"
             isScanning = false
         }
+        /* v0.2.33: re-entering the Miner tab while still connected — the
+         * remembered states were disposed with the old composition; read
+         * the seed again so the card renders. */
+        if (bleManager.isConnected()) bleManager.startSeedOnboardingRead()
     }
 
     // v0.2.14: no auto-disconnect when leaving the Miner screen — the BLE

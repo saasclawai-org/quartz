@@ -470,6 +470,9 @@ class QuartzBLEManager(private val context: Context) {
         if (connectedGatt != null && seedReadRetries < 4) {
             Log.w(TAG, "Seed read unanswered (eaten by GATT queue?) — retry $seedReadRetries/4")
             readSeedPhrase()
+        } else if (connectedGatt != null) {
+            /* v0.2.33: 4 unanswered reads — surface it instead of dead silence */
+            onError?.invoke("Seed read unanswered ×4 — Disconnect and reconnect")
         }
     }
 
