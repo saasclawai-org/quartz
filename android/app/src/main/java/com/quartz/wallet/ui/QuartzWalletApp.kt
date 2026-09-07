@@ -43,23 +43,10 @@ fun QuartzWalletApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val bleManager = remember { QuartzBLEManager(context) }
 
-    // Navigation state for seed provisioning overlay
-    var showProvisioning by remember { mutableStateOf(false) }
     var walletCreated by remember { mutableStateOf(false) }
     // Bumped when the wallet is deleted — forces WalletScreen to rebuild
     // from storage (shows onboarding again instead of stale state)
     var walletEpoch by remember { mutableIntStateOf(0) }
-
-    if (showProvisioning) {
-        SeedProvisioningScreen(
-            bleManager = bleManager,
-            onDone = {
-                showProvisioning = false
-                walletCreated = true
-            }
-        )
-        return
-    }
 
     Scaffold(
         topBar = {
@@ -80,8 +67,8 @@ fun QuartzWalletApp() {
         },
         bottomBar = {
             NavigationBar(containerColor = QuartzSurface) {
-                val tabs = listOf("Wallet" to Icons.Default.AccountBalanceWallet,
-                                  "Miner" to Icons.Default.Memory,
+                val tabs = listOf("Miner" to Icons.Default.Memory,
+                                  "Wallet" to Icons.Default.AccountBalanceWallet,
                                   "Settings" to Icons.Default.Settings)
                 tabs.forEachIndexed { index, (label, icon) ->
                     NavigationBarItem(
@@ -105,19 +92,21 @@ fun QuartzWalletApp() {
             modifier = Modifier.padding(padding)
         ) { page ->
             when (page) {
-                0 -> key(walletEpoch) {
-                    WalletScreen(
-                        walletCreated = walletCreated,
-                        onImport = { showProvisioning = true }
-                    )
-                }
-                1 -> MinerScreen(
+                0 -> MinerScreen(
                     bleManager = bleManager,
                     onWalletImported = {
                         walletCreated = true
                         walletEpoch++
                     }
                 )
+                1 -> key(walletEpoch) {
+                    WalletScreen(
+                        walletCreated = walletCreated,
+                        onSetupMiner = {
+                            scope.launch { pagerState.animateScrollToPage(0) }
+                        }
+                    )
+                }
                 2 -> SettingsScreen(onWalletDeleted = {
                     walletCreated = false
                     walletEpoch++
@@ -128,7 +117,7 @@ fun QuartzWalletApp() {
 }
 
 @Composable
-fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
+fun WalletScreen(walletCreated: Boolean = false, onSetupMiner: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -206,27 +195,27 @@ fun WalletScreen(walletCreated: Boolean = false, onImport: () -> Unit = {}) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("🔮", fontSize = 64.sp)
+            Text("📡", fontSize = 64.sp)
             Spacer(Modifier.height(24.dp))
-            Text("Welcome to Quartz", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Create a wallet or import an existing one",
+            Text("No wallet yet", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Your Quartz miner creates your wallet when you set it up — one seed for mining and spending",
                 color = QuartzMuted, fontSize = 15.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 8.dp, bottom = 32.dp))
             Button(
-                onClick = { pendingWallet = SoftwareWallet.create() },
+                onClick = onSetupMiner,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
-            ) { Text("Create New Wallet", color = QuartzBg, fontWeight = FontWeight.Bold) }
+            ) { Text("📡 Set Up Your Miner", color = QuartzBg, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { showRestore = true },
                 modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) { Text("🗝 Restore from Seed Phrase") }
+            ) { Text("🗝 Restore from Paper Backup") }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = onImport,
+                onClick = { pendingWallet = SoftwareWallet.create() },
                 modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) { Text("📷 Import Wallet (Scan QR / ESP32)") }
+            ) { Text("Continue Without a Miner") }
         }
 
         // ── Wallet view ────────────────────────────────────────────
@@ -898,6 +887,28 @@ private fun formatScannedAmount(qz: Double): String =
     String.format(java.util.Locale.US, "%.8f", qz).trimEnd('0').trimEnd('.')
 @Composable
 fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {}) {
+    // v0.2.31: miner-led wallet setup — never silently replace a different phone wallet
+    var conflictWallet by remember { mutableStateOf<SoftwareWallet.NewWallet?>(null) }
+    val conflictCtx = androidx.compose.ui.platform.LocalContext.current
+    conflictWallet?.let { newW ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { conflictWallet = null },
+            title = { Text("Replace phone wallet?") },
+            text = { Text("This phone already has a different wallet. Replace it with this miner's wallet (${newW.address.take(12)}…)? The current wallet is only recoverable from its own 12 words.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    SoftwareWallet.save(conflictCtx, newW)
+                    conflictWallet = null
+                    onWalletImported()
+                }) { Text("Replace", color = QuartzAccent, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { conflictWallet = null }) {
+                    Text("Keep Current")
+                }
+            }
+        )
+    }
     var isScanning by remember { mutableStateOf(false) }
     var isConnected by remember { mutableStateOf(false) }
     var stats by remember { mutableStateOf<MiningStats?>(null) }
@@ -1085,8 +1096,13 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                                             seedWords.value?.let { words ->
                                                 try {
                                                     val w = SoftwareWallet.restore(words)
-                                                    SoftwareWallet.save(wctx, w)
-                                                    onWalletImported()
+                                                    val store = WalletStore(wctx)
+                                                    if (store.hasWallet() && store.getAddress() != w.address) {
+                                                        conflictWallet = w
+                                                    } else {
+                                                        SoftwareWallet.save(wctx, w)
+                                                        onWalletImported()
+                                                    }
                                                 } catch (e: Exception) {
                                                     statusMsg = "Wallet import failed: ${e.message}"
                                                 }
@@ -1158,9 +1174,15 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                                         walletAddress.isEmpty() ->
                                             verifyResult = "Miner's wallet address not read yet — reconnect and retry."
                                         w.address == walletAddress -> {
-                                            verifyResult = "✓ MATCH — these words control this miner's wallet. Imported as this phone's wallet."
-                                            SoftwareWallet.save(vctx, w)
-                                            onWalletImported()
+                                            val store = WalletStore(vctx)
+                                            if (store.hasWallet() && store.getAddress() != w.address) {
+                                                verifyResult = "✓ MATCH — these words control this miner's wallet."
+                                                conflictWallet = w
+                                            } else {
+                                                verifyResult = "✓ MATCH — these words control this miner's wallet. Imported as this phone's wallet."
+                                                SoftwareWallet.save(vctx, w)
+                                                onWalletImported()
+                                            }
                                         }
                                         else ->
                                             verifyResult = "✗ NO MATCH — these words are NOT this miner's backup. Keep looking for the right paper."
