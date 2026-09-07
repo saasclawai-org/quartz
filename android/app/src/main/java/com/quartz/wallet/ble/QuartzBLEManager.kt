@@ -529,8 +529,16 @@ class QuartzBLEManager(private val context: Context) {
      * already confirmed → stats view; words → the Miner screen shows them. */
     private var seedPollCount = 0
 
+    /* v0.2.32: v089.3 firmware refreshes the served seed value only ON
+     * read — the first read after boot answers with boot-time zeros
+     * ("0 words"). One automatic retry gets the refreshed words; a
+     * genuinely-confirmed board answers empty twice and the wiped-seed
+     * state stands. */
+    private var seedEmptyRetryDone = false
+
     fun startSeedOnboardingRead() {
         seedPollCount = 0
+        seedEmptyRetryDone = false
         pollSeedRead()
     }
 
@@ -744,16 +752,25 @@ class QuartzBLEManager(private val context: Context) {
                     handler.removeCallbacks(seedReadWatchdog)
                     seedReadRetries = 0
                     // Parse 12 words from packed char[12][12] array
-                    if (data == null || data.isEmpty()) {
+                    val words = mutableListOf<String>()
+                    val buf = data ?: ByteArray(0)
+                    for (i in 0 until minOf(12, buf.size / 12)) {
+                        val wordBytes = buf.copyOfRange(i * 12, (i + 1) * 12)
+                        val word = String(wordBytes).trimEnd('\u0000').trim()
+                        if (word.isNotEmpty()) words.add(word)
+                    }
+                    if (words.isEmpty()) {
+                        // v0.2.32: one empty answer can be v089.3's one-read
+                        // lag — retry before declaring the seed wiped
+                        if (!seedEmptyRetryDone) {
+                            seedEmptyRetryDone = true
+                            Log.w(TAG, "Seed read 0 words — retrying once (v089.3 refresh lag)")
+                            handler.postDelayed({ if (connectedGatt != null) readSeedPhrase() }, 600)
+                            return
+                        }
                         Log.w(TAG, "Seed phrase empty (already confirmed)")
                         onSeedRead?.invoke(emptyList())
                         return
-                    }
-                    val words = mutableListOf<String>()
-                    for (i in 0 until minOf(12, data.size / 12)) {
-                        val wordBytes = data.copyOfRange(i * 12, (i + 1) * 12)
-                        val word = String(wordBytes).trimEnd('\u0000').trim()
-                        if (word.isNotEmpty()) words.add(word)
                     }
                     Log.i(TAG, "Seed phrase read: ${words.size} words")
                     onSeedRead?.invoke(words)
@@ -810,16 +827,24 @@ class QuartzBLEManager(private val context: Context) {
                 SEED_UUID -> {
                     handler.removeCallbacks(seedReadWatchdog)
                     seedReadRetries = 0
-                    if (value.isEmpty()) {
-                        Log.w(TAG, "Seed phrase empty (already confirmed)")
-                        onSeedRead?.invoke(emptyList())
-                        return
-                    }
                     val words = mutableListOf<String>()
                     for (i in 0 until minOf(12, value.size / 12)) {
                         val wordBytes = value.copyOfRange(i * 12, (i + 1) * 12)
                         val word = String(wordBytes).trimEnd('\u0000').trim()
                         if (word.isNotEmpty()) words.add(word)
+                    }
+                    if (words.isEmpty()) {
+                        // v0.2.32: one empty answer can be v089.3's one-read
+                        // lag — retry before declaring the seed wiped
+                        if (!seedEmptyRetryDone) {
+                            seedEmptyRetryDone = true
+                            Log.w(TAG, "Seed read 0 words — retrying once (v089.3 refresh lag)")
+                            handler.postDelayed({ if (connectedGatt != null) readSeedPhrase() }, 600)
+                            return
+                        }
+                        Log.w(TAG, "Seed phrase empty (already confirmed)")
+                        onSeedRead?.invoke(emptyList())
+                        return
                     }
                     Log.i(TAG, "Seed phrase read: ${words.size} words")
                     onSeedRead?.invoke(words)
