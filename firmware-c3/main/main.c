@@ -654,6 +654,7 @@ static void mining_task(void *pvParameters) {
      * BLE advertising, the 10s banner, serial/BOOT confirm) silently
      * self-deleted: the board looked booted but nothing ever advertised. */
     if (!quartz_wallet_is_backup_confirmed() && !quartz_ble_is_active()) {
+        quartz_wifi_set_coex_power();   /* v089.5: same coex sequence as the proven 'ble on' path */
         quartz_ble_init();
         ESP_LOGI(TAG, "BLE up early (provisioning) — radio active for RNG + pairing");
     }
@@ -904,13 +905,19 @@ static void mining_task(void *pvParameters) {
                     boot_hold_ms = 0;
                 }
 
-                /* v078: unmissable repeating banner while unconfirmed */
+                /* v078: unmissable repeating banner while unconfirmed.
+                 * v089.5: honest BLE state — "NOT advertising" used to hide
+                 * both a dead stack and an active phone link. */
                 confirm_wait_ms += 50;
                 if (confirm_wait_ms >= 10000) {
                     confirm_wait_ms = 0;
                     ESP_LOGW(TAG, "⏳ WALLET NOT CONFIRMED — MINING WILL NOT START [BLE: %s]",
-                             quartz_ble_is_advertising() ? "advertising" : "NOT advertising");
-                    ESP_LOGW(TAG, "   → type 'confirm' + Enter   (or hold BOOT/PRG 3s)");
+                             quartz_ble_is_connected() ? "CONNECTED — finish backup in the app" :
+                             quartz_ble_is_advertising() ? "advertising — pair in the app" :
+                             quartz_ble_is_active() ? "up, not advertising (kicking)" :
+                                                      "down — auto-retrying");
+                    ESP_LOGW(TAG, "   → Quartz app: pair as \"Quartz-Miner\" and confirm on your phone");
+                    ESP_LOGW(TAG, "   → serial fallback: 'confirm' + Enter (or hold BOOT/PRG 3s)");
                     quartz_ble_kick_adv();
                 }
 

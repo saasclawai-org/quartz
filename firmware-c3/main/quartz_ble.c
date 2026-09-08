@@ -15,6 +15,8 @@
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -466,47 +468,69 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 static bool s_ble_active = false;          /* v083: pair window state */
 static esp_timer_handle_t s_pair_timer = NULL;
 
-void quartz_ble_init(void) {
-    ESP_LOGI(TAG, "Starting BLE GATT server (Bluedroid)");
-
+/* v089.5: per-step bring-up with error codes + clean teardown. A bare
+ * "return" on failure used to leave the board BLE-dead forever — the
+ * unconfirmed banner's kick was a no-op and the app never saw the miner. */
+static bool ble_stack_bringup(void) {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    if (esp_bt_controller_init(&bt_cfg) != ESP_OK) {
-        ESP_LOGE(TAG, "BT controller init failed");
+    esp_err_t e;
+    if ((e = esp_bt_controller_init(&bt_cfg)) != ESP_OK) {
+        ESP_LOGE(TAG, "BT controller init failed: %s", esp_err_to_name(e));
+        return false;
+    }
+    if ((e = esp_bt_controller_enable(ESP_BT_MODE_BLE)) != ESP_OK) {
+        ESP_LOGE(TAG, "BT controller enable failed: %s", esp_err_to_name(e));
+        esp_bt_controller_deinit();
+        return false;
+    }
+    if ((e = esp_bluedroid_init()) != ESP_OK) {
+        ESP_LOGE(TAG, "Bluedroid init failed: %s", esp_err_to_name(e));
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+        return false;
+    }
+    if ((e = esp_bluedroid_enable()) != ESP_OK) {
+        ESP_LOGE(TAG, "Bluedroid enable failed: %s", esp_err_to_name(e));
+        esp_bluedroid_deinit();
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+        return false;
+    }
+    return true;
+}
+
+void quartz_ble_init(void) {
+    if (s_ble_active) return;   /* v089.5: idempotent */
+    s_advertising = false;
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        if (attempt > 1) vTaskDelay(pdMS_TO_TICKS(150));
+        ESP_LOGI(TAG, "Starting BLE GATT server (Bluedroid) — attempt %d/3", attempt);
+        if (!ble_stack_bringup()) continue;
+
+        /* === BLE Security: require bonding for seed characteristics === */
+        uint8_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;  /* Secure Connections + Bond */
+        esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
+        uint8_t iocap = ESP_IO_CAP_NONE;  /* No display/keyboard on ESP32 */
+        esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
+        uint8_t key_size = 16;  /* Max key size */
+        esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
+        uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+        esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
+        uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+        esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
+
+        esp_ble_gap_register_callback(gap_event_handler);
+        esp_ble_gatts_register_callback(gatts_event_handler);
+        esp_ble_gatts_app_register(0);
+
+        esp_ble_gap_set_device_name("Quartz-Miner");
+
+        ESP_LOGI(TAG, "BLE security: bonding required for seed/confirm characteristics");
+        s_ble_active = true;
         return;
     }
-    if (esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK) {
-        ESP_LOGE(TAG, "BT controller enable failed");
-        return;
-    }
-    if (esp_bluedroid_init() != ESP_OK) {
-        ESP_LOGE(TAG, "Bluedroid init failed");
-        return;
-    }
-    if (esp_bluedroid_enable() != ESP_OK) {
-        ESP_LOGE(TAG, "Bluedroid enable failed");
-        return;
-    }
-
-    /* === BLE Security: require bonding for seed characteristics === */
-    uint8_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;  /* Secure Connections + Bond */
-    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
-    uint8_t iocap = ESP_IO_CAP_NONE;  /* No display/keyboard on ESP32 */
-    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
-    uint8_t key_size = 16;  /* Max key size */
-    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
-    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
-    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
-
-    esp_ble_gap_register_callback(gap_event_handler);
-    esp_ble_gatts_register_callback(gatts_event_handler);
-    esp_ble_gatts_app_register(0);
-
-    esp_ble_gap_set_device_name("Quartz-Miner");
-
-    ESP_LOGI(TAG, "BLE security: bonding required for seed/confirm characteristics");
-    s_ble_active = true;
+    ESP_LOGE(TAG, "BLE init failed 3/3 — the unconfirmed banner will keep retrying");
 }
 
 /* ---- v083: pair-mode window (BLE on demand; mining keeps full radio after) ---- */
@@ -531,12 +555,21 @@ bool quartz_ble_is_advertising(void) {
 
 void quartz_ble_kick_adv(void) {
     /* v087: self-heal — BLE up but not advertising → re-issue payload
-     * configs (ADV_DATA_SET_COMPLETE starts advertising again). */
-    if (!s_ble_active || s_advertising || s_connected) return;
-    static uint8_t kicks = 0;
-    if (kicks >= 3) return;
-    kicks++;
-    ESP_LOGW(TAG, "BLE not advertising — re-issuing adv configs (kick %d/3)", kicks);
+     * configs (ADV_DATA_SET_COMPLETE starts advertising again).
+     * v089.5: BLE never came up → re-run the FULL init, rate-limited to
+     * every 30s. The old 3-kick give-up masked dead-BLE boards forever:
+     * the banner said "NOT advertising" while this call no-opped. */
+    if (s_connected) return;
+    if (!s_ble_active) {
+        static int64_t last_init_try_us = -30000000LL;
+        int64_t now_us = esp_timer_get_time();
+        if (now_us - last_init_try_us < 30000000LL) return;
+        last_init_try_us = now_us;
+        ESP_LOGW(TAG, "BLE down — full re-init (banner self-heal)");
+        quartz_ble_init();
+        return;
+    }
+    if (s_advertising) return;
     esp_ble_gap_config_adv_data(&s_adv_data_adv);
     esp_ble_gap_config_adv_data(&s_adv_data);
 }
