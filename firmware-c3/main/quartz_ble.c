@@ -289,13 +289,19 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
 };
 
 static bool s_advertising = false;         /* v087: ADV_START_COMPLETE seen */
+static bool s_adv_allowed = false;        /* v089.8: wallet ready → allowed to advertise.
+                                          * Fresh boots bring the BLE stack up ~80s before
+                                          * the wallet exists (entropy gate); pairing in that
+                                          * window read zero words and the app dead-ended
+                                          * on a false "already backed up". The radio stays
+                                          * on for RNG — it just doesn't advertise yet. */
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
         /* v086: advertise as soon as the ADV payload is set; the scan-rsp
          * (name only) applies live even if it completes after start. */
-        esp_ble_gap_start_advertising(&s_adv_params);
+        if (s_adv_allowed) esp_ble_gap_start_advertising(&s_adv_params);
         break;
     case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
         break;  /* nothing to do — name rides in the scan response */
@@ -364,11 +370,14 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                 ESP_LOGE(TAG, "start_service FAILED: %s", esp_err_to_name(svc_err));
             }
             /* v086: both payloads sized to fit 31 bytes — if these calls
-             * fail, we now log it loudly instead of failing silently. */
-            if (esp_ble_gap_config_adv_data(&s_adv_data_adv) != ESP_OK)
-                ESP_LOGE(TAG, "ADV payload rejected (too big?) — check sizes");
-            if (esp_ble_gap_config_adv_data(&s_adv_data) != ESP_OK)
-                ESP_LOGE(TAG, "scan-rsp payload rejected (too big?) — check sizes");
+             * fail, we now log it loudly instead of failing silently.
+             * v089.8: only once the wallet is ready to be served. */
+            if (s_adv_allowed) {
+                if (esp_ble_gap_config_adv_data(&s_adv_data_adv) != ESP_OK)
+                    ESP_LOGE(TAG, "ADV payload rejected (too big?) — check sizes");
+                if (esp_ble_gap_config_adv_data(&s_adv_data) != ESP_OK)
+                    ESP_LOGE(TAG, "scan-rsp payload rejected (too big?) — check sizes");
+            }
         } else {
             ESP_LOGE(TAG, "Attr table count mismatch: got %d, want %d — service NOT started",
                      param->add_attr_tab.num_handle, QUARTZ_IDX_NB);
@@ -385,7 +394,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         s_connected = false;
         s_conn_handle = 0xFFFF;
         ESP_LOGI(TAG, "Phone disconnected from BLE");
-        esp_ble_gap_start_advertising(&s_adv_params);
+        if (s_adv_allowed) esp_ble_gap_start_advertising(&s_adv_params);
         break;
 
     case ESP_GATTS_READ_EVT:
@@ -584,6 +593,7 @@ void quartz_ble_kick_adv(void) {
         return;
     }
     if (s_advertising) return;
+    if (!s_adv_allowed) return;   /* wallet not ready — nothing to serve yet */
     esp_ble_gap_config_adv_data(&s_adv_data_adv);
     esp_ble_gap_config_adv_data(&s_adv_data);
 }
@@ -596,6 +606,7 @@ static void pair_window_end_cb(void *arg) {
 
 void quartz_ble_pair_window_start(uint32_t seconds) {
     if (!s_ble_active) return;   /* quartz_ble_init() must have run */
+    s_adv_allowed = true;        /* v089.8: 'ble on' / post-confirm window always serves */
     if (!s_pair_timer) {
         const esp_timer_create_args_t args = {
             .callback = pair_window_end_cb,
@@ -648,6 +659,14 @@ void quartz_ble_set_seed_phrase(const char words[12][12]) {
     memcpy(s_seed_phrase, words, sizeof(s_seed_phrase));
     s_seed_available = true;
     s_seed_confirmed = false;
+    /* v089.8: wallet exists — unlock advertising (fresh-boot race fix:
+     * pairing before this point read zero words and dead-ended the app) */
+    if (!s_adv_allowed) {
+        s_adv_allowed = true;
+        ESP_LOGI(TAG, "Wallet ready — BLE advertising unlocked");
+        esp_ble_gap_config_adv_data(&s_adv_data_adv);
+        esp_ble_gap_config_adv_data(&s_adv_data);
+    }
     /* v0894: push to the GATT stack immediately — refresh-on-read alone
      * lags one read behind (first read still serves the stale copy) */
     if (s_seed_handle) {
