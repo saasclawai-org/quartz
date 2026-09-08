@@ -402,9 +402,15 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         }
         if (param->read.handle == s_seed_handle) {
             if (s_seed_confirmed) {
-                /* Seed already confirmed — return empty */
-                uint8_t empty = 0;
-                esp_ble_gatts_set_attr_value(s_seed_handle, 0, &empty);
+                /* v089.7: serve the zeroed buffer, NOT a 0-length value —
+                 * Bluedroid's SET_ATTR_VALUE deep-copy rejects len 0
+                 * ("btc_gatts_arg_deep_copy 12, invalid length" spam), the
+                 * set fails, the table keeps serving the words, and the
+                 * app re-shows the confirmation card forever. The buffer
+                 * was memset to 0 at confirm (and boots zeroed for
+                 * already-confirmed boards). */
+                esp_ble_gatts_set_attr_value(s_seed_handle,
+                    sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase);
             } else if (s_seed_available) {
                 /* Provisioning: serve the words — PERM_READ_ENCRYPTED
                  * already gates access to bonded peers */
@@ -541,6 +547,14 @@ void quartz_ble_stop(void) {
     if (!s_ble_active) return;
     s_ble_active = false;
     s_advertising = false;   /* v087 */
+    /* v089.7: close a live link before tearing down the stack, and clear
+     * the connection state so update_stats stops notifying a ghost */
+    if (s_connected && s_gatts_if) {
+        esp_ble_gatts_close(s_gatts_if, s_conn_handle);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    s_connected = false;
+    s_conn_handle = 0xFFFF;
     if (s_pair_timer) esp_timer_stop(s_pair_timer);
     esp_bluedroid_disable();
     esp_bluedroid_deinit();

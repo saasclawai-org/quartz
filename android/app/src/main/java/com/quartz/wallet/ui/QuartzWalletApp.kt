@@ -925,6 +925,8 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
 
     // v0.2.27: prove-the-backup challenge + honest wiped-seed state
     val seedWiped = remember { androidx.compose.runtime.mutableStateOf(false) }
+    /* v0.2.34: seed confirmed in this app session — suppress word re-reads */
+    val seedConfirmedSession = remember { androidx.compose.runtime.mutableStateOf(false) }
     val challenge = remember { androidx.compose.runtime.mutableStateOf<List<Int>?>(null) }
     var challengeStep by remember { mutableStateOf(0) }
     var challengeInput by remember { mutableStateOf("") }
@@ -956,10 +958,21 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
     // Set up BLE callbacks
     LaunchedEffect(Unit) {
         bleManager.onSeedRead = { words ->
-            if (words.isNotEmpty() && seedWords.value == null) seedWords.value = words
-            // v0.2.27: empty read = seed confirmed+wiped earlier — say so,
-            // don't go silent ("no way to confirm" was this invisibility)
-            if (words.isEmpty()) seedWiped.value = true
+            if (words.isEmpty()) {
+                // v0.2.27: empty read = seed confirmed+wiped earlier — say so,
+                // don't go silent ("no way to confirm" was this invisibility)
+                seedWiped.value = true
+            } else if (!seedConfirmedSession.value && seedWords.value == null) {
+                /* v0.2.34: a confirmed board can serve a stale words copy —
+                 * if this phone's wallet already controls this miner, treat
+                 * words as wiped instead of re-showing the confirmation card */
+                val localAddr = SoftwareWallet.load(actx)?.third
+                if (walletAddress.isEmpty() || localAddr == null || localAddr != walletAddress) {
+                    seedWords.value = words
+                } else {
+                    seedWiped.value = true
+                }
+            }
         }
         bleManager.onSeedConfirmed = {
             seedWords.value = null
@@ -987,8 +1000,10 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
         }
         /* v0.2.33: re-entering the Miner tab while still connected — the
          * remembered states were disposed with the old composition; read
-         * the seed again so the card renders. */
-        if (bleManager.isConnected()) bleManager.startSeedOnboardingRead()
+         * the seed again so the card renders.
+         * v0.2.34: skip once this session confirmed — stale copies must
+         * not resurrect the confirmation card. */
+        if (bleManager.isConnected() && !seedConfirmedSession.value) bleManager.startSeedOnboardingRead()
     }
 
     // v0.2.14: no auto-disconnect when leaving the Miner screen — the BLE
@@ -1102,6 +1117,12 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                                         challengeInput = ""; challengeError = null; challengeStep++
                                         if (challengeStep >= 3) {
                                             bleManager.confirmSeedPhrase()
+                                            /* v0.2.34: the 3-word proof happened here — kill the
+                                             * card immediately; the BLE ack races post-confirm
+                                             * stack changes and stale table copies can
+                                             * re-deliver the words otherwise */
+                                            seedConfirmedSession.value = true
+                                            seedWiped.value = true
                                             seedWords.value?.let { words ->
                                                 try {
                                                     val w = SoftwareWallet.restore(words)
@@ -1116,6 +1137,7 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                                                     statusMsg = "Wallet import failed: ${e.message}"
                                                 }
                                             }
+                                            seedWords.value = null
                                             challenge.value = null; challengeStep = 0
                                         }
                                     } else {

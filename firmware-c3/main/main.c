@@ -1007,13 +1007,21 @@ static void mining_task(void *pvParameters) {
         quartz_ble_init();
         ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
     } else {
-        /* Confirmed: if BLE was started for provisioning, shut it down and
-         * give the radio back to WiFi full-power mining. */
-        if (quartz_ble_is_active()) {
-            quartz_ble_stop();
+        /* Confirmed: give the radio back to WiFi full-power mining — but
+         * v089.7: if the phone is still connected (just confirmed in-app),
+         * keep BLE up as a 5-min pair window so live stats keep flowing;
+         * tearing the stack down under a live link half-killed GATTS
+         * (stale reads + BTC error spam). */
+        if (quartz_ble_is_active() && quartz_ble_is_connected()) {
+            quartz_ble_pair_window_start(300);
+            ESP_LOGI(TAG, "Phone connected post-confirm — BLE serves stats 5 min, then radio goes to WiFi ('ble on' reopens)");
+        } else {
+            if (quartz_ble_is_active()) {
+                quartz_ble_stop();
+            }
+            ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi ('ble on' = 5-min pair window)");
+            quartz_wifi_set_full_power();
         }
-        ESP_LOGI(TAG, "BLE off (seed confirmed) — radio dedicated to WiFi ('ble on' = 5-min pair window)");
-        quartz_wifi_set_full_power();
     }
 
     /* If PIN is set, show PIN entry screen before mining starts */
