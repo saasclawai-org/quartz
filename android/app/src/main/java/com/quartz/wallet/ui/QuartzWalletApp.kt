@@ -1088,7 +1088,12 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                     when {
                         ch == null -> Button(
                             onClick = {
-                                challenge.value = (0..11).shuffled().take(3)
+                                /* v0.2.36: challenge three DIFFERENT words — a seed
+                                 * can legitimately repeat a word (valid BIP-39),
+                                 * but asking the same word three times looks
+                                 * broken and proves nothing */
+                                challenge.value = (0..11).shuffled()
+                                    .distinctBy { seedWords.value?.get(it) ?: it }.take(3)
                                 challengeStep = 0; challengeInput = ""; challengeError = null
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -1228,6 +1233,73 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                             Spacer(Modifier.height(4.dp))
                             Text(it, fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center)
                         }
+                    }
+                }
+            }
+        }
+
+        /* v0.2.36: close the loop — after the seed is confirmed, push WiFi
+         * credentials over BLE and reboot the miner straight into mining.
+         * No captive portal, no serial. */
+        if (isConnected && (seedConfirmedSession.value || seedWiped.value)) {
+            var wifiSsid by remember { mutableStateOf("") }
+            var wifiPass by remember { mutableStateOf("") }
+            var wifiMsg by remember { mutableStateOf<String?>(null) }
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("📡 Miner WiFi", color = QuartzAccent, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Send your WiFi to the miner over Bluetooth — it saves, reboots and starts mining.",
+                        fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = wifiSsid,
+                        onValueChange = { wifiSsid = it },
+                        label = { Text("WiFi name (SSID)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = wifiPass,
+                        onValueChange = { wifiPass = it },
+                        label = { Text("WiFi password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (wifiSsid.isBlank() || wifiPass.isBlank()) {
+                                wifiMsg = "Both fields are needed."
+                                return@Button
+                            }
+                            wifiMsg = "Sending…"
+                            bleManager.setWifiSsid(wifiSsid.trim()) { okS ->
+                                if (!okS) { wifiMsg = "SSID write failed — tap Save again."; return@setWifiSsid }
+                                bleManager.setWifiPass(wifiPass) { okP ->
+                                    if (!okP) { wifiMsg = "Password write failed — tap Save again."; return@setWifiPass }
+                                    wifiMsg = "Credentials saved — rebooting miner…"
+                                    bleManager.rebootMiner { queued ->
+                                        if (!queued) wifiMsg = "Reboot write failed — power-cycle the miner."
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                    ) { Text("💾 Save & Reboot Miner", color = QuartzBg, fontWeight = FontWeight.Bold) }
+                    wifiMsg?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center)
                     }
                 }
             }

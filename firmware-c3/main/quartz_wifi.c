@@ -108,6 +108,20 @@ static void save_wifi_creds(const char *ssid, const char *pass) {
     nvs_close(h);
 }
 
+/* v089.9: BLE provisioning — SSID and password arrive as two separate
+ * encrypted writes; stage each and commit the pair to NVS once both
+ * are present (the app sends SSID first, then the password). */
+void quartz_wifi_set_credentials(const char *ssid, const char *pass) {
+    static char staged_ssid[33] = {0};
+    static char staged_pass[65] = {0};
+    if (ssid) snprintf(staged_ssid, sizeof(staged_ssid), "%s", ssid);
+    if (pass) snprintf(staged_pass, sizeof(staged_pass), "%s", pass);
+    if (staged_ssid[0] != '\0' && staged_pass[0] != '\0') {
+        save_wifi_creds(staged_ssid, staged_pass);
+        ESP_LOGI(TAG, "📡 WiFi credentials received over BLE — reboot to join");
+    }
+}
+
 /* --- Node endpoint config (host[:port]) --------------------------------- */
 
 /* Parse "host[:port]" into the runtime endpoint. Port defaults to 80

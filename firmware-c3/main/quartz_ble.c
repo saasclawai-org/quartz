@@ -15,6 +15,7 @@
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -42,6 +43,9 @@ static uint16_t s_confirm_handle = 0;
 static uint16_t s_pin_set_handle = 0;
 static uint16_t s_pin_unlock_handle = 0;
 static uint16_t s_pin_status_handle = 0;
+static uint16_t s_wifi_ssid_handle = 0;
+static uint16_t s_wifi_pass_handle = 0;
+static uint16_t s_reboot_handle = 0;
 static bool s_connected = false;
 static uint16_t s_conn_handle = 0xFFFF;
 static uint16_t s_stats_handle = 0;
@@ -98,6 +102,24 @@ static uint8_t s_pin_unlock_uuid128[16] = {
 static uint8_t s_pin_status_uuid128[16] = {
     0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
     0x00, 0x10, 0x00, 0x00, 0x08, 0x0A, 0x00, 0x00
+};
+
+/* WiFi SSID char UUID: 00000A09-... (v089.9: BLE provisioning loop) */
+static uint8_t s_wifi_ssid_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x09, 0x0A, 0x00, 0x00
+};
+
+/* WiFi password char UUID: 00000A0A-... */
+static uint8_t s_wifi_pass_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x0A, 0x0A, 0x00, 0x00
+};
+
+/* Reboot char UUID: 00000A0B-... (write anything → apply + restart) */
+static uint8_t s_reboot_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x0B, 0x0A, 0x00, 0x00
 };
 
 /* v086: BLE payloads must fit 31 bytes. The old scan-rsp (name 14 +
@@ -162,6 +184,12 @@ enum {
     QUARTZ_IDX_PIN_UNLOCK_VAL,
     QUARTZ_IDX_PIN_STATUS_CHAR,
     QUARTZ_IDX_PIN_STATUS_VAL,
+    QUARTZ_IDX_WIFI_SSID_CHAR,
+    QUARTZ_IDX_WIFI_SSID_VAL,
+    QUARTZ_IDX_WIFI_PASS_CHAR,
+    QUARTZ_IDX_WIFI_PASS_VAL,
+    QUARTZ_IDX_REBOOT_CHAR,
+    QUARTZ_IDX_REBOOT_VAL,
     QUARTZ_IDX_NB,
 };
 
@@ -286,6 +314,38 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_UUID_LEN_128, s_pin_status_uuid128, ESP_GATT_PERM_READ,
          sizeof(s_pin_status_buf), sizeof(s_pin_status_buf), s_pin_status_buf}
     },
+    /* v089.9: WiFi provisioning over BLE — write SSID, then password,
+     * then reboot. Encrypted (bonded) writes only. */
+    [QUARTZ_IDX_WIFI_SSID_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_write}
+    },
+    [QUARTZ_IDX_WIFI_SSID_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_wifi_ssid_uuid128, ESP_GATT_PERM_WRITE_ENCRYPTED,
+         33, 0, NULL}
+    },
+    [QUARTZ_IDX_WIFI_PASS_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_write}
+    },
+    [QUARTZ_IDX_WIFI_PASS_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_wifi_pass_uuid128, ESP_GATT_PERM_WRITE_ENCRYPTED,
+         65, 0, NULL}
+    },
+    [QUARTZ_IDX_REBOOT_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_write}
+    },
+    [QUARTZ_IDX_REBOOT_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_reboot_uuid128, ESP_GATT_PERM_WRITE_ENCRYPTED,
+         1, 0, NULL}
+    },
 };
 
 static bool s_advertising = false;         /* v087: ADV_START_COMPLETE seen */
@@ -365,6 +425,9 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_pin_set_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_SET_VAL];
             s_pin_unlock_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_UNLOCK_VAL];
             s_pin_status_handle = param->add_attr_tab.handles[QUARTZ_IDX_PIN_STATUS_VAL];
+            s_wifi_ssid_handle = param->add_attr_tab.handles[QUARTZ_IDX_WIFI_SSID_VAL];
+            s_wifi_pass_handle = param->add_attr_tab.handles[QUARTZ_IDX_WIFI_PASS_VAL];
+            s_reboot_handle = param->add_attr_tab.handles[QUARTZ_IDX_REBOOT_VAL];
             esp_err_t svc_err = esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]);
             if (svc_err != ESP_OK) {
                 ESP_LOGE(TAG, "start_service FAILED: %s", esp_err_to_name(svc_err));
@@ -471,6 +534,30 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                     }
                 }
                 memset(pin, 0, sizeof(pin));
+            }
+        }
+        /* v089.9: WiFi provisioning loop — SSID then password, reboot applies */
+        if (param->write.handle == s_wifi_ssid_handle) {
+            if (param->write.len > 0 && param->write.len < 33) {
+                char ssid[33] = {0};
+                memcpy(ssid, param->write.value, param->write.len);
+                quartz_wifi_set_credentials(ssid, NULL);
+                ESP_LOGI(TAG, "WiFi SSID staged over BLE (%d bytes)", param->write.len);
+            }
+        }
+        if (param->write.handle == s_wifi_pass_handle) {
+            if (param->write.len > 0 && param->write.len < 65) {
+                char pass[65] = {0};
+                memcpy(pass, param->write.value, param->write.len);
+                quartz_wifi_set_credentials(NULL, pass);
+                ESP_LOGI(TAG, "WiFi password received over BLE — credentials committed");
+            }
+        }
+        if (param->write.handle == s_reboot_handle) {
+            if (param->write.len >= 1) {
+                ESP_LOGW(TAG, "Reboot requested over BLE — applying WiFi + restarting");
+                vTaskDelay(pdMS_TO_TICKS(500));
+                esp_restart();
             }
         }
         break;
@@ -599,6 +686,14 @@ void quartz_ble_kick_adv(void) {
 }
 
 static void pair_window_end_cb(void *arg) {
+    /* v089.9: phone still connected (mid WiFi-provisioning or watching
+     * stats) — extend the window instead of tearing the stack down
+     * under a live link */
+    if (s_connected) {
+        ESP_LOGI(TAG, "Pair window: phone still connected — extending 5 min");
+        esp_timer_start_once(s_pair_timer, 300ULL * 1000000ULL);
+        return;
+    }
     quartz_ble_stop();
     quartz_wifi_set_full_power();
     ESP_LOGI(TAG, "Pair window closed — BLE off, WiFi back to full power");

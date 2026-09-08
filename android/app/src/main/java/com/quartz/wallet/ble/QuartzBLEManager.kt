@@ -40,6 +40,9 @@ class QuartzBLEManager(private val context: Context) {
 
         // PIN-related characteristics
         val PIN_SET_UUID: UUID = UUID.fromString("00000a06-0000-1000-8000-00805f9b34fb")
+        val WIFI_SSID_UUID: UUID = UUID.fromString("00000a09-0000-1000-8000-00805f9b34fb")
+        val WIFI_PASS_UUID: UUID = UUID.fromString("00000a0a-0000-1000-8000-00805f9b34fb")
+        val REBOOT_UUID: UUID = UUID.fromString("00000a0b-0000-1000-8000-00805f9b34fb")
         val PIN_UNLOCK_UUID: UUID = UUID.fromString("00000a07-0000-1000-8000-00805f9b34fb")
         val PIN_STATUS_UUID: UUID = UUID.fromString("00000a08-0000-1000-8000-00805f9b34fb")
 
@@ -59,6 +62,7 @@ class QuartzBLEManager(private val context: Context) {
     var onStatsUpdate: ((MiningStats) -> Unit)? = null
     var onAddressRead: ((String) -> Unit)? = null
     var onSeedRead: ((List<String>) -> Unit)? = null
+    var onWifiWriteResult: ((Boolean) -> Unit)? = null
     var onSeedConfirmed: (() -> Unit)? = null
     var onConnectionChange: ((Boolean) -> Unit)? = null
     var onScanResult: ((String) -> Unit)? = null  // device name
@@ -380,6 +384,42 @@ class QuartzBLEManager(private val context: Context) {
             onResult(false)
         }
         Log.i(TAG, "PIN set write: ${pin.length} digits")
+    }
+
+    /** v0.2.36: WiFi provisioning over BLE — write SSID, then password,
+     *  then reboot. The board stages each half and commits to NVS when
+     *  both are present; the reboot write applies and restarts. */
+    private fun writeEncrypted(uuid: UUID, payload: ByteArray, desc: String): Boolean {
+        val gatt = connectedGatt ?: return false
+        val svc = gatt.getService(SERVICE_UUID) ?: return false
+        val ch = svc.getCharacteristic(uuid) ?: return false
+        ch.value = payload
+        ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        val ok = gatt.writeCharacteristic(ch)
+        Log.i(TAG, "$desc write queued: $ok")
+        return ok
+    }
+
+    fun setWifiSsid(ssid: String, onResult: (Boolean) -> Unit) {
+        onWifiWriteResult = onResult
+        if (!writeEncrypted(WIFI_SSID_UUID, ssid.toByteArray(Charsets.US_ASCII), "WiFi SSID")) {
+            onWifiWriteResult = null
+            onResult(false)
+        }
+    }
+
+    fun setWifiPass(pass: String, onResult: (Boolean) -> Unit) {
+        onWifiWriteResult = onResult
+        if (!writeEncrypted(WIFI_PASS_UUID, pass.toByteArray(Charsets.US_ASCII), "WiFi password")) {
+            onWifiWriteResult = null
+            onResult(false)
+        }
+    }
+
+    fun rebootMiner(onResult: (Boolean) -> Unit) {
+        /* fire-and-forget: the board restarts 500ms after the write —
+         * the GATT callback may never arrive */
+        onResult(writeEncrypted(REBOOT_UUID, byteArrayOf(1), "Reboot"))
     }
 
     /**
@@ -917,6 +957,10 @@ class QuartzBLEManager(private val context: Context) {
                         onPinSetResult?.invoke(false)
                         onPinSetResult = null
                     }
+                    WIFI_SSID_UUID, WIFI_PASS_UUID -> {
+                        onWifiWriteResult?.invoke(false)
+                        onWifiWriteResult = null
+                    }
                     SEED_UUID -> {
                         if (pendingRecoveryWords != null) {
                             onRecoverResult?.invoke(false, null, "Failed to write seed (GATT error $status)")
@@ -965,6 +1009,11 @@ class QuartzBLEManager(private val context: Context) {
                     onPinSetResult?.invoke(success)
                     onPinSetResult = null
                 }
+                WIFI_SSID_UUID, WIFI_PASS_UUID -> {
+                    onWifiWriteResult?.invoke(true)
+                    onWifiWriteResult = null
+                }
+                REBOOT_UUID -> Log.i(TAG, "Reboot write acked — board restarting")
                 CONFIRM_UUID -> {
                     Log.i(TAG, "Seed confirmation acknowledged by device")
                     handler.removeCallbacks(confirmWatchdog)
