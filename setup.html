@@ -174,7 +174,7 @@ sup { color: var(--accent2); font-size: 12px; }
 
     <p>Get the files from the <a href="/download.html">download page</a>. You need <strong>one</strong> all-in-one image for your board:</p>
     <ul>
-      <li><strong>ESP32-C3</strong> (Super Mini, DevKitM): <code>quartz-c3-merged-v0895.bin</code></li>
+      <li><strong>ESP32-C3</strong> (Super Mini, DevKitM): <code>quartz-c3-merged-v0896.bin</code></li>
       <li><strong>Classic ESP32</strong> (DevKit, WROOM, M5Stack, LilyGO T3): <code>quartz-esp32-merged-v0894.bin</code></li>
       <li><strong>ESP32-S3</strong> (Heltec V3): see the download page (build pending)</li>
     </ul>
@@ -183,7 +183,7 @@ sup { color: var(--accent2); font-size: 12px; }
     <p>Put the script next to the bin file, run it, plug the board in. It detects the port and flashes itself:</p>
     <pre><code>cd %USERPROFILE%\Downloads
 curl -O https://quartzchain.net/downloads/flash_c3.py
-curl -O https://quartzchain.net/downloads/quartz-c3-merged-v0895.bin
+curl -O https://quartzchain.net/downloads/quartz-c3-merged-v0896.bin
 python flash_c3.py</code></pre>
     <p class="muted">For classic ESP32 boards use <a href="/downloads/flash_esp32.py">flash_esp32.py</a> + <code>quartz-esp32-merged-v0894.bin</code>. On the C3 Super Mini, hold <strong>BOOT</strong> while plugging in if it won't connect — its auto-reset is finicky.</p>
 
@@ -202,20 +202,20 @@ python flash_c3.py</code></pre>
         <li>Plug the board into USB. Open Device Manager → Ports → find your COM port (e.g. <code>COM5</code>)</li>
         <li>Flash the all-in-one image (C3 example):</li>
       </ol>
-      <pre><code>python -m esptool --chip esp32c3 --port COM5 --baud 115200 write_flash 0x0 quartz-c3-merged-v0895.bin</code></pre>
+      <pre><code>python -m esptool --chip esp32c3 --port COM5 --baud 115200 write_flash 0x0 quartz-c3-merged-v0896.bin</code></pre>
       <p class="muted">Classic ESP32: <code>--chip esp32 ... 0x0 quartz-esp32-merged-v0894.bin</code></p>
     </div>
 
     <div id="mac" class="tab-content">
       <pre><code>pip install esptool
 ls /dev/cu.*   # look for SLAB_USBtoUART or wchusbserial
-python -m esptool --chip esp32c3 --port /dev/cu.SLAB_USBtoUART --baud 115200 write_flash 0x0 quartz-c3-merged-v0895.bin</code></pre>
+python -m esptool --chip esp32c3 --port /dev/cu.SLAB_USBtoUART --baud 115200 write_flash 0x0 quartz-c3-merged-v0896.bin</code></pre>
     </div>
 
     <div id="linux" class="tab-content">
       <pre><code>pip install esptool
 ls /dev/ttyUSB*   # if permission denied: sudo usermod -aG dialout $USER
-python -m esptool --chip esp32c3 --port /dev/ttyUSB0 --baud 115200 write_flash 0x0 quartz-c3-merged-v0895.bin</code></pre>
+python -m esptool --chip esp32c3 --port /dev/ttyUSB0 --baud 115200 write_flash 0x0 quartz-c3-merged-v0896.bin</code></pre>
     </div>
 
     <p>Wait for <code>Hash of data verified.</code> The board resets itself and boots into setup mode.</p>
@@ -224,7 +224,7 @@ python -m esptool --chip esp32c3 --port /dev/ttyUSB0 --baud 115200 write_flash 0
       <strong>⚠️ Flash doctrine — read this before your second flash:</strong>
       <ul>
         <li><strong>Updating a board that already works?</strong> Flash the <em>app-only</em> image at <code>0x20000</code> — it preserves your wallet, seed, PIN, WiFi and node settings:
-          <pre><code>python -m esptool --chip esp32c3 --port COM5 --baud 115200 write_flash 0x20000 quartz-app-v0895-c3.bin</code></pre></li>
+          <pre><code>python -m esptool --chip esp32c3 --port COM5 --baud 115200 write_flash 0x20000 quartz-app-v0896-c3.bin</code></pre></li>
         <li><strong>The all-in-one image (0x0)</strong> is for <em>new or bricked boards only</em>. It <strong>wipes WiFi settings and the wallet</strong> — the image's padding overlaps the settings partition. A board flashed this way comes up with a fresh wallet and needs full setup again.</li>
         <li><strong>Bricked by the browser web flasher?</strong> (boot loop <code>invalid header: 0xffffffff</code>) — use the Python commands above instead. WebSerial can abort mid-write on some USB setups, leaving the flash half-erased. If the bootloader survived (the loop started right after an app-only update), the app-only command at <code>0x20000</code> revives it <em>and keeps your wallet</em>.</li>
       </ul>
@@ -349,12 +349,12 @@ I (6414) MAIN: Scratchpad allocated (16 KB)
 I (6420) MAIN: BLE off (seed confirmed) — radio dedicated to WiFi
 I (6438) MAIN: Mining started!
 I (7251) QZ.WIFI: Got work: height=7514 target=13        ← within ~1s on a local node
-I (807197) MAIN: Mining... 30 H/s, 56 total, nonce 55 [v089.5]
+I (807197) MAIN: Mining... 30 H/s, 56 total, nonce 55 [v089.6]
 I (807587) QZ.MESH: Peer discovered: 08f9e0f652bc (caps=0x03 height=0)</code></pre>
     <ul>
       <li><code>Mining started!</code> by ~7 seconds after reset — if it's not there, see the seed-confirm trap in step 3</li>
       <li><code>Got work</code> fast = node URL is right (local node: under a second; quartzchain.net: up to ~35s)</li>
-      <li><code>[v089.5]</code> in mining lines = your firmware version</li>
+      <li><code>[v089.6]</code> in mining lines = your firmware version</li>
       <li><code>Peer discovered</code> = another Quartz board in radio range (~200m) — you're meshing</li>
     </ul>
 

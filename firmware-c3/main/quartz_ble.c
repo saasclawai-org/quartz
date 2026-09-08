@@ -389,33 +389,33 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
         break;
 
     case ESP_GATTS_READ_EVT:
-        if (param->read.handle == s_stats_handle + 1) {
-            esp_ble_gatts_set_attr_value(s_stats_handle + 1,
+        if (param->read.handle == s_stats_handle) {
+            esp_ble_gatts_set_attr_value(s_stats_handle,
                 sizeof(struct mining_stats), (uint8_t*)&s_stats);
         }
         /* v0893: attr values are COPIED at table creation — without these
          * refreshes the phone keeps reading the boot-time zeros ("0 words",
          * empty address) no matter what the setters wrote into RAM. */
-        if (param->read.handle == s_addr_handle + 1) {
-            esp_ble_gatts_set_attr_value(s_addr_handle + 1,
+        if (param->read.handle == s_addr_handle) {
+            esp_ble_gatts_set_attr_value(s_addr_handle,
                 strlen(s_address), (uint8_t*)s_address);
         }
-        if (param->read.handle == s_seed_handle + 1) {
+        if (param->read.handle == s_seed_handle) {
             if (s_seed_confirmed) {
                 /* Seed already confirmed — return empty */
                 uint8_t empty = 0;
-                esp_ble_gatts_set_attr_value(s_seed_handle + 1, 0, &empty);
+                esp_ble_gatts_set_attr_value(s_seed_handle, 0, &empty);
             } else if (s_seed_available) {
                 /* Provisioning: serve the words — PERM_READ_ENCRYPTED
                  * already gates access to bonded peers */
-                esp_ble_gatts_set_attr_value(s_seed_handle + 1,
+                esp_ble_gatts_set_attr_value(s_seed_handle,
                     sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase);
             }
         }
         break;
 
     case ESP_GATTS_WRITE_EVT:
-        if (param->write.handle == s_confirm_handle + 1) {
+        if (param->write.handle == s_confirm_handle) {
             /* Phone sent 3 word indices (0-11) as confirmation */
             if (param->write.len >= 3 && s_seed_available && !s_seed_confirmed) {
                 uint8_t *indices = param->write.value;
@@ -429,7 +429,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             }
         }
         /* PIN set — requires bonded encrypted connection */
-        if (param->write.handle == s_pin_set_handle + 1) {
+        if (param->write.handle == s_pin_set_handle) {
             if (param->write.len > 0 && param->write.len <= 8) {
                 char pin[9] = {0};
                 memcpy(pin, param->write.value, param->write.len);
@@ -439,7 +439,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             }
         }
         /* PIN unlock — write PIN to unlock device */
-        if (param->write.handle == s_pin_unlock_handle + 1) {
+        if (param->write.handle == s_pin_unlock_handle) {
             if (param->write.len > 0 && param->write.len <= 8) {
                 char pin[9] = {0};
                 memcpy(pin, param->write.value, param->write.len);
@@ -617,7 +617,7 @@ void quartz_ble_set_address(const char *address) {
     }
     /* v0894: push immediately (see set_seed_phrase) */
     if (s_addr_handle) {
-        esp_ble_gatts_set_attr_value(s_addr_handle + 1,
+        esp_ble_gatts_set_attr_value(s_addr_handle,
             strlen(s_address), (uint8_t*)s_address);
     }
 }
@@ -637,7 +637,7 @@ void quartz_ble_set_seed_phrase(const char words[12][12]) {
     /* v0894: push to the GATT stack immediately — refresh-on-read alone
      * lags one read behind (first read still serves the stale copy) */
     if (s_seed_handle) {
-        esp_ble_gatts_set_attr_value(s_seed_handle + 1,
+        esp_ble_gatts_set_attr_value(s_seed_handle,
             sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase);
     }
     ESP_LOGI(TAG, "Seed phrase loaded for BLE provisioning (read once)");
