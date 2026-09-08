@@ -107,7 +107,7 @@ fun QuartzWalletApp() {
                         }
                     )
                 }
-                2 -> SettingsScreen(onWalletDeleted = {
+                2 -> SettingsScreen(bleManager = bleManager, onWalletDeleted = {
                     walletCreated = false
                     walletEpoch++
                 })
@@ -1233,6 +1233,17 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
             }
         }
 
+        /* v0.2.35: manual seed re-read — a fresh board spends its first
+         * ~80s generating the wallet; pairing in that window reads zeros
+         * and the card never retries on its own. */
+        if (isConnected && seedWords.value == null) {
+            OutlinedButton(
+                onClick = { bleManager.startSeedOnboardingRead() },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = QuartzAccent)
+            ) { Text("🔄 Re-read seed") }
+        }
+
         if (!isConnected && stats == null) {
             // Not connected — show pair button
             Text(
@@ -1388,7 +1399,7 @@ fun formatUptime(seconds: Long): String {
 }
 
 @Composable
-fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
+fun SettingsScreen(bleManager: QuartzBLEManager, onWalletDeleted: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { WalletStore(context) }
     // v0.2.9: node settings in plain "quartz_settings" (NOT the encrypted wallet file)
@@ -1401,6 +1412,8 @@ fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
     var showConfirm by remember { mutableStateOf(false) }
     var confirmText by remember { mutableStateOf("") }
     var deleted by remember { mutableStateOf(false) }
+    var showForgetMiner by remember { mutableStateOf(false) }
+    var forgetResult by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
         Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -1445,6 +1458,34 @@ fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
         )
         Spacer(Modifier.height(24.dp))
 
+        /* v0.2.35: miner reset — stale bonds after a board erase/reflash
+         * silently kill the encrypted seed read; this is the in-app
+         * equivalent of Android Bluetooth settings → Forget */
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = QuartzCard),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("📡 Miner", color = QuartzAccent, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Reflashed or erased your board? Drop the old Bluetooth pairing here — stale bonds silently block the seed read.",
+                    fontSize = 12.sp, color = QuartzMuted
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showForgetMiner = true },
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                ) { Text("🔗 Forget Quartz Miner") }
+                forgetResult?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, fontSize = 12.sp, color = QuartzMuted)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
         OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text("📤 Export Wallet")
         }
@@ -1468,6 +1509,32 @@ fun SettingsScreen(onWalletDeleted: () -> Unit = {}) {
                 color = QuartzMuted, fontSize = 13.sp
             )
         }
+    }
+
+    if (showForgetMiner) {
+        AlertDialog(
+            onDismissRequest = { showForgetMiner = false },
+            title = { Text("Forget Quartz Miner?") },
+            text = {
+                Text(
+                    "Removes the Bluetooth pairing and disconnects. Your wallet, keys and settings are untouched. " +
+                    "Use this after erasing or reflashing a board, or when pairing acts up.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showForgetMiner = false
+                    bleManager.forgetMiner { removed ->
+                        forgetResult = if (removed > 0) "✓ Bond removed. Scan on the Miner tab to pair fresh."
+                                       else "No bond was found — nothing to remove."
+                    }
+                }) { Text("Forget") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgetMiner = false }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showConfirm) {

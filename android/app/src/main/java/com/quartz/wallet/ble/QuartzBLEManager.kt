@@ -286,6 +286,35 @@ class QuartzBLEManager(private val context: Context) {
         onConnectionChange?.invoke(false)
     }
 
+    /* v0.2.35: "Forget Quartz Miner" — drop the system Bluetooth bond.
+     * A stale bond (board erased/reflashed → its keys gone, phone still
+     * holds the old pair) makes every encrypted seed read fail SILENTLY:
+     * connected, no words, no error. Removing the bond forces a clean
+     * re-pair on the next scan. */
+    @SuppressLint("MissingPermission")
+    fun forgetMiner(onDone: ((removed: Int) -> Unit)? = null) {
+        val dev = connectedDevice
+        disconnect()
+        var removed = 0
+        val targets = (if (dev != null) listOf(dev) else emptyList()) +
+            adapter.bondedDevices.filter { it.name == "Quartz-Miner" || it.name?.startsWith("Quartz-") == true }
+        targets.distinctBy { it.address }.forEach { d ->
+            try {
+                val m = d.javaClass.getMethod("removeBond")
+                if (m.invoke(d) == true) removed++
+                Log.i(TAG, "Removed bond for ${d.name} (${d.address})")
+            } catch (e: Exception) {
+                Log.w(TAG, "removeBond failed for ${d.address}: ${e.message}")
+            }
+        }
+        discovered.clear()
+        seedReadRetries = 0
+        seedEmptyRetryDone = false
+        connectionState.value = if (removed > 0) "bond forgotten — scan to pair fresh"
+                                 else "no bond found — scan to connect"
+        onDone?.invoke(removed)
+    }
+
     // ── PIN Operations ──────────────────────────────────────────────
 
     /**
