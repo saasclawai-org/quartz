@@ -643,6 +643,13 @@ static void deferred_wifi_task(void *arg) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     quartz_wifi_init();
+    /* v089.11: bring mesh up once WiFi exists — v085 rule stays: never
+     * pre-confirmation (ESP-NOW coex starves BLE discovery). */
+    if (quartz_wallet_is_backup_confirmed()) {
+        quartz_mesh_init();
+        quartz_mesh_update_caps(QZ_CAP_IS_MINING |
+                                (quartz_wifi_is_connected() ? QZ_CAP_HAS_WIFI : 0));
+    }
     vTaskDelete(NULL);
 }
 
@@ -1397,6 +1404,11 @@ void app_main(void) {
      * (mining won't start) and quartz_mesh_init() is idempotent. */
     if (!quartz_wallet_is_backup_confirmed()) {
         ESP_LOGI(TAG, "Mesh deferred (seed unconfirmed) — radio reserved for BLE + portal");
+    } else if (wifi_deferred) {
+        /* v089.11: confirmed but no WiFi creds — WiFi driver not up yet
+         * (v089.10 deferred it for BLE provisioning); the deferred task
+         * brings mesh up after WiFi initializes. */
+        ESP_LOGI(TAG, "Mesh deferred (WiFi unprovisioned) — radio reserved for BLE");
     } else if (quartz_wifi_is_connected()) {
         quartz_mesh_init();
         quartz_mesh_update_caps(QZ_CAP_HAS_WIFI | QZ_CAP_IS_MINING);
