@@ -630,9 +630,16 @@ console_next:
  * after PROVISION_WIFI_FALLBACK_S if the user never confirms (portal
  * stays reachable for stranded setups). */
 #define PROVISION_WIFI_FALLBACK_S 120
+#define PROVISION_BLE_WINDOW_S    1200  /* v089.10: confirmed but no WiFi creds — BLE-first this long */
 static void deferred_wifi_task(void *arg) {
-    for (int i = 0; i < PROVISION_WIFI_FALLBACK_S; i++) {
-        if (quartz_wallet_is_backup_confirmed()) break;
+    /* v089.10: setup = seed confirmed AND WiFi creds present. The portal
+     * only fires when provisioning truly stalls — a live phone link resets
+     * the idle timer, so BLE provisioning never gets the radio yanked. */
+    int timeout_s = quartz_wallet_is_backup_confirmed() ? PROVISION_BLE_WINDOW_S
+                                                        : PROVISION_WIFI_FALLBACK_S;
+    for (int i = 0; i < timeout_s; i++) {
+        if (quartz_wallet_is_backup_confirmed() && quartz_wifi_has_creds()) break;
+        if (quartz_ble_is_connected()) i = -1;   /* phone linked — keep waiting */
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     quartz_wifi_init();
@@ -998,14 +1005,26 @@ static void mining_task(void *pvParameters) {
      * Once backup is confirmed, keep the shared C3 radio 100% WiFi:
      * BLE+WiFi coex duty-cycling is what triggers router evictions
      * (reason 34) and the 201/202/205 reconnect churn. */
-    bool ble_on = !quartz_wallet_is_backup_confirmed();
+    /* v089.10: setup isn't done until the miner can reach the node — a
+     * confirmed board with no WiFi creds keeps BLE available so the app
+     * can finish provisioning any time, power-cycles included. */
+    bool setup_done = quartz_wallet_is_backup_confirmed() && quartz_wifi_has_creds();
+    bool ble_on = !setup_done;
     if (ble_on && quartz_ble_is_active()) {
         /* v084: BLE already running from the provisioning wait — keep it up */
         ESP_LOGI(TAG, "BLE ready (from provisioning wait) — pair as \"Quartz-Miner\"");
     } else if (ble_on) {
         quartz_ble_set_address(quartz_wallet_get_address());
         quartz_ble_init();
-        ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+        if (quartz_wifi_has_creds()) {
+            ESP_LOGI(TAG, "BLE ready — pair as \"Quartz-Miner\"");
+        } else {
+            /* v089.10: seed confirmed but unprovisioned — rolling pair
+             * window (extends while the phone stays linked) so WiFi setup
+             * can be finished any time; the portal takes over after it. */
+            quartz_ble_pair_window_start(PROVISION_BLE_WINDOW_S);
+            ESP_LOGI(TAG, "BLE ready (no WiFi creds) — %d s rolling pair window; finish WiFi setup from the app any time", PROVISION_BLE_WINDOW_S);
+        }
     } else {
         /* Confirmed: give the radio back to WiFi full-power mining — but
          * v089.7: if the phone is still connected (just confirmed in-app),
@@ -1340,9 +1359,9 @@ void app_main(void) {
      * air stays silent; two independent scanners confirmed). Unconfirmed
      * boards defer WiFi to a background task: starts the moment the seed
      * is confirmed, or PROVISION_WIFI_FALLBACK_S as a portal fallback. */
-    bool wifi_deferred = !quartz_wallet_is_backup_confirmed();
+    bool wifi_deferred = !(quartz_wallet_is_backup_confirmed() && quartz_wifi_has_creds());  /* v089.10 */
     if (wifi_deferred) {
-        ESP_LOGI(TAG, "Seed unconfirmed — WiFi deferred, radio dedicated to BLE");
+        ESP_LOGI(TAG, "Setup incomplete (seed or WiFi) — WiFi deferred, radio dedicated to BLE");
         xTaskCreate(deferred_wifi_task, "qz_wifi_defer", 3072, NULL, 3, NULL);
     } else {
         quartz_wifi_init();

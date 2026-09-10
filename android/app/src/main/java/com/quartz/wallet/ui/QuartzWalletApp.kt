@@ -1240,11 +1240,14 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
 
         /* v0.2.36: close the loop — after the seed is confirmed, push WiFi
          * credentials over BLE and reboot the miner straight into mining.
-         * No captive portal, no serial. */
-        if (isConnected && (seedConfirmedSession.value || seedWiped.value)) {
-            var wifiSsid by remember { mutableStateOf("") }
-            var wifiPass by remember { mutableStateOf("") }
-            var wifiMsg by remember { mutableStateOf<String?>(null) }
+         * No captive portal, no serial.
+         * v0.2.37: state hoisted so typed text survives a dropped Bluetooth
+         * link — the card stays visible post-confirm; Save re-enables on
+         * reconnect instead of the card (and your typing) vanishing. */
+        var wifiSsid by remember { mutableStateOf("") }
+        var wifiPass by remember { mutableStateOf("") }
+        var wifiMsg by remember { mutableStateOf<String?>(null) }
+        if (seedConfirmedSession.value || seedWiped.value) {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 colors = CardDefaults.cardColors(containerColor = QuartzCard),
@@ -1277,6 +1280,7 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                     )
                     Spacer(Modifier.height(8.dp))
                     Button(
+                        enabled = isConnected,
                         onClick = {
                             if (wifiSsid.isBlank() || wifiPass.isBlank()) {
                                 wifiMsg = "Both fields are needed."
@@ -1297,6 +1301,13 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
                     ) { Text("💾 Save & Reboot Miner", color = QuartzBg, fontWeight = FontWeight.Bold) }
+                    if (!isConnected) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Bluetooth link lost — your text is kept. Reconnect to the miner to send.",
+                            fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center
+                        )
+                    }
                     wifiMsg?.let {
                         Spacer(Modifier.height(6.dp))
                         Text(it, fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center)
