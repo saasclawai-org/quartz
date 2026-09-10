@@ -199,6 +199,16 @@ static void send_hello(void) {
 int quartz_mesh_init(void) {
     if (s_initialized) return 0;
 
+    /* v089.11: ESP-NOW NULL-derefs into a boot panic if the WiFi driver
+     * was never initialized. Reachable in deferred-WiFi boot states
+     * (seed unconfirmed, or confirmed with no WiFi creds yet) — mesh must
+     * never take the board down; callers retry after WiFi comes up. */
+    wifi_mode_t mode;
+    if (esp_wifi_get_mode(&mode) != ESP_OK) {
+        ESP_LOGW(TAG, "Mesh deferred — WiFi driver not up yet");
+        return -1;
+    }
+
     /* ESP-NOW requires WiFi to be started first */
     esp_err_t err = esp_now_init();
     if (err != ESP_OK) {
