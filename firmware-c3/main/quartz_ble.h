@@ -19,6 +19,10 @@
 #define QUARTZ_CHAR_PIN_UNLOCK_UUID 0x0A07  /* Write: unlock device with PIN */
 #define QUARTZ_CHAR_PIN_STATUS_UUID 0x0A08  /* Read: has PIN? attempts left? */
 
+/* Relay characteristics (v089.12 — docs/RELAY-BLE-SPEC.md) */
+#define QUARTZ_CHAR_RELAY_STATUS_UUID 0x0A0C /* Read: JSON state snapshot */
+#define QUARTZ_CHAR_RELAY_CMD_UUID    0x0A0D /* Write (bonded): CLI-syntax command */
+
 /* Initialize BLE GATT server with mining stats */
 void quartz_ble_init(void);
 

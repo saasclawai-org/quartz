@@ -5,6 +5,7 @@
 
 #include "quartz_ble.h"
 #include "quartz_wifi.h"
+#include "quartz_pay.h"     /* v089.12: relay over BLE (0A0C/0A0D) */
 #include "esp_timer.h"
 #include "quartz_wallet.h"
 
@@ -46,6 +47,11 @@ static uint16_t s_pin_status_handle = 0;
 static uint16_t s_wifi_ssid_handle = 0;
 static uint16_t s_wifi_pass_handle = 0;
 static uint16_t s_reboot_handle = 0;
+/* v089.12: relay over BLE — chars appended AFTER 0A0B, never inserted
+ * (the v089.6 +1 handle bug: mid-table additions shift every handle) */
+static uint16_t s_relay_status_handle = 0;
+static uint16_t s_relay_cmd_handle = 0;
+static char s_relay_json[256] = "{\"v\":1}";
 static bool s_connected = false;
 static uint16_t s_conn_handle = 0xFFFF;
 static uint16_t s_stats_handle = 0;
@@ -122,6 +128,18 @@ static uint8_t s_reboot_uuid128[16] = {
     0x00, 0x10, 0x00, 0x00, 0x0B, 0x0A, 0x00, 0x00
 };
 
+/* Relay status char UUID: 00000A0C-... (v089.12: JSON snapshot, read) */
+static uint8_t s_relay_status_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x0C, 0x0A, 0x00, 0x00
+};
+
+/* Relay command char UUID: 00000A0D-... (v089.12: bonded write, CLI syntax) */
+static uint8_t s_relay_cmd_uuid128[16] = {
+    0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x0D, 0x0A, 0x00, 0x00
+};
+
 /* v086: BLE payloads must fit 31 bytes. The old scan-rsp (name 14 +
  * UUID 18 + conn-int 6 = 38 B) NEVER fit — config_adv_data failed, the
  * completion event never fired, and advertising never started on ANY
@@ -190,6 +208,11 @@ enum {
     QUARTZ_IDX_WIFI_PASS_VAL,
     QUARTZ_IDX_REBOOT_CHAR,
     QUARTZ_IDX_REBOOT_VAL,
+    /* v089.12: relay over BLE — APPEND-ONLY entries (handle-shift lesson) */
+    QUARTZ_IDX_RELAY_STATUS_CHAR,
+    QUARTZ_IDX_RELAY_STATUS_VAL,
+    QUARTZ_IDX_RELAY_CMD_CHAR,
+    QUARTZ_IDX_RELAY_CMD_VAL,
     QUARTZ_IDX_NB,
 };
 
@@ -342,6 +365,28 @@ static esp_gatts_attr_db_t s_attr_db[QUARTZ_IDX_NB] = {
         {ESP_UUID_LEN_128, s_reboot_uuid128, ESP_GATT_PERM_WRITE_ENCRYPTED,
          1, 0, NULL}
     },
+    /* v089.12: relay status — JSON snapshot, refreshed on read */
+    [QUARTZ_IDX_RELAY_STATUS_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_read}
+    },
+    [QUARTZ_IDX_RELAY_STATUS_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_relay_status_uuid128, ESP_GATT_PERM_READ,
+         sizeof(s_relay_json), sizeof(s_relay_json), (uint8_t*)s_relay_json}
+    },
+    /* v089.12: relay command — bonded write, CLI syntax (RELAY-BLE-SPEC.md) */
+    [QUARTZ_IDX_RELAY_CMD_CHAR] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_16, (uint8_t*)&s_char_decl_uuid16, ESP_GATT_PERM_READ,
+         sizeof(uint8_t), sizeof(uint8_t), (uint8_t*)&s_props_write}
+    },
+    [QUARTZ_IDX_RELAY_CMD_VAL] = {
+        {ESP_GATT_AUTO_RSP},
+        {ESP_UUID_LEN_128, s_relay_cmd_uuid128, ESP_GATT_PERM_WRITE_ENCRYPTED,
+         96, 0, NULL}
+    },
 };
 
 static bool s_advertising = false;         /* v087: ADV_START_COMPLETE seen */
@@ -424,6 +469,8 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_wifi_ssid_handle = param->add_attr_tab.handles[QUARTZ_IDX_WIFI_SSID_VAL];
             s_wifi_pass_handle = param->add_attr_tab.handles[QUARTZ_IDX_WIFI_PASS_VAL];
             s_reboot_handle = param->add_attr_tab.handles[QUARTZ_IDX_REBOOT_VAL];
+            s_relay_status_handle = param->add_attr_tab.handles[QUARTZ_IDX_RELAY_STATUS_VAL];
+            s_relay_cmd_handle = param->add_attr_tab.handles[QUARTZ_IDX_RELAY_CMD_VAL];
             if (esp_ble_gatts_start_service(param->add_attr_tab.handles[QUARTZ_IDX_SVC]) != ESP_OK)
                 ESP_LOGE(TAG, "GATT service start failed");
             /* v086: both payloads sized to fit 31 bytes — if these calls
@@ -483,6 +530,12 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                 esp_ble_gatts_set_attr_value(s_seed_handle,
                     sizeof(s_seed_phrase), (uint8_t*)s_seed_phrase);
             }
+        }
+        /* v089.12: relay status JSON snapshot (0A0C) */
+        if (param->read.handle == s_relay_status_handle) {
+            quartz_pay_build_relay_json(s_relay_json, sizeof(s_relay_json));
+            esp_ble_gatts_set_attr_value(s_relay_status_handle,
+                (uint16_t) strlen(s_relay_json), (uint8_t*) s_relay_json);
         }
         break;
 
@@ -552,6 +605,21 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                 ESP_LOGW(TAG, "Reboot requested over BLE — applying WiFi + restarting");
                 vTaskDelay(pdMS_TO_TICKS(500));
                 esp_restart();
+            }
+        }
+        /* v089.12: relay command (0A0D) — CLI syntax, shared parser with
+         * serial console. Bonded+encrypted writes only. 'pin <gpio>' and
+         * 'test' have the same semantics as the CLI (reboot / ~3s block). */
+        if (param->write.handle == s_relay_cmd_handle) {
+            if (param->write.len > 0 && param->write.len < 96) {
+                char rcmd[96] = {0};
+                memcpy(rcmd, param->write.value, param->write.len);
+                rcmd[strcspn(rcmd, "\r\n")] = '\0';
+                if (!quartz_pay_is_initialized())
+                    quartz_pay_init(quartz_wallet_get_address());   /* once: re-init disarms */
+                char rreply[192];
+                quartz_pay_relay_cmd(rcmd, rreply, sizeof(rreply));
+                ESP_LOGI(TAG, "Relay over BLE: '%s' → %s", rcmd, rreply);
             }
         }
         break;

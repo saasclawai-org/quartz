@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdbool.h>
+#include <stddef.h>   /* v089.12: size_t for relay_cmd/build_relay_json */
 
 #ifdef __cplusplus
 extern "C" {
@@ -110,6 +111,8 @@ void quartz_pay_set_fast(bool fast);
 bool quartz_pay_get_fast(void);
 void quartz_pay_toggle_invert(void);
 bool quartz_pay_get_invert(void);
+/* v089.12: absolute polarity (BLE sets state; CLI keeps bare toggle) */
+void quartz_pay_set_invert(bool invert);
 /* v082: auto re-arm (vending mode) — after firing, re-request the same
  * amount with a fresh arm snapshot. Coinbase txs (counterparty null —
  * mining rewards) never fire the relay. */
@@ -122,10 +125,29 @@ bool quartz_pay_get_auto(void);
  */
 qz_pay_state_t quartz_pay_get_state(void);
 
+/* v089.12: true after quartz_pay_init() — callers guard on this because
+ * re-init resets state to IDLE and would kill an armed watch */
+bool quartz_pay_is_initialized(void);
+
 /**
  * Get current payment request info.
  */
 const qz_pay_request_t *quartz_pay_get_request(void);
+
+/* ---- v089.12: relay over BLE (docs/RELAY-BLE-SPEC.md) ----
+ * One parser, two transports: serial CLI ("relay …") and BLE char 0A0D.
+ * Commands (one per call):
+ *   ""                      status line
+ *   arm <qz> [pulse_s] [fast|safe]   (bare "<qz> …" also accepted)
+ *   test [sec] · off|cancel · fast [1|0] · safe · invert [1|0] ·
+ *   auto [1|0] · pin <gpio>         (pin persists + reboots)
+ * Returns 0 on success, -1 on usage error; one-line reply in `reply`. */
+int quartz_pay_relay_cmd(const char *line, char *reply, size_t reply_len);
+
+/* JSON status snapshot for BLE char 0A0C:
+ * {"v":1,"state":"idle|armed|receiving|fired|expired|error",...}
+ * `uri` present only while armed. Returns length, or -1. */
+int quartz_pay_build_relay_json(char *buf, size_t buf_len);
 
 /**
  * Build QR code string for display.

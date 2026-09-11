@@ -564,81 +564,15 @@ static void quartz_serial_command(const char *cmd)
         ESP_LOGI(TAG, "BLE: %s%s", quartz_ble_is_active() ? "on — pair as \"Quartz-Miner\"" : "off ('ble on' = 5-min pair window)",
                  quartz_ble_is_active() && quartz_wallet_is_backup_confirmed() ? " (window)" : " (setup)");
     } else if (strncasecmp(cmd, "relay", 5) == 0) {
-        /* v079: pay-to-trigger relay */
+        /* v079/v089.12: pay-to-trigger relay — one parser, two
+         * transports (serial here, BLE char 0A0D) */
         const char *rarg = cmd + 5;
         while (*rarg == ' ') rarg++;
-        quartz_pay_init(quartz_wallet_get_address());
-            if (*rarg == '\0') {
-                ESP_LOGI(TAG, "Relay: pin GPIO%d · pulse %lums · %s · invert %s · auto %s",
-                         quartz_pay_get_pin(), (unsigned long) quartz_pay_get_duration_ms(),
-                         quartz_pay_get_fast() ? "fast (0-conf)" : "safe (1 conf)",
-                         quartz_pay_get_invert() ? "on" : "off",
-                         quartz_pay_get_auto() ? "on" : "off");
-                if (quartz_pay_get_state() == QZ_PAY_WAITING) {
-                    const qz_pay_request_t *rq = quartz_pay_get_request();
-                    ESP_LOGI(TAG, "Watch: ARMED for %.2f QZ — fires on qualifying payment",
-                             (float)rq->amount_satoshis / 1e8f);
-                } else {
-                    ESP_LOGI(TAG, "Watch: not armed ('relay <price>' to arm)");
-                }
-                ESP_LOGI(TAG, "Usage: relay <price_qz> [pulse_sec] [fast|safe] | relay test [sec] | relay fast | relay safe | relay invert | relay auto | relay off | relay pin <gpio>");
-        } else if (strncasecmp(rarg, "test", 4) == 0) {
-            int rsec = atoi(rarg + 4);
-            ESP_LOGW(TAG, "\u26a1 Firing relay NOW (test, %ds)", rsec > 0 ? rsec : (int)(quartz_pay_get_duration_ms()/1000));
-            quartz_pay_trigger_relay(rsec > 0 ? (uint32_t)rsec * 1000 : 0);
-            } else if (strcasecmp(rarg, "off") == 0) {
-                quartz_pay_cancel();
-                ESP_LOGI(TAG, "Relay watch cancelled");
-            } else if (strcasecmp(rarg, "fast") == 0 || strcasecmp(rarg, "safe") == 0) {
-                quartz_pay_set_fast(strcasecmp(rarg, "fast") == 0);
-                ESP_LOGI(TAG, "Relay mode: %s", quartz_pay_get_fast()
-                         ? "fast — fire on 0-conf (~2s)" : "safe — wait 1 block confirmation");
-            } else if (strcasecmp(rarg, "auto") == 0) {
-                quartz_pay_set_auto(!quartz_pay_get_auto());
-                ESP_LOGI(TAG, "Relay auto re-arm %s — %s",
-                         quartz_pay_get_auto() ? "ON" : "OFF",
-                         quartz_pay_get_auto()
-                             ? "re-arms after every payment, never expires; mining rewards ignored"
-                             : "one-shot per arming (300s timeout)");
-            } else if (strcasecmp(rarg, "invert") == 0) {
-                quartz_pay_toggle_invert();
-                ESP_LOGI(TAG, "Relay invert %s — module treated as active-%s",
-                         quartz_pay_get_invert() ? "ON" : "OFF",
-                         quartz_pay_get_invert() ? "LOW" : "HIGH");
-            } else if (strncasecmp(rarg, "pin ", 4) == 0) {
-            int rp = atoi(rarg + 4);
-            if (rp >= 0 && rp <= 48) {
-                nvs_handle_t rh;
-                if (nvs_open("qz_relay", NVS_READWRITE, &rh) == ESP_OK) {
-                    nvs_set_u8(rh, "pin", (uint8_t)rp); nvs_commit(rh); nvs_close(rh);
-                    ESP_LOGI(TAG, "Relay pin set to GPIO%d — rebooting\u2026", rp);
-                    vTaskDelay(pdMS_TO_TICKS(500)); esp_restart();
-                }
-            } else ESP_LOGW(TAG, "Usage: relay pin <0-48>");
-        } else {
-            float price = strtof(rarg, NULL);
-            if (price <= 0.0f || price > 100000.0f) {
-                ESP_LOGW(TAG, "Usage: relay <price_qz> [pulse_sec]");
-            } else {
-                    const char *rsp = strchr(rarg, ' ');
-                    if (rsp) {
-                        int dsec = atoi(rsp);
-                        if (dsec > 0) quartz_pay_set_duration_ms((uint32_t)dsec * 1000);
-                        /* v080: optional [fast|safe] after the seconds */
-                        const char *tok = dsec > 0 ? strchr(rsp + 1, ' ') : rsp;
-                        if (tok) {
-                            while (*tok == ' ') tok++;
-                            if ((tok[0]=='f'||tok[0]=='F') && (tok[1]=='a'||tok[1]=='A')) quartz_pay_set_fast(true);
-                            else if ((tok[0]=='s'||tok[0]=='S') && (tok[1]=='a'||tok[1]=='A')) quartz_pay_set_fast(false);
-                        }
-                    }
-                    char ruri[256];
-                quartz_pay_build_qr_string(ruri, sizeof(ruri), quartz_wallet_get_address(), price, "relay");
-                ESP_LOGI(TAG, "\u26a1 Pay-to-trigger: %s", ruri);
-                ESP_LOGI(TAG, "   watching for %.2f QZ — relay fires on confirmation", price);
-                quartz_pay_request(price, "relay");
-            }
-        }
+        if (!quartz_pay_is_initialized())
+            quartz_pay_init(quartz_wallet_get_address());   /* once: re-init disarms */
+        char rreply[192];
+        quartz_pay_relay_cmd(rarg, rreply, sizeof(rreply));
+        ESP_LOGI(TAG, "%s", rreply);
     } else if (strcasecmp(cmd, "help") == 0) {
         ESP_LOGI(TAG, "Commands:");
         ESP_LOGI(TAG, "  address              show wallet address");

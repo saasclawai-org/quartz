@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>   /* v089.12: strcasecmp/strncasecmp for relay_cmd */
 
 #ifdef ESP_PLATFORM
 #include "esp_log.h"
@@ -29,6 +30,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
+#include "esp_system.h"   /* v089.12: esp_restart for relay pin change */
 
 static const char *TAG = "QZ.PAY";
 #endif
@@ -491,6 +493,12 @@ const qz_pay_request_t *quartz_pay_get_request(void) {
     return &s_request;
 }
 
+/* v089.12: BLE/CLI guard — quartz_pay_init() resets state to IDLE,
+ * so transport layers init once; blind re-init disarms an armed watch. */
+bool quartz_pay_is_initialized(void) {
+    return s_initialized;
+}
+
 
 /* ---- v079 additions ---- */
 void quartz_pay_set_duration_ms(uint32_t duration_ms) {
@@ -542,3 +550,165 @@ void quartz_pay_toggle_invert(void) {
     relay_write(false);   /* re-apply idle level immediately */
 }
 bool quartz_pay_get_invert(void) { return s_invert; }
+
+/* ---- v089.12 additions: relay over BLE (docs/RELAY-BLE-SPEC.md) ---- */
+
+void quartz_pay_set_invert(bool invert) {
+    if (s_invert == invert) return;   /* no-op: skip NVS churn */
+    quartz_pay_toggle_invert();       /* persists + re-applies idle level */
+}
+
+/* One-line status shared by CLI reply and BLE command ack */
+static void relay_status_line(char *reply, size_t reply_len) {
+    const qz_pay_request_t *rq = quartz_pay_get_request();
+    bool armed = (quartz_pay_get_state() == QZ_PAY_WAITING);
+    int n = snprintf(reply, reply_len,
+                     "Relay: pin GPIO%d \u00b7 pulse %lums \u00b7 %s \u00b7 invert %s \u00b7 auto %s \u00b7 %s",
+                     (int) quartz_pay_get_pin(),
+                     (unsigned long) quartz_pay_get_duration_ms(),
+                     quartz_pay_get_fast() ? "fast (0-conf)" : "safe (1 conf)",
+                     quartz_pay_get_invert() ? "on" : "off",
+                     quartz_pay_get_auto() ? "on" : "off",
+                     armed ? "ARMED" : "not armed");
+    if (armed && rq && rq->amount_satoshis > 0 && n > 0 && (size_t) n < reply_len - 16) {
+        snprintf(reply + n, reply_len - n, " (%.2f QZ)",
+                 (float) rq->amount_satoshis / 1e8f);
+    }
+}
+
+int quartz_pay_relay_cmd(const char *line, char *reply, size_t reply_len) {
+    if (!reply || reply_len < 64) return -1;
+    reply[0] = '\0';
+    if (!line) line = "";
+    while (*line == ' ') line++;
+
+    if (*line == '\0') {                       /* status */
+        relay_status_line(reply, reply_len);
+        return 0;
+    }
+    if (strncasecmp(line, "test", 4) == 0) {   /* test [sec] */
+        int sec = atoi(line + 4);
+        snprintf(reply, reply_len, "\u26a1 Firing relay NOW (test, %ds)",
+                 sec > 0 ? sec : (int)(quartz_pay_get_duration_ms() / 1000));
+        quartz_pay_trigger_relay(sec > 0 ? (uint32_t) sec * 1000 : 0);
+        return 0;
+    }
+    if (strcasecmp(line, "off") == 0 || strcasecmp(line, "cancel") == 0) {
+        quartz_pay_cancel();
+        snprintf(reply, reply_len, "Relay watch cancelled");
+        return 0;
+    }
+    if (strncasecmp(line, "fast", 4) == 0 || strcasecmp(line, "safe") == 0) {
+        bool fast = (strncasecmp(line, "fast", 4) == 0);
+        const char *arg = line + 4;            /* both keywords are 4 chars */
+        if (*arg == ' ' && arg[1] != '\0') fast = (atoi(arg + 1) != 0);
+        quartz_pay_set_fast(fast);
+        snprintf(reply, reply_len, "Relay mode: %s",
+                 quartz_pay_get_fast()
+                     ? "fast \u2014 fire on 0-conf (~2s)" : "safe \u2014 wait 1 block confirmation");
+        return 0;
+    }
+    if (strcasecmp(line, "auto") == 0 || strncasecmp(line, "auto ", 5) == 0) {
+        bool on = (line[4] == '\0') ? !quartz_pay_get_auto() : (atoi(line + 5) != 0);
+        quartz_pay_set_auto(on);
+        snprintf(reply, reply_len, "Relay auto re-arm %s \u2014 %s", on ? "ON" : "OFF",
+                 on ? "re-arms after every payment, never expires; mining rewards ignored"
+                     : "one-shot per arming (300s timeout)");
+        return 0;
+    }
+    if (strcasecmp(line, "invert") == 0 || strncasecmp(line, "invert ", 7) == 0) {
+        bool on = (line[6] == '\0') ? !quartz_pay_get_invert() : (atoi(line + 7) != 0);
+        quartz_pay_set_invert(on);
+        snprintf(reply, reply_len, "Relay invert %s \u2014 module treated as active-%s",
+                 on ? "ON" : "OFF", on ? "LOW" : "HIGH");
+        return 0;
+    }
+#ifdef ESP_PLATFORM
+    if (strncasecmp(line, "pin ", 4) == 0) {
+        int rp = atoi(line + 4);
+        if (rp < 0 || rp > 48) {
+            snprintf(reply, reply_len, "Usage: pin <0-48>");
+            return -1;
+        }
+        nvs_handle_t rh;
+        if (nvs_open("qz_relay", NVS_READWRITE, &rh) == ESP_OK) {
+            nvs_set_u8(rh, "pin", (uint8_t) rp);
+            nvs_commit(rh);
+            nvs_close(rh);
+            snprintf(reply, reply_len, "Relay pin set to GPIO%d \u2014 rebooting\u2026", rp);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_restart();
+        }
+        snprintf(reply, reply_len, "Relay pin write failed");
+        return -1;
+    }
+#endif
+    /* arm <price_qz> [pulse_s] [fast|safe] — bare "<price> \u2026" also accepted */
+    {
+        const char *p = line;
+        if (strncasecmp(line, "arm ", 4) == 0) {
+            p = line + 4;
+            while (*p == ' ') p++;
+        }
+        if (*p >= '0' && *p <= '9') {
+            float price = strtof(p, NULL);
+            if (price > 0.0f && price <= 100000.0f) {
+                const char *rsp = strchr(p, ' ');
+                if (rsp) {
+                    int dsec = atoi(rsp);
+                    if (dsec > 0) quartz_pay_set_duration_ms((uint32_t) dsec * 1000);
+                    /* v080: optional [fast|safe] after the seconds */
+                    const char *tok = dsec > 0 ? strchr(rsp + 1, ' ') : rsp;
+                    if (tok) {
+                        while (*tok == ' ') tok++;
+                        if ((tok[0]=='f'||tok[0]=='F') && (tok[1]=='a'||tok[1]=='A')) quartz_pay_set_fast(true);
+                        else if ((tok[0]=='s'||tok[0]=='S') && (tok[1]=='a'||tok[1]=='A')) quartz_pay_set_fast(false);
+                    }
+                }
+                char ruri[160];
+                quartz_pay_build_qr_string(ruri, sizeof(ruri), s_wallet_address, price, "relay");
+                snprintf(reply, reply_len,
+                         "\u26a1 armed %.2f QZ \u00b7 pulse %lus \u00b7 %s \u00b7 fires on %s",
+                         price,
+                         (unsigned long)(quartz_pay_get_duration_ms() / 1000),
+                         ruri,
+                         quartz_pay_get_fast() ? "0-conf (~2s)" : "1 confirmation");
+                quartz_pay_request(price, "relay");
+                return 0;
+            }
+        }
+    }
+    snprintf(reply, reply_len,
+             "Usage: arm <qz> [pulse_s] [fast|safe] | test [sec] | off | fast [1|0] | invert [1|0] | auto [1|0] | pin <gpio>");
+    return -1;
+}
+
+int quartz_pay_build_relay_json(char *buf, size_t buf_len) {
+    if (!buf || buf_len < 200) return -1;
+    static const char *names[] = {
+        "idle", "armed", "receiving", "fired", "expired", "error"
+    };
+    qz_pay_state_t st = quartz_pay_get_state();
+    const qz_pay_request_t *rq = quartz_pay_get_request();
+    float price = (rq && rq->amount_satoshis > 0) ? (float) rq->amount_satoshis / 1e8f : 0.0f;
+    int n = snprintf(buf, buf_len,
+        "{\"v\":1,\"state\":\"%s\",\"price_qz\":%.8f,\"pulse_s\":%lu,"
+        "\"fast\":%s,\"invert\":%s,\"auto\":%s,\"pin\":%d,\"addr\":\"%s\"",
+        (st >= QZ_PAY_IDLE && st <= QZ_PAY_ERROR) ? names[st] : "error",
+        price,
+        (unsigned long)(quartz_pay_get_duration_ms() / 1000),
+        quartz_pay_get_fast() ? "true" : "false",
+        quartz_pay_get_invert() ? "true" : "false",
+        quartz_pay_get_auto() ? "true" : "false",
+        (int) quartz_pay_get_pin(),
+        s_wallet_address);
+    if (n < 0 || (size_t) n >= buf_len) return -1;
+    if (st == QZ_PAY_WAITING) {
+        char uri[160];
+        quartz_pay_build_qr_string(uri, sizeof(uri), s_wallet_address, price, "relay");
+        n += snprintf(buf + n, buf_len - n, ",\"uri\":\"%s\"}", uri);
+    } else {
+        n += snprintf(buf + n, buf_len - n, "}");
+    }
+    return (n > 0 && (size_t) n < buf_len) ? n : -1;
+}
