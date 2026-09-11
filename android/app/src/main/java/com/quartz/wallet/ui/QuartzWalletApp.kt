@@ -1327,6 +1327,131 @@ fun MinerScreen(bleManager: QuartzBLEManager, onWalletImported: () -> Unit = {})
             ) { Text("🔄 Re-read seed") }
         }
 
+        /* v0.2.38: relay over BLE (firmware v089.12+ — chars 0A0C/0A0D).
+         * The card only renders when the board advertises the relay status
+         * characteristic; older firmware never sees it. Commands use the
+         * exact serial-CLI syntax — one parser on the board serves both. */
+        if (bleManager.relaySupported.value) {
+            var relayPrice by remember { mutableStateOf("") }
+            var relayPulse by remember { mutableStateOf("") }
+            var relayMsg by remember { mutableStateOf<String?>(null) }
+            val rs = bleManager.relayStatus.value
+            val armed = rs?.state == "armed"
+            val uri = rs?.uri
+            fun relayCmd(cmd: String, label: String) {
+                relayMsg = "Sending…"
+                bleManager.sendRelayCommand(cmd) { ok ->
+                    relayMsg = if (ok) label else "Write failed — check the link and retry"
+                    if (ok) bleManager.readRelayStatus()
+                }
+            }
+            LaunchedEffect(Unit) { bleManager.readRelayStatus() }
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = QuartzCard),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("⚡ Relay", color = QuartzAccent, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Pay-to-trigger GPIO relay — arm, test and configure over Bluetooth.",
+                        fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        rs?.let {
+                            when (it.state) {
+                                "armed" -> "🟢 ARMED — %.2f QZ · pulse %ds · %s".format(
+                                    it.priceQz, it.pulseS, if (it.fast) "fast (0-conf)" else "safe (1 conf)")
+                                "receiving" -> "💰 payment seen — confirming…"
+                                "fired" -> "✅ fired"
+                                "expired" -> "⌛ watch expired"
+                                "error" -> "⚠ error"
+                                else -> "idle — not armed"
+                            }
+                        } ?: "reading…",
+                        fontSize = 13.sp, color = QuartzAccent
+                    )
+                    if (armed && uri != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            uri, fontSize = 11.sp, color = QuartzMuted,
+                            textAlign = TextAlign.Center, maxLines = 2
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = relayPrice,
+                        onValueChange = { relayPrice = it },
+                        label = { Text("Price (QZ), e.g. 1.5") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = relayPulse,
+                        onValueChange = { relayPulse = it },
+                        label = { Text("Pulse seconds (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        enabled = isConnected,
+                        onClick = {
+                            if (armed) {
+                                relayCmd("cancel", "Watch cancelled")
+                            } else {
+                                val price = relayPrice.trim().toDoubleOrNull()
+                                if (price == null || price <= 0.0) {
+                                    relayMsg = "Enter a price first (e.g. 1.5)"
+                                    return@Button
+                                }
+                                val pulse = relayPulse.trim().toIntOrNull()
+                                val cmd = if (pulse != null && pulse > 0) "arm $price $pulse" else "arm $price"
+                                relayCmd(cmd, "Armed $price QZ — relay fires on payment")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = QuartzAccent)
+                    ) { Text(if (armed) "✖ Cancel watch" else "🤝 Arm relay", color = QuartzBg, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.height(6.dp))
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { relayCmd("fast ${if (rs?.fast == true) 0 else 1}", "Mode set") },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        ) { Text(if (rs?.fast == true) "⚡ fast" else "🐢 safe", fontSize = 11.sp, maxLines = 1) }
+                        OutlinedButton(
+                            onClick = { relayCmd("invert ${if (rs?.invert == true) 0 else 1}", "Polarity set") },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        ) { Text("↕︎ invert " + (if (rs?.invert == true) "on" else "off"), fontSize = 11.sp, maxLines = 1) }
+                        OutlinedButton(
+                            onClick = { relayCmd("auto ${if (rs?.auto == true) 0 else 1}", "Auto re-arm set") },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        ) { Text("🔁 auto " + (if (rs?.auto == true) "on" else "off"), fontSize = 11.sp, maxLines = 1) }
+                        OutlinedButton(
+                            onClick = { relayCmd("test", "⚡ Test fired — pulse running") },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        ) { Text("⚡ test", fontSize = 11.sp, maxLines = 1) }
+                    }
+                    relayMsg?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, fontSize = 12.sp, color = QuartzMuted, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        }
+
         if (!isConnected && stats == null) {
             // Not connected — show pair button
             Text(

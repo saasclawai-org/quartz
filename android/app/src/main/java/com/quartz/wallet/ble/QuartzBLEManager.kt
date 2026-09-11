@@ -43,6 +43,9 @@ class QuartzBLEManager(private val context: Context) {
         val WIFI_SSID_UUID: UUID = UUID.fromString("00000a09-0000-1000-8000-00805f9b34fb")
         val WIFI_PASS_UUID: UUID = UUID.fromString("00000a0a-0000-1000-8000-00805f9b34fb")
         val REBOOT_UUID: UUID = UUID.fromString("00000a0b-0000-1000-8000-00805f9b34fb")
+        // Relay characteristics (v0.2.38 — firmware v089.12+, docs/RELAY-BLE-SPEC.md)
+        val RELAY_STATUS_UUID: UUID = UUID.fromString("00000a0c-0000-1000-8000-00805f9b34fb")
+        val RELAY_CMD_UUID: UUID = UUID.fromString("00000a0d-0000-1000-8000-00805f9b34fb")
         val PIN_UNLOCK_UUID: UUID = UUID.fromString("00000a07-0000-1000-8000-00805f9b34fb")
         val PIN_STATUS_UUID: UUID = UUID.fromString("00000a08-0000-1000-8000-00805f9b34fb")
 
@@ -63,6 +66,7 @@ class QuartzBLEManager(private val context: Context) {
     var onAddressRead: ((String) -> Unit)? = null
     var onSeedRead: ((List<String>) -> Unit)? = null
     var onWifiWriteResult: ((Boolean) -> Unit)? = null
+    var onRelayWriteResult: ((Boolean) -> Unit)? = null   // v0.2.38: 0A0D command writes
     var onSeedConfirmed: (() -> Unit)? = null
     var onConnectionChange: ((Boolean) -> Unit)? = null
     var onScanResult: ((String) -> Unit)? = null  // device name
@@ -94,6 +98,9 @@ class QuartzBLEManager(private val context: Context) {
     /* v0.2.20: visible connection state — taps looked dead while
      * connectGatt worked silently for seconds before any UI change */
     val connectionState = androidx.compose.runtime.mutableStateOf("idle")
+    val relaySupported = androidx.compose.runtime.mutableStateOf(false)   // v0.2.38: board has 0A0C (v089.12+)
+    val relayStatus = androidx.compose.runtime.mutableStateOf<RelayState?>(null)   // last 0A0C snapshot
+    var onRelayReadResult: ((RelayState?) -> Unit)? = null
     @Volatile private var connectRetries = 0
 
     fun adapterOn(): Boolean = adapter.isEnabled
@@ -422,6 +429,36 @@ class QuartzBLEManager(private val context: Context) {
         onResult(writeEncrypted(REBOOT_UUID, byteArrayOf(1), "Reboot"))
     }
 
+    /** v0.2.38: relay command (0A0D) — exact serial-CLI syntax:
+     *  "arm 1.5 3" · "cancel" · "test [sec]" · "fast 1|0" · "invert 1|0" ·
+     *  "auto 1|0" · "pin <gpio>" (pin reboots the board). Bonded only. */
+    fun sendRelayCommand(cmd: String, onResult: (Boolean) -> Unit) {
+        onRelayWriteResult = onResult
+        if (!writeEncrypted(RELAY_CMD_UUID, cmd.toByteArray(Charsets.US_ASCII), "Relay '$cmd'")) {
+            onRelayWriteResult = null
+            onResult(false)
+        }
+    }
+
+    /** v0.2.38: read the relay snapshot (0A0C). Updates relayStatus and
+     *  fires onResult (null on failure or unsupported board). */
+    @SuppressLint("MissingPermission")
+    fun readRelayStatus(onResult: ((RelayState?) -> Unit)? = null) {
+        val gatt = connectedGatt ?: run { onResult?.invoke(null); return }
+        val service = gatt.getService(SERVICE_UUID) ?: run { onResult?.invoke(null); return }
+        val char = service.getCharacteristic(RELAY_STATUS_UUID) ?: run {
+            relaySupported.value = false   /* not v089.12+ — hide the card */
+            onResult?.invoke(null)
+            return
+        }
+        onRelayReadResult = onResult
+        if (!gatt.readCharacteristic(char)) {
+            onRelayReadResult = null
+            onResult?.invoke(null)
+        }
+        Log.i(TAG, "Relay status read")
+    }
+
     /**
      * Read PIN status from the device.
      * Reads from PIN_STATUS_UUID; firmware returns 3-byte payload:
@@ -726,6 +763,9 @@ class QuartzBLEManager(private val context: Context) {
 
             statsCharacteristic = service.getCharacteristic(STATS_UUID)
             val addrChar = service.getCharacteristic(ADDRESS_UUID)
+            /* v0.2.38: relay card probe — 0A0C present means v089.12+;
+             * older firmware never shows the card */
+            relaySupported.value = service.getCharacteristic(RELAY_STATUS_UUID) != null
 
             // v0.2.14: seed/PIN characteristics are ENCRYPTED on the device
             // and neither side ever initiated pairing — bond now so the seed
@@ -864,6 +904,12 @@ class QuartzBLEManager(private val context: Context) {
                     Log.i(TAG, "Stats (polled): $stats H/s, blocks=${stats.blocksFound}")
                     onStatsUpdate?.invoke(stats)
                 }
+                RELAY_STATUS_UUID -> {
+                    val rs = data?.let { parseRelay(it) }
+                    relayStatus.value = rs
+                    onRelayReadResult?.invoke(rs)
+                    onRelayReadResult = null
+                }
             }
         }
 
@@ -937,6 +983,12 @@ class QuartzBLEManager(private val context: Context) {
                     Log.i(TAG, "Stats (polled): $stats H/s, blocks=${stats.blocksFound}")
                     onStatsUpdate?.invoke(stats)
                 }
+                RELAY_STATUS_UUID -> {
+                    val rs = parseRelay(value)
+                    relayStatus.value = rs
+                    onRelayReadResult?.invoke(rs)
+                    onRelayReadResult = null
+                }
             }
         }
 
@@ -960,6 +1012,10 @@ class QuartzBLEManager(private val context: Context) {
                     WIFI_SSID_UUID, WIFI_PASS_UUID -> {
                         onWifiWriteResult?.invoke(false)
                         onWifiWriteResult = null
+                    }
+                    RELAY_CMD_UUID -> {
+                        onRelayWriteResult?.invoke(false)
+                        onRelayWriteResult = null
                     }
                     SEED_UUID -> {
                         if (pendingRecoveryWords != null) {
@@ -1013,6 +1069,10 @@ class QuartzBLEManager(private val context: Context) {
                     onWifiWriteResult?.invoke(true)
                     onWifiWriteResult = null
                 }
+                RELAY_CMD_UUID -> {
+                    onRelayWriteResult?.invoke(true)
+                    onRelayWriteResult = null
+                }
                 REBOOT_UUID -> Log.i(TAG, "Reboot write acked — board restarting")
                 CONFIRM_UUID -> {
                     Log.i(TAG, "Seed confirmation acknowledged by device")
@@ -1040,6 +1100,24 @@ class QuartzBLEManager(private val context: Context) {
         }
     }
 
+    private fun parseRelay(data: ByteArray): RelayState? = try {
+        val o = org.json.JSONObject(String(data, Charsets.UTF_8).trimEnd('\u0000'))
+        RelayState(
+            state = o.optString("state", "idle"),
+            priceQz = o.optDouble("price_qz", 0.0),
+            pulseS = o.optLong("pulse_s", 0L),
+            fast = o.optBoolean("fast", true),
+            invert = o.optBoolean("invert", false),
+            auto = o.optBoolean("auto", false),
+            pin = o.optInt("pin", 0),
+            addr = o.optString("addr", ""),
+            uri = if (o.has("uri") && !o.isNull("uri")) o.optString("uri") else null
+        )
+    } catch (e: Exception) {
+        Log.w(TAG, "Relay JSON parse failed: ${e.message}")
+        null
+    }
+
     private fun parseStats(data: ByteArray): MiningStats {
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         return MiningStats(
@@ -1052,3 +1130,17 @@ class QuartzBLEManager(private val context: Context) {
 
     fun isConnected(): Boolean = connectedGatt != null
 }
+
+/** v0.2.38: relay snapshot from firmware char 0A0C (v089.12+).
+ *  uri is present only while armed — a quartz: payment URI. */
+data class RelayState(
+    val state: String,      // idle | armed | receiving | fired | expired | error
+    val priceQz: Double,
+    val pulseS: Long,
+    val fast: Boolean,
+    val invert: Boolean,
+    val auto: Boolean,
+    val pin: Int,
+    val addr: String,
+    val uri: String?
+)
