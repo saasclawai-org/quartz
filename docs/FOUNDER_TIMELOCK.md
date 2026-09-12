@@ -1,5 +1,15 @@
 # Quartz Founder Timelock Specification
 
+> **Status: IMPLEMENTED 2026-09-12** (P0-1). Consensus rules live in
+> `reference-node/quartz/consensus.py` (UTXO `lock_until`, stamped at
+> output creation, enforced at spend). Tests: `tests/test_founder_timelock.py`.
+> Activation: `QUARTZ_FOUNDER_ADDRESSES` env (comma-separated wallet
+> addresses); fresh chains covenant from genesis, existing chains activate
+> at the current tip (forward-only — never retroactive). This document
+> describes the mechanism as shipped; the original draft's Bitcoin-style
+> CLTV script framing was aspirational — Quartz has no script language,
+> so the covenant is a consensus-derived per-output spend floor.
+
 ## Overview
 
 All QZ mined by the project founder (Norman Moore) during the first 2 years
@@ -11,31 +21,39 @@ trust.
 
 ### Coinbase Timelock Output
 
-When the founder's ESP32 mines a block, the coinbase transaction contains
-a special output with a timelock covenant:
+When the founder's ESP32 mines a block, the coinbase output paying the
+founder's wallet address creates a UTXO with a consensus-enforced spend
+floor:
 
 ```
-Output Script (founder coins):
-    OP_CHECKLOCKTIMEVERIFY <2_years_from_block_height> OP_DROP
-    <founder_pubkey> OP_CHECKSIG
+UTXO.lock_until = block_height + FOUNDER_TIMELOCK_BLOCKS
+                 (= block_height + 2,102,400)
 
-Meaning: "These coins are spendable by founder_pubkey, but ONLY after
-block height X."
+Meaning: "These coins are spendable by the founder's key, but ONLY in
+blocks at height >= lock_until."
 ```
+
+Quartz validates WOTS+/Ed25519 signatures rather than scripts, so the
+covenant is carried by the UTXO itself (not an output script): every
+node stamps `lock_until` when the coinbase output is created and rejects
+any transaction spending a locked output before its unlock height.
 
 ### How It Works
 
 1. Founder registers their ESP32 device normally (birth certificate, attestation)
 2. Founder's device mines blocks like any other miner
-3. The protocol detects founder's device_pubkey in the coinbase
-4. Instead of a standard P2PKH output, the coinbase creates a CLTV output
-5. The timelock expiry = current_block_height + 105,120 (≈2 years at 120s blocks)
-6. Any attempt to spend these coins before expiry = invalid transaction (rejected by all nodes)
+3. Consensus detects the configured founder address in the coinbase payout
+4. The output's UTXO is stamped `lock_until = height + 2,102,400`
+5. Any attempt to spend these coins before expiry = invalid transaction
+   (rejected by all nodes — mempool, block validation, and /send all
+   refuse locked outputs)
+6. Coinbase maturity (100 blocks) rides the same mechanism while the
+   covenant is active
 
 ### Key Properties
 
-- **Consensus-enforced:** No special software needed. Every full node validates CLTV.
-- **Transparent:** Anyone can see the timelock on the block explorer. The founder's coins and their unlock dates are public.
+- **Consensus-enforced:** No special software needed. Every full node stamps and validates `lock_until`.
+- **Transparent:** Locked balances and unlock heights are public (`/api/v1/address/<addr>` reports `locked_balance_*` + `next_unlock_block`; `/api/v1/info` reports covenant status).
 - **Per-block:** Each block's reward is individually locked. Coins unlock gradually — block 1's reward unlocks first, block 2 next, etc.
 - **No admin key:** There is no way to unlock early. No multi-sig override. No emergency key. The CLTV is absolute.
 - **Non-custodial:** The founder holds the private key. The timelock only restricts *when* they can spend, not *who* can spend.
@@ -44,12 +62,11 @@ block height X."
 
 | Parameter | Value |
 |-----------|-------|
-| Block time | 120 seconds |
-| Blocks per year | 262,800 |
-| Timelock period | 2 years = 525,600 blocks |
-| Founder coins per block | 47.5 QZ (same as any miner) |
-| Estimated founder total (solo, 1 ESP32, 2 years) | ~4,275 QZ |
-| First unlock | Block 525,601 (≈2 years after the block was mined) |
+| Block time | 30 seconds |
+| Blocks per year | 1,051,200 |
+| Timelock period | 2 years = 2,102,400 blocks |
+| Founder coins per block | same as any miner |
+| First unlock of a block mined at height H | H + 2,102,401 (≈2 years later) |
 
 ### What This Proves
 
@@ -74,11 +91,7 @@ his coins as a social promise. Quartz makes it a mathematical impossibility.
 
 ### Future Extension: Community Timelock
 
-Any miner can optionally timelock their own coins by using a CLTV output
-in their spend transaction. This could be used for:
-
-- Long-term holders proving commitment
-- ESP32 weather stations locking operating funds
-- Mesh pool coordinators bonding stake
-
-The protocol supports this generically — CLTV is part of the script language.
+Any miner could opt into locking their own coins via the same mechanism
+(long-term holders proving commitment, mesh coordinators bonding stake).
+That would need a tx-level opt-in flag — consensus-derived covenant locks
+today cover founder coinbases only.

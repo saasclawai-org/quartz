@@ -77,6 +77,7 @@ from quartz.consensus import (
     ConsensusEngine, UTXOSet, UTXO, Mempool,
     validate_transaction, validate_block, apply_block,
     MAX_BLOCK_TXS, MAX_BLOCK_SIZE, TX_DATA_LIMIT,
+    timelock_enabled, timelock_status,
 )
 
 # Override difficulty for fast testnet blocks (real network uses 20)
@@ -247,20 +248,45 @@ class QuartzChain:
             print("💰 Dev fund disabled (no dev-wallet.json, QUARTZ_DEV_WALLET unset) "
                   "— 100% miner rewards", flush=True)
 
-        # Load or create chain
-        if os.path.exists(CHAIN_FILE):
+        # Load or create chain (record whether this is an existing chain:
+        # a mid-chain covenant activation must lock only NEW founder
+        # coins, never historical ones)
+        _chain_existed = os.path.exists(CHAIN_FILE)
+        if _chain_existed:
             self.load()
         else:
             self.mine_genesis()
 
         # Initialize consensus engine (builds UTXO set from chain)
+        # Founder timelock covenant (P0-1): activate by setting
+        # QUARTZ_FOUNDER_ADDRESSES (comma-separated wallet addresses) —
+        # coinbase outputs paying those addresses are then consensus-
+        # locked for 2 years. Unset on today's testnet (rule inert).
+        founder_addrs = [
+            a.strip() for a in
+            os.environ.get('QUARTZ_FOUNDER_ADDRESSES', '').split(',')
+            if a.strip()
+        ]
         self.consensus = ConsensusEngine(
             blocks=self.blocks,
             balances=self.balances,
             current_difficulty=self.current_difficulty,
             block_time=TESTNET_BLOCK_TIME,
             retarget_period=RETARGET_PERIOD,
+            founder_addresses=founder_addrs or None,
+            # Fresh chain: covenant from genesis (mainnet case). Existing
+            # chain: activate at the current tip — locks only new coins,
+            # on this node AND on every rebuild (activation height is
+            # consensus config, persisted via env on restart).
+            founder_activation_height=(
+                (len(self.blocks) - 1) if (_chain_existed and founder_addrs)
+                else 0),
         )
+        if founder_addrs:
+            _st = timelock_status()
+            print(f"\U0001f512 Founder timelock COVENANT ACTIVE: {len(founder_addrs)} "
+                  f"address(es) — mined coins locked {_st['blocks']:,} blocks "
+                  f"(2 years), from height {_st['activation_height']}", flush=True)
         # Synthetic UTXOs (faucet / legacy-balance mints) are not in any
         # block, so the engine's replay doesn't include them — re-add.
         self.synthetic_utxos = getattr(self, 'synthetic_utxos', [])
@@ -343,8 +369,11 @@ class QuartzChain:
             miner_id=miner_id[:6],
         )
 
-        # Select mempool txs through consensus engine
-        selected_txs = self.consensus.mempool.select_for_block(self.consensus.utxo_set)
+        # Select mempool txs through consensus engine (height = block
+        # being built, so spend floors — covenant/maturity — are checked
+        # at the height the txs would confirm)
+        selected_txs = self.consensus.mempool.select_for_block(
+            self.consensus.utxo_set, height=height)
 
         # Attach pending messages as zero-fee data-carrier txs, filling
         # whatever block slots remain (oldest first). These are the
@@ -517,6 +546,7 @@ class QuartzChain:
             "dev_fund_balance_qz": self.balances.get(self.dev_wallet['address'], 0) / 1e8 if self.dev_wallet else 0,
             "total_hashrate": sum(m.get('hashrate', 0) for m in self._active_miners().values()),
             "hardware_miners": len(self._active_miners()),
+            "founder_timelock": timelock_status(),
         }
 
     def _active_miner_count(self, max_age_s=600) -> int:
@@ -644,10 +674,24 @@ class QuartzChain:
                     "time": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(ts)),
                     "counterparty": counterparty,
                 })
+        # Founder-timelock transparency: report covenant-locked funds
+        # (unspendable at the current tip) and the nearest unlock height.
+        locked_sats, next_unlock = 0, None
+        if hasattr(self, 'consensus'):
+            tip = len(self.blocks) - 1
+            for u in self.consensus.utxo_set.get_utxos_for(addr_b):
+                if u.lock_until and u.lock_until > tip + 1:
+                    locked_sats += u.amount
+                    if next_unlock is None or u.lock_until < next_unlock:
+                        next_unlock = u.lock_until
+
         return {
             "address": address,
             "balance_sats": self.balances.get(address, 0),
             "balance_qz": self.balances.get(address, 0) / 1e8,
+            "locked_balance_sats": locked_sats,
+            "locked_balance_qz": locked_sats / 1e8,
+            "next_unlock_block": next_unlock,
             "tx_count": len(txs),
             "transactions": txs[-20:],  # last 20
         }
@@ -1629,11 +1673,21 @@ class QuartzAPIHandler(BaseHTTPRequestHandler):
                     utxo_set.get_utxos_for(from_addr.encode()),
                     key=lambda u: u.amount,
                 )
+                # Covenant: locked outputs (founder-mined coins, immature
+                # coinbases) are unspendable — never select them. Spendable
+                # means valid in the next block (lock_until <= tip + 1).
+                _tip = len(self.chain.blocks) - 1
+                sender_utxos = [u for u in sender_utxos
+                                if not u.lock_until or u.lock_until <= _tip + 1]
 
                 # Testnet convenience: legacy balances (pre-consensus) have no
                 # UTXOs behind them. Auto-mint one so old balances stay spendable.
                 available = sum(u.amount for u in sender_utxos)
-                if available < amount_sats and sender_balance >= amount_sats:
+                # Legacy auto-mint is disabled under the covenant (it
+                # would mint lock-free coins from the balance dict);
+                # mainnet has no legacy balances anyway.
+                if (available < amount_sats and sender_balance >= amount_sats
+                        and not timelock_enabled()):
                     mint_amt = sender_balance - available
                     mint_tx = Transaction(
                         version=1,

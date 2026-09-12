@@ -48,6 +48,89 @@ MAX_REORG_DEPTH = 2016            # one retarget period
 ORPHAN_MAX_DEPTH = 72             # blocks
 MEMPOOL_EXPIRY_HOURS = 72
 MEMPOOL_MAX_TX_SIZE = 4096        # 4 KB
+FOUNDER_TIMELOCK_BLOCKS = 2_102_400  # founder covenant: 2 years at 30 s blocks
+
+
+# ============================================================
+# Founder Timelock Covenant (docs/FOUNDER_TIMELOCK.md — P0-1)
+# ============================================================
+# Founder-mined coins are consensus-locked for 2 years: a coinbase output
+# paying a configured founder address creates a UTXO with
+# lock_until = height + FOUNDER_TIMELOCK_BLOCKS, and every node rejects
+# any spend of a locked output before its unlock height. Coinbase maturity
+# (COINBASE_MATURITY) rides the same mechanism while the covenant is
+# active. Locks are stamped only on NEW outputs — activation never locks
+# already-created coins, so the rule is safe to introduce mid-chain.
+# Inert by default (testnet runs unlocked; mainnet/dry-run opts in).
+
+_timelock_founder_scripts: Set[bytes] = set()
+_timelock_enforced: bool = False
+_timelock_activation_height: int = 0
+
+
+def configure_timelock(founder_addresses: Optional[List[str]] = None,
+                       enabled: Optional[bool] = None,
+                       activation_height: Optional[int] = None) -> None:
+    """Configure the founder-timelock covenant.
+
+    founder_addresses: wallet addresses whose MINED (coinbase) coins are
+    locked. v2 coinbases pay the wallet address directly, so the match is
+    script_pubkey == address ASCII bytes. [] clears; None leaves untouched.
+    enabled: master switch for covenant + maturity enforcement (both or
+    neither). None leaves untouched.
+    activation_height: covenant applies to coinbase outputs created at
+    heights >= this (0 = active from genesis, the mainnet case). Keeping
+    incremental application and UTXO-set rebuilds in agreement — a
+    mid-chain activation locks only NEW coins, on every node, forever.
+    """
+    global _timelock_founder_scripts, _timelock_enforced
+    global _timelock_activation_height
+    if founder_addresses is not None:
+        _timelock_founder_scripts = {
+            a.encode('utf-8') for a in founder_addresses if a
+        }
+    if enabled is not None:
+        _timelock_enforced = enabled
+    if activation_height is not None:
+        _timelock_activation_height = max(0, int(activation_height))
+
+
+def timelock_enabled() -> bool:
+    return _timelock_enforced
+
+
+def timelock_status() -> dict:
+    """Public covenant status (/api/v1/info, explorer)."""
+    return {
+        'enabled': _timelock_enforced,
+        'blocks': FOUNDER_TIMELOCK_BLOCKS,
+        'activation_height': _timelock_activation_height,
+        'founder_addresses': sorted(
+            s.decode('utf-8', 'replace') for s in _timelock_founder_scripts),
+    }
+
+
+def _output_lock_height(tx: Transaction, script_pubkey: bytes,
+                        height: int) -> int:
+    """Consensus spend-floor for a newly created output (0 = no lock).
+
+    Coinbase outputs only (single null-prev input):
+      - all coinbase outputs mature: height + COINBASE_MATURITY
+      - outputs paying a founder address: height + FOUNDER_TIMELOCK_BLOCKS
+    Regular transfer outputs are never locked by these rules — the
+    covenant binds founder-MINED coins, not coins other people send the
+    founder.
+    """
+    if not _timelock_enforced:
+        return 0
+    if height < _timelock_activation_height:
+        return 0  # covenant not yet active at this height
+    if len(tx.inputs) != 1 or tx.inputs[0][0] != b'\x00' * 32:
+        return 0  # not a coinbase
+    lock = height + COINBASE_MATURITY
+    if script_pubkey in _timelock_founder_scripts:
+        lock = max(lock, height + FOUNDER_TIMELOCK_BLOCKS)
+    return lock
 
 
 # ============================================================
@@ -62,6 +145,7 @@ class UTXO:
     amount: int          # quartz-sats
     script_pubkey: bytes # 32 bytes (recipient address hash)
     created_height: int  # block height where this output was created
+    lock_until: int = 0  # earliest height this output may be spent (0 = unlocked)
 
     @property
     def key(self) -> Tuple[bytes, int]:
@@ -167,9 +251,14 @@ class Mempool:
         self._spent_utxos: Set[Tuple[bytes, int]] = set()  # UTXOs spent by mempool txs
         self._max_size = max_size
 
-    def add(self, tx: Transaction, utxo_set: UTXOSet) -> Tuple[bool, str]:
+    def add(self, tx: Transaction, utxo_set: UTXOSet,
+            height: int = 0) -> Tuple[bool, str]:
         """
         Add a transaction to the mempool.
+
+        height: the height the tx would confirm at (tip + 1). Spend
+        floors (founder covenant / coinbase maturity) are checked against
+        it; default 0 is maximally strict.
 
         Returns (success, reason).
         """
@@ -185,7 +274,8 @@ class Mempool:
             return (False, f"tx too large: {tx_size} bytes")
 
         # Validate the transaction
-        is_valid, fee, spends, creates, reason = validate_transaction(tx, utxo_set)
+        is_valid, fee, spends, creates, reason = validate_transaction(
+            tx, utxo_set, height=height)
         if not is_valid:
             return (False, reason)
 
@@ -240,10 +330,13 @@ class Mempool:
         return len(self._txs)
 
     def select_for_block(self, utxo_set: UTXOSet, max_txs: int = MAX_BLOCK_TXS,
-                        max_size: int = MAX_BLOCK_SIZE) -> List[Transaction]:
+                        max_size: int = MAX_BLOCK_SIZE,
+                        height: int = 0) -> List[Transaction]:
         """
         Select transactions for a block template.
 
+        height: the height of the block being built (tip + 1) — spend
+        floors are re-checked against it.
         Greedy by fee-per-byte, respecting dependency ordering.
         """
         # Sort by fee-per-byte descending
@@ -268,7 +361,8 @@ class Mempool:
                 continue
 
             # Re-validate against current state (UTXO may have changed)
-            is_valid, _, _, _, _ = validate_transaction(entry.tx, utxo_set)
+            is_valid, _, _, _, _ = validate_transaction(
+                entry.tx, utxo_set, height=height)
             if not is_valid:
                 continue
 
@@ -408,14 +502,13 @@ def validate_transaction(tx: Transaction, utxo_set: UTXOSet,
         if not utxo_set.has(prev_hash, idx):
             return (False, 0, spends, creates, f"input {i}: UTXO already spent")
 
-        # Coinbase maturity check
-        if utxo.created_height >= 0 and height > 0:
-            # Check if this UTXO came from a coinbase
-            # (In v1, we track this via the txid being the block's coinbase txid.
-            #  For simplicity, we check if created_height + maturity > current height.)
-            # This is a simplification — a full implementation would flag
-            # coinbase-derived UTXOs explicitly.
-            pass  # Coinbase maturity enforced at block validation level
+        # Spend-floor enforcement (founder timelock covenant + coinbase
+        # maturity). lock_until is stamped on the UTXO at creation time;
+        # a spend is valid only in blocks at height >= lock_until.
+        if utxo.lock_until and height < utxo.lock_until:
+            return (False, 0, spends, creates,
+                    f"input {i}: output locked until block {utxo.lock_until} "
+                    f"(current height {height})")
 
         # Signature verification — two accepted forms:
         #   1. Ed25519-style: 64-byte signature + 32-byte pubkey.
@@ -636,7 +729,8 @@ def apply_block(block: Block, height: int, utxo_set: UTXOSet,
     for tx in block.transactions:
         confirmed_txids.append(tx.txid)
 
-        # Add outputs to UTXO set
+        # Add outputs to UTXO set (coinbase outputs may carry a consensus
+        # spend-floor: founder covenant / coinbase maturity)
         for i, (amount, script) in enumerate(tx.outputs):
             utxo = UTXO(
                 txid=tx.txid,
@@ -644,6 +738,7 @@ def apply_block(block: Block, height: int, utxo_set: UTXOSet,
                 amount=amount,
                 script_pubkey=script,
                 created_height=height,
+                lock_until=_output_lock_height(tx, script, height),
             )
             utxo_set.add(utxo)
 
@@ -727,7 +822,9 @@ class ConsensusEngine:
 
     def __init__(self, blocks: List[Block], balances: Dict[str, int],
                  current_difficulty: int, block_time: int = 30,
-                 retarget_period: int = 144, storage=None):
+                 retarget_period: int = 144, storage=None,
+                 founder_addresses: Optional[List[str]] = None,
+                 founder_activation_height: int = 0):
         self.blocks = blocks
         self.utxo_set = UTXOSet()
         self.mempool = Mempool()
@@ -736,6 +833,15 @@ class ConsensusEngine:
         self.retarget_period = retarget_period
         self.balances = balances  # legacy balance dict (for compatibility)
         self.storage = storage  # optional persistence (OTS slot tracking)
+
+        # Founder timelock covenant (P0-1): a non-empty founder address
+        # list activates it — locks are stamped on new coinbase outputs
+        # from now on, and spends of locked outputs are rejected. None/[]
+        # leaves the covenant off.
+        if founder_addresses is not None:
+            configure_timelock(founder_addresses,
+                               enabled=bool(founder_addresses),
+                               activation_height=founder_activation_height)
         self._orphan_blocks: Dict[bytes, List[Block]] = {}  # prev_hash → orphans
 
         # Fork-tracking structures:
@@ -758,7 +864,8 @@ class ConsensusEngine:
         self.utxo_set = UTXOSet()
         for height, block in enumerate(self.blocks):
             for tx in block.transactions:
-                # Add outputs
+                # Add outputs (covenant spend-floors recomputed from
+                # consensus rules — rebuilds are rule-faithful by design)
                 for i, (amount, script) in enumerate(tx.outputs):
                     self.utxo_set.add(UTXO(
                         txid=tx.txid,
@@ -766,6 +873,7 @@ class ConsensusEngine:
                         amount=amount,
                         script_pubkey=script,
                         created_height=height,
+                        lock_until=_output_lock_height(tx, script, height),
                     ))
 
             # Remove spent inputs (non-coinbase only)
@@ -1158,7 +1266,10 @@ class ConsensusEngine:
 
         Returns (success, reason).
         """
-        return self.mempool.add(tx, self.utxo_set)
+        # height = next block height: a tx is relayable iff it would be
+        # valid in the block that confirms it (spend floors are inclusive
+        # at lock_until).
+        return self.mempool.add(tx, self.utxo_set, height=self.height + 1)
 
     def build_block_template(self, miner_id: bytes,
                             miner_addr: Optional[str] = None) -> Block:
@@ -1174,8 +1285,9 @@ class ConsensusEngine:
         # Calculate reward
         miner_reward = get_miner_reward(height)
 
-        # Select txs from mempool
-        selected_txs = self.mempool.select_for_block(self.utxo_set)
+        # Select txs from mempool (height = the block being built)
+        selected_txs = self.mempool.select_for_block(
+            self.utxo_set, height=height)
 
         # Calculate total fees
         total_fees = 0

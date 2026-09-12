@@ -42,7 +42,7 @@ Quartz mainnet is live when **all** of the following hold simultaneously:
 | Wallets (web + Android), explorer, docs | ✅ Working |
 | One-tarball Pi node | ✅ Working, deployed in the field |
 | Test suite | ✅ 289 tests passing (consensus 29, crypto 33, difficulty 12, attestation 21, …) — mostly happy-path |
-| Founder timelock | ❌ Spec only (`docs/FOUNDER_TIMELOCK.md`) — not implemented |
+| Founder timelock | ✅ Implemented 2026-09-12 — consensus `lock_until` stamped at coinbase, enforced at spend (`tests/test_founder_timelock.py`, 21 tests); inactive until `QUARTZ_FOUNDER_ADDRESSES` set at genesis |
 | Adversarial/hardening tests | ❌ Not started |
 | Difficulty retarget at near-zero hashrate | ⚠️ Logic exists (±1-bit clamp, 25% max change) but never dry-run with the simulator off |
 | Independent nodes | ❌ 1 (seed, founder-controlled) + 1 (founder's Pi) |
@@ -54,15 +54,20 @@ The network is the long pole: D1/D2 require 15+ people we don't control yet.
 
 ## 3. Engineering checklist (P0 = launch blockers)
 
-### P0-1 Implement founder timelock (spec → consensus rule)
-- [ ] Coinbase covenant output: founder-mined coins timelocked 2 years
-      (per `docs/FOUNDER_TIMELOCK.md`)
-- [ ] Consensus validation: reject blocks that pay founder without the covenant;
-      reject spends of timelocked outputs before expiry
-- [ ] Dev-fund handling decided and coded (static 5,724.5 QZ today; where does
-      it live on mainnet — same covenant? separate keys?)
-- [ ] Tests: timelock honored across reorgs; expiry unlocks
-- Est: 3–5 days. **Must exist at height 0 — cannot be retrofitted.**
+### P0-1 Implement founder timelock (spec → consensus rule) — **DONE 2026-09-12**
+- [x] Coinbase covenant output: founder-mined coins timelocked 2 years
+      (`FOUNDER_TIMELOCK_BLOCKS = 2,102,400` at 30 s blocks — UTXO `lock_until`)
+- [x] Consensus validation: coinbase-paying-founder carries the covenant by
+      construction (consensus stamps it — nothing to omit); spends of locked
+      outputs rejected before expiry by every node (mempool, block, /send)
+- [x] Dev-fund handling decided and coded — dev fund is 0% (dropped
+      2026-08-10, `40f5d7f`); nothing to covenant
+- [x] Tests: locking, spend rejection before/at/after expiry, reorg undo/redo,
+      rebuild-vs-incremental agreement, forward-only activation (21 tests,
+      `tests/test_founder_timelock.py`)
+- Coinbase maturity (100 blocks) rides the same mechanism while active.
+- Mainnet activation: `QUARTZ_FOUNDER_ADDRESSES` set at genesis
+  (activation height 0 = covenant from block 1).
 
 ### P0-2 Adversarial test pass
 - [ ] Invalid-PoW / malformed block floods (fuzz block headers, txs)
@@ -136,4 +141,4 @@ The network is the long pole: D1/D2 require 15+ people we don't control yet.
 ---
 
 *This document is updated as bars are met or scope changes. Last update:
-2026-08-23.*
+2026-09-12 (P0-1 done).*
